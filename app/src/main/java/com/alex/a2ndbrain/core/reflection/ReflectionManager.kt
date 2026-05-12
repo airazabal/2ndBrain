@@ -44,21 +44,23 @@ class ReflectionManager(private val context: Context) {
         if (memories.isEmpty()) return
 
         val apiKey = settingsManager.getGeminiApiKey()
-        val modelName = settingsManager.getGeminiModel()
+        val preferredModel = settingsManager.getGeminiModel()
         
-        val summaryText = if (apiKey.isNotBlank()) {
+        val (summaryText, modelUsed) = if (apiKey.isNotBlank()) {
             val rawData = memories.joinToString("\n") { 
                 "- [${getAppName(it)}] ${it.title ?: ""}: ${it.content.take(100)}" 
             }
-            GeminiAgent(apiKey, modelName).summarizeMemories(rawData)
+            val result = GeminiAgent(apiKey).summarizeMemories(rawData, preferredModel)
+            result.text to result.modelName
         } else {
-            generateBasicSummary(memories)
+            generateBasicSummary(memories) to "Local Template"
         }
 
         val summaryEntity = DailySummaryEntity(
             date = todayStr,
             summary = summaryText,
-            timestamp = System.currentTimeMillis()
+            timestamp = System.currentTimeMillis(),
+            modelName = modelUsed
         )
 
         database.memoryDao().insertSummary(summaryEntity)

@@ -7,5 +7,6 @@ import androidx.room.PrimaryKey
 data class DailySummaryEntity(
     @PrimaryKey val date: String, // format: YYYY-MM-DD
     val summary: String,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val modelName: String? = null
 )

@@ -612,14 +612,20 @@ fun ReflectionScreen(
     onGenerateReflection: () -> Unit
 ) {
     var selectedModel by remember { mutableStateOf(settingsManager.getGeminiModel()) }
-    val models = listOf(
-        "gemini-1.5-flash", 
-        "gemini-1.5-flash-8b", 
-        "gemini-2.0-flash", 
-        "gemini-2.0-flash-lite-preview-02-05",
-        "gemini-1.5-pro",
-        "gemini-2.0-pro-exp-02-05"
-    )
+    val models = remember {
+        val baseModels = mutableListOf(
+            "gemini-3.1-flash-lite-preview",
+            "gemini-3.1-pro-preview",
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
+            "gemini-2.0-flash"
+        )
+        val buildConfigModel = BuildConfig.GEMINI_MODEL
+        if (buildConfigModel.isNotEmpty() && !baseModels.contains(buildConfigModel)) {
+            baseModels.add(0, buildConfigModel)
+        }
+        baseModels
+    }
 
     Column(
         modifier = Modifier
@@ -692,14 +698,23 @@ fun SummaryCard(summary: DailySummaryEntity) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date(summary.timestamp)),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Column {
+                    Text(
+                        text = SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date(summary.timestamp)),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    summary.modelName?.let { name ->
+                        Text(
+                            text = "AI: ${name.removePrefix("gemini-")}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+                        )
+                    }
+                }
                 Icon(
                     imageVector = Icons.Default.Notifications,
                     contentDescription = null,

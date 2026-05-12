@@ -17,8 +17,11 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
-        val geminiModel = project.findProperty("gemini.model")?.toString() ?: "gemini-2.0-flash"
+        val geminiModel = project.findProperty("gemini.model")?.toString() ?: "gemini-1.5-flash"
         buildConfigField("String", "GEMINI_MODEL", "\"$geminiModel\"")
+        
+        val geminiKey = project.findProperty("gemini.api.key")?.toString() ?: ""
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
     buildTypes {
@@ -69,6 +72,10 @@ dependencies {
 
     // Gemini AI
     implementation(libs.google.generativeai)
+    implementation(libs.kotlin.reflect.artifact)
+    implementation(libs.kotlin.stdlib.artifact)
+    implementation(libs.coroutines.core)
+    implementation(libs.coroutines.android)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

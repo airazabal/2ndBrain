@@ -2,6 +2,7 @@ package com.alex.a2ndbrain.core.capture
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.alex.a2ndbrain.BuildConfig
 
 class CaptureSettingsManager(context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("capture_settings", Context.MODE_PRIVATE)
@@ -40,15 +41,17 @@ class CaptureSettingsManager(context: Context) {
     }
 
     fun getGeminiApiKey(): String {
-        return prefs.getString("gemini_api_key", "") ?: ""
+        val savedKey = prefs.getString("gemini_api_key", "")?.trim() ?: ""
+        if (savedKey.isNotBlank()) return savedKey
+        return BuildConfig.GEMINI_API_KEY
     }
 
     fun saveGeminiApiKey(key: String) {
-        prefs.edit().putString("gemini_api_key", key).apply()
+        prefs.edit().putString("gemini_api_key", key.trim()).apply()
     }
 
     fun getGeminiModel(): String {
-        return prefs.getString("gemini_model", "gemini-1.5-flash") ?: "gemini-1.5-flash"
+        return prefs.getString("gemini_model", "gemini-2.5-flash") ?: "gemini-2.5-flash"
     }
 
     fun saveGeminiModel(model: String) {
