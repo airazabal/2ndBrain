@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -49,6 +50,7 @@ fun AppCaptureSettingsScreen(
 ) {
     var monitoredApps by remember { mutableStateOf(settingsManager.getMonitoredApps()) }
     var geminiApiKey by remember { mutableStateOf(settingsManager.getGeminiApiKey()) }
+    val debugEvents by com.alex.a2ndbrain.core.capture.CaptureDebugStore.events.collectAsState()
     val context = LocalContext.current
     val packageManager = context.packageManager
     
@@ -58,7 +60,8 @@ fun AppCaptureSettingsScreen(
                      it.packageName == "com.google.android.gm" || 
                      it.packageName == "com.google.android.apps.messaging" ||
                      it.packageName == "com.microsoft.office.outlook" ||
-                     it.packageName.contains("mail", ignoreCase = true) }
+                     it.packageName.contains("mail", ignoreCase = true) ||
+                     it.packageName.contains("todoist", ignoreCase = true) }
             .sortedBy { packageManager.getApplicationLabel(it.applicationInfo ?: return@sortedBy "").toString().lowercase() }
     }
 
@@ -73,6 +76,7 @@ fun AppCaptureSettingsScreen(
     }
 
     var isListenerEnabled by remember { mutableStateOf(false) }
+    var showDebugLogs by remember { mutableStateOf(false) }
     
     // Check listener status periodically
     LaunchedEffect(Unit) {
@@ -107,11 +111,36 @@ fun AppCaptureSettingsScreen(
             )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text("System Access", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("System Access", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    TextButton(onClick = { showDebugLogs = !showDebugLogs }) {
+                        Text(if (showDebugLogs) "Hide Logs" else "Show Logs", fontSize = 12.sp)
+                    }
+                }
                 Text(
                     if (isListenerEnabled) "✓ Notification access granted" else "✗ Notification access required",
                     style = MaterialTheme.typography.bodySmall
                 )
+                
+                if (showDebugLogs) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp)
+                    ) {
+                        LazyColumn(modifier = Modifier.padding(8.dp)) {
+                            items(debugEvents) { log ->
+                                Text(log, style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                            }
+                        }
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
                 Row {
                     Button(onClick = {

@@ -19,9 +19,23 @@ class GeminiAgent(private val apiKey: String) {
         
         val prompt = """
             You are a 'Second Brain' AI assistant. Analyze the following notification and clipboard captures from a user's day and provide a concise, personal, and insightful daily reflection.
-            Group related activities, highlight key interactions with people, and list potential action items. Format it in a friendly, journal-like tone.
+            
+            CORE TASK:
+            Look for correlations, conflicts, and synergies between different apps:
+            - Compare Calendar events with Todoist tasks. Identify if a packed schedule might make it hard to finish specific tasks.
+            - Correlate Emails/Messages with Calendar/Todoist. (e.g., "You got an email about X, which relates to your Todoist task Y").
+            - Spot patterns: Are certain people mentioned across multiple platforms? Are there recurring themes?
+            
+            ADVISORY TONE:
+            Don't just list what happened. Provide 'Second Brain' advice:
+            - Suggest focus areas for tomorrow based on what wasn't finished or what seems urgent.
+            - Flag potential 'time crunches' where meetings and tasks overlap.
+            - Highlight key interactions or follow-ups that shouldn't be missed.
 
-            RAW MEMORIES:
+            FORMAT:
+            Friendly, journal-like, and insightful. Use bullet points for action items.
+
+            RAW MEMORIES (with timestamps):
             $memoriesText
         """.trimIndent()
 

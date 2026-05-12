@@ -57,6 +57,7 @@ class NotificationCaptureService : NotificationListenerService() {
         // Respect monitored apps setting
         val monitoredApps = settingsManager.getMonitoredApps()
         if (monitoredApps.isNotEmpty() && !monitoredApps.contains(packageName)) {
+            Log.d("2ndBrain", "Skipping $packageName - not in monitored list")
             return
         }
 
@@ -66,6 +67,8 @@ class NotificationCaptureService : NotificationListenerService() {
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim() ?: ""
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim() ?: ""
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim() ?: ""
+        val infoText = extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()?.trim() ?: ""
+        val summaryText = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString()?.trim() ?: ""
         
         // Messaging Style (SMS, WhatsApp, Gmail)
         val messagingMessages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
@@ -87,9 +90,8 @@ class NotificationCaptureService : NotificationListenerService() {
         }
 
         Log.d("2ndBrain", "Processing trigger from: $packageName (Manual: $isManual)")
-        if (!isManual) CaptureDebugStore.logEvent("Trigger: $packageName")
+        if (!isManual) CaptureDebugStore.logEvent("Post: ${packageName.split(".").lastOrNull() ?: packageName}")
 
-        val bigSummary = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString()?.trim() ?: ""
         val bigTitle = extras.getCharSequence(Notification.EXTRA_TITLE_BIG)?.toString()?.trim() ?: ""
 
         // Gmail specific logic: check for "android.text" if other things fail
@@ -97,15 +99,16 @@ class NotificationCaptureService : NotificationListenerService() {
         val ticker = notification.tickerText?.toString()?.trim() ?: ""
 
         // Improved content selection priority
-        val contentOptions = if (packageName == "com.google.android.gm") {
-            listOf(inboxContent, bigText, androidText, messagingContent, text, subText, bigSummary, ticker)
+        val contentOptions = if (packageName == "com.google.android.gm" || packageName.contains("todoist")) {
+            listOf(inboxContent, bigText, androidText, messagingContent, text, subText, infoText, summaryText, ticker)
         } else {
-            listOf(bigText, messagingContent, inboxContent, text, subText, bigSummary, ticker)
+            listOf(bigText, messagingContent, inboxContent, text, subText, infoText, summaryText, ticker)
         }
         
         val finalContent = contentOptions.firstOrNull { it.isNotBlank() } ?: ""
 
         if (title.isEmpty() && finalContent.isEmpty() && bigTitle.isEmpty()) {
+            Log.d("2ndBrain", "Skipping $packageName - no content found")
             return
         }
 

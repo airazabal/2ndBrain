@@ -7,7 +7,13 @@ object CaptureDebugStore {
     private val _lastEvent = MutableStateFlow<String>("Waiting for events...")
     val lastEvent = _lastEvent.asStateFlow()
 
+    private val _events = MutableStateFlow<List<String>>(emptyList())
+    val events = _events.asStateFlow()
+
     fun logEvent(message: String) {
-        _lastEvent.value = "[${System.currentTimeMillis() % 100000}] $message"
+        val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        val formattedMessage = "[$timestamp] $message"
+        _lastEvent.value = formattedMessage
+        _events.value = (listOf(formattedMessage) + _events.value).take(50)
     }
 }

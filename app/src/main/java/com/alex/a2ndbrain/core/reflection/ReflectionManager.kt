@@ -47,8 +47,10 @@ class ReflectionManager(private val context: Context) {
         val preferredModel = settingsManager.getGeminiModel()
         
         val (summaryText, modelUsed) = if (apiKey.isNotBlank()) {
-            val rawData = memories.joinToString("\n") { 
-                "- [${getAppName(it)}] ${it.title ?: ""}: ${it.content.take(100)}" 
+            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+            val rawData = memories.sortedBy { it.timestamp }.joinToString("\n") { 
+                val time = timeFormat.format(Date(it.timestamp))
+                "- [$time][${getAppName(it)}] ${it.title ?: ""}: ${it.content.take(150)}"
             }
             val result = GeminiAgent(apiKey).summarizeMemories(rawData, preferredModel)
             result.text to result.modelName
