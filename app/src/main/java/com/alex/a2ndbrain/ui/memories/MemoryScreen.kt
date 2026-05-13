@@ -110,7 +110,7 @@ fun MemoryScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "Memories",
+                        text = "Notifications",
                         style = MaterialTheme.typography.headlineMedium
                     )
                     Spacer(modifier = Modifier.width(8.dp))

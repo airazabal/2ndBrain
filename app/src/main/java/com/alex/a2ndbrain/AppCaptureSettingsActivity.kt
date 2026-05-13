@@ -97,7 +97,14 @@ fun AppCaptureSettingsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Capture Settings", style = MaterialTheme.typography.headlineSmall)
+            Column {
+                Text("Capture Settings", style = MaterialTheme.typography.headlineSmall)
+                Text(
+                    text = "v${com.alex.a2ndbrain.BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
             Button(onClick = onBack) { Text("Done") }
         }
         
@@ -275,7 +282,14 @@ fun AppCaptureSettingsScreen(
                             monitoredApps = current
                         }
                     )
-                    Text(appName, modifier = Modifier.padding(start = 8.dp))
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        Text(appName, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            text = pkg.packageName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
                 }
             }
         }

@@ -57,4 +57,12 @@ class CaptureSettingsManager(context: Context) {
     fun saveGeminiModel(model: String) {
         prefs.edit().putString("gemini_model", model).apply()
     }
+
+    fun getObsidianVaultUri(): String {
+        return prefs.getString("obsidian_vault_uri", "") ?: ""
+    }
+
+    fun saveObsidianVaultUri(uri: String) {
+        prefs.edit().putString("obsidian_vault_uri", uri).apply()
+    }
 }
