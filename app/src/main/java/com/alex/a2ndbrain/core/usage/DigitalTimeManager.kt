@@ -3,13 +3,18 @@ package com.alex.a2ndbrain.core.usage
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.util.Log
+import androidx.documentfile.provider.DocumentFile
+import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
+import org.json.JSONArray
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 
 class DigitalTimeManager(private val context: Context) {
     private val database = AppDatabase.getDatabase(context)
+    private val settingsManager = CaptureSettingsManager(context)
     private val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
 
     fun isPermissionGranted(): Boolean {
@@ -46,7 +51,11 @@ class DigitalTimeManager(private val context: Context) {
             endTime
         )
 
-        if (stats.isNullOrEmpty()) return
+        if (stats.isNullOrEmpty()) {
+            // Even if empty, we might have remote data to pull
+            syncWithVault(todayStr, deviceId, deviceName)
+            return
+        }
 
         stats.forEach { stat ->
             val timeSpent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
@@ -66,6 +75,90 @@ class DigitalTimeManager(private val context: Context) {
                 )
                 database.memoryDao().insertUsageStat(entity)
             }
+        }
+
+        syncWithVault(todayStr, deviceId, deviceName)
+    }
+
+    private suspend fun syncWithVault(date: String, myDeviceId: String, myDeviceName: String) {
+        val vaultUri = settingsManager.getObsidianVaultUri()
+        if (vaultUri.isBlank()) return
+
+        try {
+            val root = DocumentFile.fromTreeUri(context, android.net.Uri.parse(vaultUri)) ?: return
+            
+            // 1. Ensure .2ndbrain/usage directory exists
+            var brainDir = root.findFile(".2ndbrain")
+            if (brainDir == null) brainDir = root.createDirectory(".2ndbrain")
+            
+            var usageDir = brainDir?.findFile("usage")
+            if (usageDir == null) usageDir = brainDir?.createDirectory("usage")
+            
+            if (usageDir == null) return
+
+            // 2. Export local stats for this date
+            val localStats = database.memoryDao().getUsageStatsForDateSync(date)
+            if (localStats.isNotEmpty()) {
+                val json = JSONObject()
+                json.put("deviceName", myDeviceName)
+                val appsArray = JSONArray()
+                localStats.filter { it.deviceId == myDeviceId }.forEach { stat ->
+                    val appJson = JSONObject()
+                    appJson.put("pkg", stat.packageName)
+                    appJson.put("time", stat.totalTimeVisibleMs)
+                    appJson.put("ts", stat.lastTimestamp)
+                    appsArray.put(appJson)
+                }
+                json.put("apps", appsArray)
+
+                val fileName = "${date}_${myDeviceId}.json"
+                var file = usageDir.findFile(fileName)
+                if (file == null) file = usageDir.createFile("application/json", fileName)
+                
+                file?.let {
+                    context.contentResolver.openOutputStream(it.uri)?.use { stream ->
+                        stream.write(json.toString().toByteArray())
+                    }
+                }
+            }
+
+            // 3. Import remote stats
+            usageDir.listFiles().forEach { file ->
+                val name = file.name ?: ""
+                if (name.startsWith(date) && !name.contains(myDeviceId) && name.endsWith(".json")) {
+                    importFile(file, date)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("DigitalTime", "Vault sync failed", e)
+        }
+    }
+
+    private suspend fun importFile(file: DocumentFile, date: String) {
+        try {
+            val content = context.contentResolver.openInputStream(file.uri)?.use { stream ->
+                stream.bufferedReader().readText()
+            } ?: return
+            
+            val json = JSONObject(content)
+            val deviceName = json.optString("deviceName", "Remote Device")
+            val deviceId = file.name?.substringAfter("_")?.removeSuffix(".json") ?: "remote"
+            val apps = json.getJSONArray("apps")
+            
+            for (i in 0 until apps.length()) {
+                val app = apps.getJSONObject(i)
+                val entity = UsageStatEntity(
+                    date = date,
+                    packageName = app.getString("pkg"),
+                    totalTimeVisibleMs = app.getLong("time"),
+                    deviceId = deviceId,
+                    deviceName = deviceName,
+                    lastTimestamp = app.getLong("ts")
+                )
+                database.memoryDao().insertUsageStat(entity)
+            }
+        } catch (e: Exception) {
+            Log.e("DigitalTime", "Failed to import ${file.name}", e)
         }
     }
     

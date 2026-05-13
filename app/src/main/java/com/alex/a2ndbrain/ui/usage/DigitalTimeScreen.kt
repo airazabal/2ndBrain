@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.BuildConfig
@@ -42,11 +43,11 @@ fun DigitalTimeScreen(
         usageStats.groupBy { it.packageName }
             .map { (packageName, stats) ->
                 val totalTime = stats.sumOf { it.totalTimeVisibleMs }
-                val devices = stats.map { it.deviceName }.distinct().joinToString(", ")
+                val deviceBreakdown = stats.associate { it.deviceName to it.totalTimeVisibleMs }
                 ConsolidatedUsage(
                     packageName = packageName,
                     totalTimeMs = totalTime,
-                    devices = devices,
+                    deviceBreakdown = deviceBreakdown,
                     lastTimestamp = stats.maxOf { it.lastTimestamp }
                 )
             }.sortedByDescending { it.totalTimeMs }
@@ -121,11 +122,11 @@ fun DigitalTimeScreen(
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                Text("Top Apps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("App Totals Across Devices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(consolidatedStats.take(20)) { stat ->
+                    items(consolidatedStats.take(25)) { stat ->
                         ConsolidatedUsageItem(stat)
                     }
                 }
@@ -137,7 +138,7 @@ fun DigitalTimeScreen(
 data class ConsolidatedUsage(
     val packageName: String,
     val totalTimeMs: Long,
-    val devices: String,
+    val deviceBreakdown: Map<String, Long>,
     val lastTimestamp: Long
 )
 
@@ -153,62 +154,77 @@ fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
         }
     }
     
-    val minutes = stat.totalTimeMs / 1000 / 60
+    val totalMinutes = stat.totalTimeMs / 1000 / 60
     
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
     ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(appName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(appName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.ExtraBold)
+                    Text(stat.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = MaterialTheme.shapes.small
+                ) {
                     Text(
-                        text = stat.devices,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stat.packageName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        text = formatDuration(stat.totalTimeMs),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }
-            Text(
-                text = if (minutes > 60) "${minutes/60}h ${minutes%60}m" else "${minutes}m",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 8.dp)
-            )
+            
+            if (stat.deviceBreakdown.size > 1) {
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                Spacer(modifier = Modifier.height(4.dp))
+                stat.deviceBreakdown.forEach { (device, time) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(device, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        Text(formatDuration(time), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            } else if (stat.deviceBreakdown.isNotEmpty()) {
+                Text(
+                    text = "On ${stat.deviceBreakdown.keys.first()}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }
 
+private fun formatDuration(ms: Long): String {
+    val mins = ms / 1000 / 60
+    return if (mins >= 60) "${mins / 60}h ${mins % 60}m" else "${mins}m"
+}
+
 @Composable
 fun UsageSummaryCard(totalTimeMs: Long) {
-    val hours = totalTimeMs / 1000 / 3600
-    val minutes = (totalTimeMs / 1000 / 60) % 60
-    
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Total Screen Time Today", style = MaterialTheme.typography.labelMedium)
+            Text("Total Cross-Device Usage", style = MaterialTheme.typography.labelMedium)
             Text(
-                text = "${hours}h ${minutes}m",
+                text = formatDuration(totalTimeMs),
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Black
             )
@@ -219,12 +235,17 @@ fun UsageSummaryCard(totalTimeMs: Long) {
 @Composable
 fun PermissionRequiredView(onGrantClick: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
             Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Usage Access Required", style = MaterialTheme.typography.titleLarge)
-            Text("2ndBrain needs permission to track app usage time.", style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(16.dp))
+            Text("Usage Access Required", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "To sync digital time across devices, 2ndBrain needs permission to see how long apps are used.",
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(24.dp))
             Button(onClick = onGrantClick) {
                 Text("Grant Permission")
             }
