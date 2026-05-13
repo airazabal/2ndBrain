@@ -10,7 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -24,6 +23,10 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
+enum class TimePeriod {
+    TODAY, WEEK, MONTH
+}
+
 @Composable
 fun DigitalTimeScreen(
     modifier: Modifier = Modifier
@@ -33,17 +36,28 @@ fun DigitalTimeScreen(
     val database = remember { AppDatabase.getDatabase(context) }
     val digitalTimeManager = remember { DigitalTimeManager(context) }
     
-    val today = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
-    val usageStats by database.memoryDao().getUsageStatsForDate(today).collectAsState(initial = emptyList())
-    
+    var selectedPeriod by remember { mutableStateOf(TimePeriod.TODAY) }
     var isPermissionGranted by remember { mutableStateOf(digitalTimeManager.isPermissionGranted()) }
     var isSyncing by remember { mutableStateOf(false) }
 
+    val startDate = remember(selectedPeriod) {
+        val cal = Calendar.getInstance()
+        when (selectedPeriod) {
+            TimePeriod.TODAY -> {} // Already today
+            TimePeriod.WEEK -> cal.add(Calendar.DAY_OF_YEAR, -7)
+            TimePeriod.MONTH -> cal.add(Calendar.MONTH, -1)
+        }
+        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+    }
+
+    val usageStats by database.memoryDao().getUsageStatsSinceFlow(startDate).collectAsState(initial = emptyList())
+    
     val consolidatedStats = remember(usageStats) {
         usageStats.groupBy { it.packageName }
             .map { (packageName, stats) ->
                 val totalTime = stats.sumOf { it.totalTimeVisibleMs }
-                val deviceBreakdown = stats.associate { it.deviceName to it.totalTimeVisibleMs }
+                val deviceBreakdown = stats.groupBy { it.deviceName }
+                    .mapValues { entry -> entry.value.sumOf { it.totalTimeVisibleMs } }
                 ConsolidatedUsage(
                     packageName = packageName,
                     totalTimeMs = totalTime,
@@ -106,6 +120,21 @@ fun DigitalTimeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // Period Selector
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            TimePeriod.entries.forEachIndexed { index, period ->
+                SegmentedButton(
+                    selected = selectedPeriod == period,
+                    onClick = { selectedPeriod = period },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = TimePeriod.entries.size)
+                ) {
+                    Text(period.name.lowercase().replaceFirstChar { it.uppercase() })
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         if (!isPermissionGranted) {
             PermissionRequiredView {
                 context.startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
@@ -114,11 +143,11 @@ fun DigitalTimeScreen(
             if (consolidatedStats.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (isSyncing) CircularProgressIndicator()
-                    else Text("No usage data captured yet today.")
+                    else Text("No usage data for this period.")
                 }
             } else {
                 val totalTime = consolidatedStats.sumOf { it.totalTimeMs }
-                UsageSummaryCard(totalTime)
+                UsageSummaryCard(totalTime, selectedPeriod)
                 
                 Spacer(modifier = Modifier.height(16.dp))
                 
@@ -126,7 +155,7 @@ fun DigitalTimeScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(consolidatedStats.take(25)) { stat ->
+                    items(consolidatedStats.take(30)) { stat ->
                         ConsolidatedUsageItem(stat)
                     }
                 }
@@ -153,8 +182,6 @@ fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
             stat.packageName.substringAfterLast(".")
         }
     }
-    
-    val totalMinutes = stat.totalTimeMs / 1000 / 60
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -212,17 +239,18 @@ fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
 
 private fun formatDuration(ms: Long): String {
     val mins = ms / 1000 / 60
-    return if (mins >= 60) "${mins / 60}h ${mins % 60}m" else "${mins}m"
+    val hours = mins / 60
+    return if (hours > 0) "${hours}h ${mins % 60}m" else "${mins}m"
 }
 
 @Composable
-fun UsageSummaryCard(totalTimeMs: Long) {
+fun UsageSummaryCard(totalTimeMs: Long, period: TimePeriod) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text("Total Cross-Device Usage", style = MaterialTheme.typography.labelMedium)
+            Text("Total Usage (${period.name.lowercase().replaceFirstChar { it.uppercase() }})", style = MaterialTheme.typography.labelMedium)
             Text(
                 text = formatDuration(totalTimeMs),
                 style = MaterialTheme.typography.headlineLarge,

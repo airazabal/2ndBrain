@@ -45,5 +45,8 @@ interface MemoryDao {
     suspend fun getUsageStatsForDateSync(date: String): List<UsageStatEntity>
 
     @Query("SELECT * FROM usage_stats WHERE date >= :startDate")
+    fun getUsageStatsSinceFlow(startDate: String): Flow<List<UsageStatEntity>>
+
+    @Query("SELECT * FROM usage_stats WHERE date >= :startDate")
     suspend fun getUsageStatsSince(startDate: String): List<UsageStatEntity>
 }

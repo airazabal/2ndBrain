@@ -6,9 +6,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.*
@@ -22,6 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import com.alex.a2ndbrain.BuildConfig
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun NotesScreen(
@@ -35,6 +42,8 @@ fun NotesScreen(
     var currentFolder by remember { mutableStateOf<DocumentFile?>(null) }
     var folderStack by remember { mutableStateOf(listOf<DocumentFile>()) }
     var items by remember { mutableStateOf<List<DocumentFile>>(emptyList()) }
+
+    var selectedNoteForPreview by remember { mutableStateOf<DocumentFile?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
@@ -63,97 +72,201 @@ fun NotesScreen(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (folderStack.isNotEmpty()) {
-                    IconButton(onClick = {
-                        val newStack = folderStack.dropLast(1)
-                        currentFolder = newStack.lastOrNull() // null means root
-                        folderStack = newStack
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (folderStack.isNotEmpty()) {
+                        IconButton(onClick = {
+                            val newStack = folderStack.dropLast(1)
+                            currentFolder = newStack.lastOrNull() // null means root
+                            folderStack = newStack
+                        }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                    
+                    Column {
+                        Text(
+                            text = if (folderStack.isEmpty()) "Notes" else folderStack.last().name ?: "Notes",
+                            style = MaterialTheme.typography.headlineMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (folderStack.isEmpty()) {
+                            Text(
+                                text = "v${BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
                     }
                 }
                 
-                Column {
-                    Text(
-                        text = if (folderStack.isEmpty()) "Notes" else folderStack.last().name ?: "Notes",
-                        style = MaterialTheme.typography.headlineMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (folderStack.isEmpty()) {
-                        Text(
-                            text = "v${BuildConfig.VERSION_NAME}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
+                if (vaultUri.isNotBlank()) {
+                    IconButton(onClick = { launcher.launch(null) }) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = "Change Vault")
                     }
                 }
             }
-            
-            if (vaultUri.isNotBlank()) {
-                IconButton(onClick = { launcher.launch(null) }) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = "Change Vault")
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (vaultUri.isBlank()) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            Icons.Default.Description,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Connect your Obsidian Vault to see your notes.")
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(onClick = { launcher.launch(null) }) {
+                            Text("Select Vault Folder")
+                        }
+                    }
+                }
+            } else {
+                if (items.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("This folder is empty.")
+                    }
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(items) { item ->
+                            NoteOrFolderItem(
+                                item = item,
+                                onFolderClick = { folder ->
+                                    folderStack = folderStack + folder
+                                    currentFolder = folder
+                                },
+                                onFileClick = { file ->
+                                    selectedNoteForPreview = file
+                                }
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        // Preview Dialog
+        selectedNoteForPreview?.let { file ->
+            NotePreviewDialog(
+                file = file,
+                onDismiss = { selectedNoteForPreview = null },
+                onEditInObsidian = {
+                    openInObsidian(context, file, vaultUri)
+                    selectedNoteForPreview = null
+                }
+            )
+        }
 
-        if (vaultUri.isBlank()) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
+        if (vaultUri.isNotBlank()) {
+            FloatingActionButton(
+                onClick = {
+                    createNewNoteInObsidian(context, vaultUri)
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(24.dp)
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Default.Description,
-                        contentDescription = null,
-                        modifier = Modifier.size(64.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Connect your Obsidian Vault to see your notes.")
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = { launcher.launch(null) }) {
-                        Text("Select Vault Folder")
-                    }
-                }
-            }
-        } else {
-            if (items.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("This folder is empty.")
-                }
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(items) { item ->
-                        NoteOrFolderItem(
-                            item = item,
-                            onFolderClick = { folder ->
-                                folderStack = folderStack + folder
-                                currentFolder = folder
-                            },
-                            onFileClick = { file ->
-                                openInObsidian(context, file, vaultUri)
-                            }
-                        )
-                    }
-                }
+                Icon(Icons.Default.Add, contentDescription = "New Note")
             }
         }
     }
+}
+
+private fun createNewNoteInObsidian(context: android.content.Context, vaultUri: String) {
+    val root = DocumentFile.fromTreeUri(context, android.net.Uri.parse(vaultUri)) ?: return
+    val vaultName = root.name ?: ""
+    val timestamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date())
+    val newNoteName = "2ndBrain-$timestamp"
+    
+    // obsidian://new?vault=my%20vault&name=my%20note
+    val obsidianUri = android.net.Uri.parse("obsidian://new?vault=${android.net.Uri.encode(vaultName)}&name=${android.net.Uri.encode(newNoteName)}")
+    
+    try {
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, obsidianUri)
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        // Obsidian not installed
+    }
+}
+
+@Composable
+fun NotePreviewDialog(
+    file: DocumentFile,
+    onDismiss: () -> Unit,
+    onEditInObsidian: () -> Unit
+) {
+    val context = LocalContext.current
+    var content by remember { mutableStateOf("Loading...") }
+
+    LaunchedEffect(file) {
+        content = try {
+            context.contentResolver.openInputStream(file.uri)?.use { stream ->
+                stream.bufferedReader().readText()
+            } ?: "Could not read file."
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = file.name?.removeSuffix(".md") ?: "Note Preview",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider(thickness = 0.5.dp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = content,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = onEditInObsidian) {
+                Text("Edit in Obsidian")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
 }
 
 @Composable
@@ -193,7 +306,7 @@ fun NoteOrFolderItem(
                 )
                 if (!item.isDirectory) {
                     Text(
-                        text = "Modified: ${java.text.SimpleDateFormat("MMM d, HH:mm", java.util.Locale.getDefault()).format(java.util.Date(item.lastModified()))}",
+                        text = "Modified: ${SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(item.lastModified()))}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
