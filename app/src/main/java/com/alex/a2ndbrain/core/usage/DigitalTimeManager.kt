@@ -28,6 +28,9 @@ class DigitalTimeManager(private val context: Context) {
             return
         }
 
+        val deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "unknown"
+        val deviceName = android.os.Build.MODEL ?: "Unknown Device"
+
         val calendar = Calendar.getInstance()
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
         
@@ -57,6 +60,8 @@ class DigitalTimeManager(private val context: Context) {
                     date = todayStr,
                     packageName = stat.packageName,
                     totalTimeVisibleMs = timeSpent,
+                    deviceId = deviceId,
+                    deviceName = deviceName,
                     lastTimestamp = stat.lastTimeUsed
                 )
                 database.memoryDao().insertUsageStat(entity)

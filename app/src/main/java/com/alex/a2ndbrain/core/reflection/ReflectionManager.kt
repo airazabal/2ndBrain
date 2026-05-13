@@ -49,11 +49,16 @@ class ReflectionManager(private val context: Context) {
         if (memories.isEmpty()) return
 
         val usageStats = database.memoryDao().getUsageStatsSince(todayStr)
-        val usageReport = usageStats.sortedByDescending { it.totalTimeVisibleMs }
-            .take(5)
-            .joinToString("\n") { 
-                "- ${it.packageName.substringAfterLast(".")}: ${it.totalTimeVisibleMs / 1000 / 60} mins"
-            }
+        val usageByDevice = usageStats.groupBy { it.deviceName }
+        
+        val usageReport = usageByDevice.entries.joinToString("\n\n") { (device, stats) ->
+            val topApps = stats.sortedByDescending { it.totalTimeVisibleMs }
+                .take(3)
+                .joinToString("\n") { 
+                    "- ${it.packageName.substringAfterLast(".")}: ${it.totalTimeVisibleMs / 1000 / 60} mins"
+                }
+            "Device: $device\n$topApps"
+        }
 
         val apiKey = settingsManager.getGeminiApiKey()
         val preferredModel = settingsManager.getGeminiModel()

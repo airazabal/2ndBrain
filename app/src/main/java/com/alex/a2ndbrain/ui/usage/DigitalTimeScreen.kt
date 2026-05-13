@@ -139,7 +139,20 @@ fun UsageItem(stat: UsageStatEntity) {
         ) {
             Column {
                 Text(appName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                Text(stat.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stat.deviceName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = stat.packageName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
             }
             Text(
                 text = if (minutes > 60) "${minutes/60}h ${minutes%60}m" else "${minutes}m",
