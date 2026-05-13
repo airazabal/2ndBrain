@@ -19,12 +19,14 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,6 +51,13 @@ fun ReflectionScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedModel by remember { mutableStateOf(settingsManager.getGeminiModel()) }
+    var isGenerating by remember { mutableStateOf(false) }
+    
+    // Automatically reset generating state when summaries list changes
+    LaunchedEffect(summaries) {
+        isGenerating = false
+    }
+
     val models = remember {
         val baseModels = mutableListOf(
             "gemini-3.1-flash-lite-preview",
@@ -86,8 +95,24 @@ fun ReflectionScreen(
                     color = MaterialTheme.colorScheme.outline
                 )
             }
-            Button(onClick = onGenerateReflection) {
-                Text("Reflect")
+            Button(
+                onClick = {
+                    isGenerating = true
+                    onGenerateReflection()
+                },
+                enabled = !isGenerating
+            ) {
+                if (isGenerating) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Reflecting...")
+                } else {
+                    Text("Reflect")
+                }
             }
         }
 

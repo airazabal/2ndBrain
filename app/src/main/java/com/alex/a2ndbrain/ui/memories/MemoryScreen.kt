@@ -31,6 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -47,6 +48,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,8 +82,15 @@ fun MemoryScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var sortOption by remember { mutableStateOf(MemorySortOption.USAGE) }
     var unreadOnly by remember { mutableStateOf(false) }
+    var isScanning by remember { mutableStateOf(false) }
+
+    // Reset scan state after a short delay or when memories change
+    LaunchedEffect(memories) {
+        isScanning = false
+    }
 
     val filteredByMonitoring = remember(memories, monitoredApps) {
         if (monitoredApps.isEmpty()) memories
@@ -136,13 +145,21 @@ fun MemoryScreen(
                 )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = {
-                    val scanIntent = Intent(context, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java).apply {
-                        action = "CHECK_ACTIVE"
+                TextButton(
+                    onClick = {
+                        isScanning = true
+                        val scanIntent = Intent(context, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java).apply {
+                            action = "CHECK_ACTIVE"
+                        }
+                        context.startService(scanIntent)
+                    },
+                    enabled = !isScanning
+                ) {
+                    if (isScanning) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("SCAN", fontSize = 12.sp)
                     }
-                    context.startService(scanIntent)
-                }) {
-                    Text("SCAN", fontSize = 12.sp)
                 }
                 TextButton(
                     onClick = onCaptureClipboard,

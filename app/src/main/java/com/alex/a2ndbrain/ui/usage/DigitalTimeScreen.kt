@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +19,7 @@ import com.alex.a2ndbrain.BuildConfig
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -26,6 +28,7 @@ fun DigitalTimeScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val database = remember { AppDatabase.getDatabase(context) }
     val digitalTimeManager = remember { DigitalTimeManager(context) }
     
@@ -33,11 +36,28 @@ fun DigitalTimeScreen(
     val usageStats by database.memoryDao().getUsageStatsForDate(today).collectAsState(initial = emptyList())
     
     var isPermissionGranted by remember { mutableStateOf(digitalTimeManager.isPermissionGranted()) }
+    var isSyncing by remember { mutableStateOf(false) }
 
-    // Refresh permission status when screen is opened
+    val consolidatedStats = remember(usageStats) {
+        usageStats.groupBy { it.packageName }
+            .map { (packageName, stats) ->
+                val totalTime = stats.sumOf { it.totalTimeVisibleMs }
+                val devices = stats.map { it.deviceName }.distinct().joinToString(", ")
+                ConsolidatedUsage(
+                    packageName = packageName,
+                    totalTimeMs = totalTime,
+                    devices = devices,
+                    lastTimestamp = stats.maxOf { it.lastTimestamp }
+                )
+            }.sortedByDescending { it.totalTimeMs }
+    }
+
     LaunchedEffect(Unit) {
-        digitalTimeManager.syncUsageStats()
-        isPermissionGranted = digitalTimeManager.isPermissionGranted()
+        if (isPermissionGranted) {
+            isSyncing = true
+            digitalTimeManager.syncUsageStats()
+            isSyncing = false
+        }
     }
 
     Column(
@@ -62,6 +82,25 @@ fun DigitalTimeScreen(
                     color = MaterialTheme.colorScheme.outline
                 )
             }
+            
+            if (isPermissionGranted) {
+                IconButton(
+                    onClick = {
+                        scope.launch {
+                            isSyncing = true
+                            digitalTimeManager.syncUsageStats()
+                            isSyncing = false
+                        }
+                    },
+                    enabled = !isSyncing
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -71,12 +110,13 @@ fun DigitalTimeScreen(
                 context.startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
             }
         } else {
-            if (usageStats.isEmpty()) {
+            if (consolidatedStats.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No usage data captured yet today.")
+                    if (isSyncing) CircularProgressIndicator()
+                    else Text("No usage data captured yet today.")
                 }
             } else {
-                val totalTime = usageStats.sumOf { it.totalTimeVisibleMs }
+                val totalTime = consolidatedStats.sumOf { it.totalTimeMs }
                 UsageSummaryCard(totalTime)
                 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -85,11 +125,73 @@ fun DigitalTimeScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(usageStats.sortedByDescending { it.totalTimeVisibleMs }.take(15)) { stat ->
-                        UsageItem(stat)
+                    items(consolidatedStats.take(20)) { stat ->
+                        ConsolidatedUsageItem(stat)
                     }
                 }
             }
+        }
+    }
+}
+
+data class ConsolidatedUsage(
+    val packageName: String,
+    val totalTimeMs: Long,
+    val devices: String,
+    val lastTimestamp: Long
+)
+
+@Composable
+fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
+    val context = LocalContext.current
+    val appName = remember(stat.packageName) {
+        try {
+            val appInfo = context.packageManager.getApplicationInfo(stat.packageName, 0)
+            context.packageManager.getApplicationLabel(appInfo).toString()
+        } catch (e: Exception) {
+            stat.packageName.substringAfterLast(".")
+        }
+    }
+    
+    val minutes = stat.totalTimeMs / 1000 / 60
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(appName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = stat.devices,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = stat.packageName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Text(
+                text = if (minutes > 60) "${minutes/60}h ${minutes%60}m" else "${minutes}m",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 8.dp)
+            )
         }
     }
 }
@@ -109,56 +211,6 @@ fun UsageSummaryCard(totalTimeMs: Long) {
                 text = "${hours}h ${minutes}m",
                 style = MaterialTheme.typography.headlineLarge,
                 fontWeight = FontWeight.Black
-            )
-        }
-    }
-}
-
-@Composable
-fun UsageItem(stat: UsageStatEntity) {
-    val context = LocalContext.current
-    val appName = remember(stat.packageName) {
-        try {
-            val appInfo = context.packageManager.getApplicationInfo(stat.packageName, 0)
-            context.packageManager.getApplicationLabel(appInfo).toString()
-        } catch (e: Exception) {
-            stat.packageName.substringAfterLast(".")
-        }
-    }
-    
-    val minutes = stat.totalTimeVisibleMs / 1000 / 60
-    
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(appName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stat.deviceName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stat.packageName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
-            Text(
-                text = if (minutes > 60) "${minutes/60}h ${minutes%60}m" else "${minutes}m",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
             )
         }
     }
