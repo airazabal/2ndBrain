@@ -130,7 +130,8 @@ class MainActivity : ComponentActivity() {
                                             lifecycleScope.launch(Dispatchers.IO) {
                                                 database.clearAllTables()
                                             }
-                                        }
+                                        },
+                                        monitoredApps = settingsManager.getMonitoredApps()
                                     )
 
                                     1 -> ReflectionScreen(

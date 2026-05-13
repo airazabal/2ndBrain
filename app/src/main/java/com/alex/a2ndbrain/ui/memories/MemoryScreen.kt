@@ -76,14 +76,20 @@ fun MemoryScreen(
     onCaptureClipboard: () -> Unit,
     onMarkAsRead: (Long) -> Unit,
     onClearAll: () -> Unit,
+    monitoredApps: Set<String> = emptySet(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var sortOption by remember { mutableStateOf(MemorySortOption.USAGE) }
     var unreadOnly by remember { mutableStateOf(false) }
 
-    val filteredByRead = remember(memories, unreadOnly) {
-        if (unreadOnly) memories.filter { !it.isRead } else memories
+    val filteredByMonitoring = remember(memories, monitoredApps) {
+        if (monitoredApps.isEmpty()) memories
+        else memories.filter { it.source != "notification" || monitoredApps.contains(it.packageName) }
+    }
+
+    val filteredByRead = remember(filteredByMonitoring, unreadOnly) {
+        if (unreadOnly) filteredByMonitoring.filter { !it.isRead } else filteredByMonitoring
     }
 
     Column(
@@ -240,7 +246,7 @@ fun MemoryScreen(
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
                     if (searchQuery.isEmpty()) {
-                        if (unreadOnly) "No unread memories!" else "No memories captured yet."
+                        if (unreadOnly) "No unread notifications!" else "No notifications captured yet."
                     } else {
                         "No matches found."
                     }

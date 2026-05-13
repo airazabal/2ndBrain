@@ -1,8 +1,32 @@
+import java.util.Properties
+import java.io.FileInputStream
+import java.io.FileOutputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
+
+val versionPropsFile = file("version.properties")
+val versionProps = Properties()
+
+if (!versionPropsFile.exists()) {
+    versionProps["VERSION_CODE"] = "2"
+    versionProps["VERSION_NAME"] = "1.0.1"
+    versionProps.store(FileOutputStream(versionPropsFile), null)
+}
+
+versionProps.load(FileInputStream(versionPropsFile))
+
+val currentVersionCode = versionProps["VERSION_CODE"].toString().toInt()
+val nextVersionCode = currentVersionCode + 1
+val nextVersionName = "1.0.$nextVersionCode"
+
+// Update the file for the next build
+versionProps["VERSION_CODE"] = nextVersionCode.toString()
+versionProps["VERSION_NAME"] = nextVersionName
+versionProps.store(FileOutputStream(versionPropsFile), null)
 
 android {
     namespace = "com.alex.a2ndbrain"
@@ -12,8 +36,8 @@ android {
         applicationId = "com.alex.a2ndbrain"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.0.1"
+        versionCode = nextVersionCode
+        versionName = nextVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         
