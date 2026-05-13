@@ -156,6 +156,12 @@ fun AppCaptureSettingsScreen(
                         Text("System")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        context.startActivity(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                    }) {
+                        Text("Usage Access")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
                     OutlinedButton(onClick = onRestartService) {
                         Text("Refresh Connection")
                     }

@@ -34,4 +34,13 @@ interface MemoryDao {
 
     @Query("UPDATE memories SET isRead = 1 WHERE id = :id")
     suspend fun markAsRead(id: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUsageStat(stat: UsageStatEntity)
+
+    @Query("SELECT * FROM usage_stats WHERE date = :date")
+    fun getUsageStatsForDate(date: String): Flow<List<UsageStatEntity>>
+
+    @Query("SELECT * FROM usage_stats WHERE date >= :startDate")
+    suspend fun getUsageStatsSince(startDate: String): List<UsageStatEntity>
 }

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
@@ -36,6 +37,7 @@ import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.notes.NotesScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
+import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -107,6 +109,12 @@ class MainActivity : ComponentActivity() {
                                     selected = currentTab == 2,
                                     onClick = { currentTab = 2 }
                                 )
+                                NavigationRailItem(
+                                    icon = { Icon(Icons.Default.Schedule, contentDescription = "Digital Time") },
+                                    label = { Text("Digital Time") },
+                                    selected = currentTab == 3,
+                                    onClick = { currentTab = 3 }
+                                )
                             }
 
                             Box(modifier = Modifier.weight(1f)) {
@@ -145,6 +153,7 @@ class MainActivity : ComponentActivity() {
                                     )
 
                                     2 -> NotesScreen(settingsManager = settingsManager)
+                                    3 -> DigitalTimeScreen()
                                 }
                             }
                         }

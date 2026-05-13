@@ -6,6 +6,7 @@ import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
+import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -40,8 +41,19 @@ class ReflectionManager(private val context: Context) {
         calendar.set(Calendar.SECOND, 0)
         val startTime = calendar.timeInMillis
 
+        // Sync latest digital time before reflection
+        val digitalTimeManager = DigitalTimeManager(context)
+        digitalTimeManager.syncUsageStats()
+
         val memories = database.memoryDao().getMemoriesSince(startTime)
         if (memories.isEmpty()) return
+
+        val usageStats = database.memoryDao().getUsageStatsSince(todayStr)
+        val usageReport = usageStats.sortedByDescending { it.totalTimeVisibleMs }
+            .take(5)
+            .joinToString("\n") { 
+                "- ${it.packageName.substringAfterLast(".")}: ${it.totalTimeVisibleMs / 1000 / 60} mins"
+            }
 
         val apiKey = settingsManager.getGeminiApiKey()
         val preferredModel = settingsManager.getGeminiModel()
@@ -52,7 +64,15 @@ class ReflectionManager(private val context: Context) {
                 val time = timeFormat.format(Date(it.timestamp))
                 "- [$time][${getAppName(it)}] ${it.title ?: ""}: ${it.content.take(150)}"
             }
-            val result = GeminiAgent(apiKey).summarizeMemories(rawData, preferredModel)
+            
+            val promptContext = """
+                $rawData
+                
+                DIGITAL USAGE (Top Apps Today):
+                $usageReport
+            """.trimIndent()
+
+            val result = GeminiAgent(apiKey).summarizeMemories(promptContext, preferredModel)
             result.text to result.modelName
         } else {
             generateBasicSummary(memories) to "Local Template"
