@@ -2,30 +2,36 @@ package com.alex.a2ndbrain.ui.notes
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
 import com.alex.a2ndbrain.BuildConfig
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.ui.theme.PastelBlue
+import com.alex.a2ndbrain.ui.theme.PastelGreen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -42,7 +48,6 @@ fun NotesScreen(
     var currentFolder by remember { mutableStateOf<DocumentFile?>(null) }
     var folderStack by remember { mutableStateOf(listOf<DocumentFile>()) }
     var items by remember { mutableStateOf<List<DocumentFile>>(emptyList()) }
-
     var selectedNoteForPreview by remember { mutableStateOf<DocumentFile?>(null) }
 
     val launcher = rememberLauncherForActivityResult(
@@ -95,20 +100,14 @@ fun NotesScreen(
                         }
                     }
                     
-                    Column {
+                    if (folderStack.isNotEmpty()) {
                         Text(
-                            text = if (folderStack.isEmpty()) "Notes" else folderStack.last().name ?: "Notes",
-                            style = MaterialTheme.typography.headlineMedium,
+                            text = folderStack.last().name ?: "Notes",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (folderStack.isEmpty()) {
-                            Text(
-                                text = "v${BuildConfig.VERSION_NAME}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
                     }
                 }
                 
@@ -119,7 +118,7 @@ fun NotesScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             if (vaultUri.isBlank()) {
                 Box(
@@ -131,23 +130,23 @@ fun NotesScreen(
                             Icons.Default.Description,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
                         )
                         Spacer(modifier = Modifier.height(16.dp))
-                        Text("Connect your Obsidian Vault to see your notes.")
+                        Text("Connect your Obsidian Vault")
                         Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { launcher.launch(null) }) {
-                            Text("Select Vault Folder")
+                        Button(onClick = { launcher.launch(null) }, shape = RoundedCornerShape(12.dp)) {
+                            Text("Select Folder")
                         }
                     }
                 }
             } else {
                 if (items.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("This folder is empty.")
+                        Text("This folder is empty.", color = MaterialTheme.colorScheme.outline)
                     }
                 } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         items(items) { item ->
                             NoteOrFolderItem(
                                 item = item,
@@ -184,29 +183,14 @@ fun NotesScreen(
                 },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(24.dp)
+                    .padding(24.dp),
+                shape = RoundedCornerShape(16.dp),
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = Color.White
             ) {
                 Icon(Icons.Default.Add, contentDescription = "New Note")
             }
         }
-    }
-}
-
-private fun createNewNoteInObsidian(context: android.content.Context, vaultUri: String) {
-    val root = DocumentFile.fromTreeUri(context, android.net.Uri.parse(vaultUri)) ?: return
-    val vaultName = root.name ?: ""
-    val timestamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date())
-    val newNoteName = "2ndBrain-$timestamp"
-    
-    // obsidian://new?vault=my%20vault&name=my%20note
-    val obsidianUri = android.net.Uri.parse("obsidian://new?vault=${android.net.Uri.encode(vaultName)}&name=${android.net.Uri.encode(newNoteName)}")
-    
-    try {
-        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, obsidianUri)
-        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-    } catch (e: Exception) {
-        // Obsidian not installed
     }
 }
 
@@ -231,17 +215,17 @@ fun NotePreviewDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(28.dp),
         title = {
             Text(
                 text = file.name?.removeSuffix(".md") ?: "Note Preview",
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = FontWeight.Bold
             )
         },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
-                HorizontalDivider(thickness = 0.5.dp)
-                Spacer(modifier = Modifier.height(8.dp))
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -250,15 +234,15 @@ fun NotePreviewDialog(
                 ) {
                     Text(
                         text = content,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         },
         confirmButton = {
-            Button(onClick = onEditInObsidian) {
-                Text("Edit in Obsidian")
+            Button(onClick = onEditInObsidian, shape = RoundedCornerShape(12.dp)) {
+                Text("Edit")
             }
         },
         dismissButton = {
@@ -281,32 +265,41 @@ fun NoteOrFolderItem(
             .clickable {
                 if (item.isDirectory) onFolderClick(item) else onFileClick(item)
             },
-        colors = CardDefaults.cardColors(
-            containerColor = if (item.isDirectory) 
-                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-            else 
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = if (item.isDirectory) Icons.Default.Folder else Icons.Default.Description,
-                contentDescription = null,
-                tint = if (item.isDirectory) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
-            )
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(if (item.isDirectory) PastelGreen else PastelBlue),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = if (item.isDirectory) Icons.Default.Folder else Icons.Default.Description,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                )
+            }
+            
             Spacer(modifier = Modifier.width(16.dp))
+            
             Column {
                 Text(
                     text = if (item.isDirectory) item.name ?: "Folder" else item.name?.removeSuffix(".md") ?: "Untitled",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (item.isDirectory) FontWeight.Bold else FontWeight.Normal
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 if (!item.isDirectory) {
                     Text(
-                        text = "Modified: ${SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(item.lastModified()))}",
+                        text = "Modified ${SimpleDateFormat("MMM d", Locale.getDefault()).format(Date(item.lastModified()))}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
@@ -321,7 +314,7 @@ private fun openInObsidian(context: android.content.Context, file: DocumentFile,
     val vaultName = root.name ?: ""
     
     // Construct the relative path from vault root
-    val relativePath = getRelativePath(context, file, vaultUri)
+    val relativePath = getRelativePath(file, vaultUri)
     val fileNameWithoutExt = relativePath.removeSuffix(".md")
     
     val obsidianUri = android.net.Uri.parse("obsidian://open?vault=${android.net.Uri.encode(vaultName)}&file=${android.net.Uri.encode(fileNameWithoutExt)}")
@@ -335,18 +328,11 @@ private fun openInObsidian(context: android.content.Context, file: DocumentFile,
     }
 }
 
-private fun getRelativePath(context: android.content.Context, file: DocumentFile, vaultUri: String): String {
-    // Simplified logic: the DocumentFile API doesn't make relative paths easy.
-    // We'll extract it from the Document URI if possible, or just use the name for now.
-    // A robust version would crawl up 'parent' but SAF DocumentFile parent is often null.
-    // For now, let's use the file name. If it's deep, Obsidian might need the full path.
-    
+private fun getRelativePath(file: DocumentFile, vaultUri: String): String {
     val fullUri = file.uri.toString()
     val decodedVaultUri = android.net.Uri.decode(vaultUri)
     val decodedFileUri = android.net.Uri.decode(fullUri)
     
-    // SAF URIs look like ...tree/primary:Documents/Vault%2FSubfolder%2FNote.md
-    // We can try to extract everything after the vault root identifier
     val vaultPathSegment = decodedVaultUri.substringAfterLast(":")
     val filePathSegment = decodedFileUri.substringAfterLast(":")
     
@@ -354,5 +340,21 @@ private fun getRelativePath(context: android.content.Context, file: DocumentFile
         filePathSegment.removePrefix(vaultPathSegment).removePrefix("/")
     } else {
         file.name ?: ""
+    }
+}
+
+private fun createNewNoteInObsidian(context: android.content.Context, vaultUri: String) {
+    val root = DocumentFile.fromTreeUri(context, android.net.Uri.parse(vaultUri)) ?: return
+    val vaultName = root.name ?: ""
+    val timestamp = SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(Date())
+    val newNoteName = "2ndBrain-$timestamp"
+    
+    val obsidianUri = android.net.Uri.parse("obsidian://new?vault=${android.net.Uri.encode(vaultName)}&name=${android.net.Uri.encode(newNoteName)}")
+    
+    try {
+        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, obsidianUri)
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    } catch (e: Exception) {
     }
 }

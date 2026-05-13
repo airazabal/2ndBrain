@@ -6,10 +6,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Description
@@ -19,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,6 +33,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
@@ -37,6 +44,7 @@ import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.notes.NotesScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
+import com.alex.a2ndbrain.ui.theme.BrainTheme
 import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,7 +69,7 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            MaterialTheme {
+            BrainTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     var currentTab by remember { mutableIntStateOf(0) }
                     val database = AppDatabase.getDatabase(this)
@@ -86,74 +94,121 @@ class MainActivity : ComponentActivity() {
                         ) {
                             NavigationRail(
                                 modifier = Modifier.fillMaxHeight(),
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                containerColor = MaterialTheme.colorScheme.surface,
                                 header = {
-                                    // Optional: Add a small logo or profile icon here
+                                    Icon(
+                                        Icons.Default.AutoAwesome,
+                                        contentDescription = null,
+                                        modifier = Modifier.padding(vertical = 16.dp).size(32.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             ) {
                                 NavigationRailItem(
                                     icon = { Icon(Icons.Default.Notifications, contentDescription = "Notifications") },
-                                    label = { Text("Notifications") },
+                                    label = { Text("Feed") },
                                     selected = currentTab == 0,
-                                    onClick = { currentTab = 0 }
+                                    onClick = { currentTab = 0 },
+                                    colors = NavigationRailItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                    )
                                 )
                                 NavigationRailItem(
                                     icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Reflection") },
-                                    label = { Text("Reflection") },
+                                    label = { Text("Brain") },
                                     selected = currentTab == 1,
-                                    onClick = { currentTab = 1 }
+                                    onClick = { currentTab = 1 },
+                                    colors = NavigationRailItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                    )
                                 )
                                 NavigationRailItem(
                                     icon = { Icon(Icons.Default.Description, contentDescription = "Notes") },
                                     label = { Text("Notes") },
                                     selected = currentTab == 2,
-                                    onClick = { currentTab = 2 }
+                                    onClick = { currentTab = 2 },
+                                    colors = NavigationRailItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                    )
                                 )
                                 NavigationRailItem(
                                     icon = { Icon(Icons.Default.Schedule, contentDescription = "Digital Time") },
-                                    label = { Text("Digital Time") },
+                                    label = { Text("Time") },
                                     selected = currentTab == 3,
-                                    onClick = { currentTab = 3 }
+                                    onClick = { currentTab = 3 },
+                                    colors = NavigationRailItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                    )
                                 )
                             }
 
-                            Box(modifier = Modifier.weight(1f)) {
-                                when (currentTab) {
-                                    0 -> MemoryScreen(
-                                        memories = filteredMemories,
-                                        searchQuery = searchQuery,
-                                        onSearchQueryChange = { searchQuery = it },
-                                        onOpenSettings = {
-                                            startActivity(Intent(this@MainActivity, AppCaptureSettingsActivity::class.java))
+                            Column(modifier = Modifier.weight(1f)) {
+                                // Hero Header
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 32.dp, vertical = 24.dp)
+                                ) {
+                                    Text(
+                                        text = when(currentTab) {
+                                            0 -> "Your daily stream of captures"
+                                            1 -> "Reflections & daily insights"
+                                            2 -> "Your space for ideas & thoughts"
+                                            else -> "Understanding your routine"
                                         },
-                                        onCaptureClipboard = {
-                                            clipboardCaptureManager.captureCurrentClipboard()
-                                        },
-                                        onMarkAsRead = { id ->
-                                            lifecycleScope.launch(Dispatchers.IO) {
-                                                database.memoryDao().markAsRead(id)
-                                            }
-                                        },
-                                        onClearAll = {
-                                            lifecycleScope.launch(Dispatchers.IO) {
-                                                database.clearAllTables()
-                                            }
-                                        },
-                                        monitoredApps = settingsManager.getMonitoredApps()
+                                        style = MaterialTheme.typography.headlineLarge,
+                                        fontWeight = FontWeight.Black,
+                                        lineHeight = 44.sp,
+                                        color = MaterialTheme.colorScheme.primary
                                     )
+                                }
 
-                                    1 -> ReflectionScreen(
-                                        summaries = summaries,
-                                        settingsManager = settingsManager,
-                                        onGenerateReflection = {
-                                            lifecycleScope.launch(Dispatchers.IO) {
-                                                reflectionManager.generateDailyReflection()
+                                Box(modifier = Modifier.weight(1f)) {
+                                    when (currentTab) {
+                                        0 -> MemoryScreen(
+                                            memories = filteredMemories,
+                                            searchQuery = searchQuery,
+                                            onSearchQueryChange = { searchQuery = it },
+                                            onOpenSettings = {
+                                                startActivity(Intent(this@MainActivity, AppCaptureSettingsActivity::class.java))
+                                            },
+                                            onCaptureClipboard = {
+                                                clipboardCaptureManager.captureCurrentClipboard()
+                                            },
+                                            onMarkAsRead = { id ->
+                                                lifecycleScope.launch(Dispatchers.IO) {
+                                                    database.memoryDao().markAsRead(id)
+                                                }
+                                            },
+                                            onClearAll = {
+                                                lifecycleScope.launch(Dispatchers.IO) {
+                                                    database.clearAllTables()
+                                                }
+                                            },
+                                            monitoredApps = settingsManager.getMonitoredApps()
+                                        )
+
+                                        1 -> ReflectionScreen(
+                                            summaries = summaries,
+                                            settingsManager = settingsManager,
+                                            onGenerateReflection = {
+                                                lifecycleScope.launch(Dispatchers.IO) {
+                                                    reflectionManager.generateDailyReflection()
+                                                }
                                             }
-                                        }
-                                    )
+                                        )
 
-                                    2 -> NotesScreen(settingsManager = settingsManager)
-                                    3 -> DigitalTimeScreen()
+                                        2 -> NotesScreen(settingsManager = settingsManager)
+                                        3 -> DigitalTimeScreen()
+                                    }
                                 }
                             }
                         }

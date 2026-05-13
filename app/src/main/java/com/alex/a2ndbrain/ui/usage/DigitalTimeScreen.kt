@@ -1,8 +1,10 @@
 package com.alex.a2ndbrain.ui.usage
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
@@ -10,6 +12,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -19,6 +23,8 @@ import com.alex.a2ndbrain.BuildConfig
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
+import com.alex.a2ndbrain.ui.theme.PastelBlue
+import com.alex.a2ndbrain.ui.theme.PastelPurple
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -82,22 +88,9 @@ fun DigitalTimeScreen(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "Digital Time",
-                    style = MaterialTheme.typography.headlineMedium
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "v${BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-            
             if (isPermissionGranted) {
                 IconButton(
                     onClick = {
@@ -118,7 +111,7 @@ fun DigitalTimeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         // Period Selector
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -133,7 +126,7 @@ fun DigitalTimeScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         if (!isPermissionGranted) {
             PermissionRequiredView {
@@ -143,18 +136,18 @@ fun DigitalTimeScreen(
             if (consolidatedStats.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     if (isSyncing) CircularProgressIndicator()
-                    else Text("No usage data for this period.")
+                    else Text("No usage data for this period.", color = MaterialTheme.colorScheme.outline)
                 }
             } else {
                 val totalTime = consolidatedStats.sumOf { it.totalTimeMs }
                 UsageSummaryCard(totalTime, selectedPeriod)
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(24.dp))
                 
-                Text("App Totals Across Devices", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
+                Text("Most Used", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
                 
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(consolidatedStats.take(30)) { stat ->
                         ConsolidatedUsageItem(stat)
                     }
@@ -185,53 +178,63 @@ fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
     
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(appName, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.ExtraBold)
-                    Text(stat.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(PastelPurple),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = appName.take(1).uppercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(appName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(stat.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
                 
                 Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = MaterialTheme.shapes.small
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
                         text = formatDuration(stat.totalTimeMs),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
             
             if (stat.deviceBreakdown.size > 1) {
-                Spacer(modifier = Modifier.height(8.dp))
-                HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 stat.deviceBreakdown.forEach { (device, time) ->
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(start = 44.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(device, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                        Text(formatDuration(time), style = MaterialTheme.typography.labelSmall)
+                        Text(formatDuration(time), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                     }
                 }
-            } else if (stat.deviceBreakdown.isNotEmpty()) {
-                Text(
-                    text = "On ${stat.deviceBreakdown.keys.first()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 4.dp)
-                )
             }
         }
     }
@@ -247,14 +250,21 @@ private fun formatDuration(ms: Long): String {
 fun UsageSummaryCard(totalTimeMs: Long, period: TimePeriod) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = PastelBlue)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Total Usage (${period.name.lowercase().replaceFirstChar { it.uppercase() }})", style = MaterialTheme.typography.labelMedium)
+        Column(modifier = Modifier.padding(24.dp)) {
+            Text(
+                text = "Total Usage (${period.name.lowercase().replaceFirstChar { it.uppercase() }})", 
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+            )
             Text(
                 text = formatDuration(totalTimeMs),
-                style = MaterialTheme.typography.headlineLarge,
-                fontWeight = FontWeight.Black
+                style = MaterialTheme.typography.displayMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
@@ -264,17 +274,18 @@ fun UsageSummaryCard(totalTimeMs: Long, period: TimePeriod) {
 fun PermissionRequiredView(onGrantClick: () -> Unit) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
-            Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
+            Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Usage Access Required", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Access Required", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "To sync digital time across devices, 2ndBrain needs permission to see how long apps are used.",
+                "2ndBrain needs permission to track app usage time.",
                 style = MaterialTheme.typography.bodyMedium,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                color = MaterialTheme.colorScheme.outline
             )
             Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = onGrantClick) {
+            Button(onClick = onGrantClick, shape = RoundedCornerShape(12.dp)) {
                 Text("Grant Permission")
             }
         }

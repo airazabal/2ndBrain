@@ -24,34 +24,15 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +42,7 @@ import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.BuildConfig
 import com.alex.a2ndbrain.core.capture.CaptureDebugStore
 import com.alex.a2ndbrain.core.memory.MemoryEntity
+import com.alex.a2ndbrain.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -106,8 +88,6 @@ fun MemoryScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        val lastDebugEvent by CaptureDebugStore.lastEvent.collectAsState()
-
         val totalCount = memories.size
         val clipboardCount = remember(memories) { memories.count { it.source == "clipboard" } }
         val appCount = remember(memories) {
@@ -119,31 +99,9 @@ fun MemoryScreen(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Notifications",
-                        style = MaterialTheme.typography.headlineMedium
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "v${BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-                val statusText = lastDebugEvent.substringAfter("] ").ifEmpty { "Monitoring for captures..." }
-                Text(
-                    text = statusText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(
                     onClick = {
@@ -171,7 +129,7 @@ fun MemoryScreen(
                     Text("CLEAR", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                 }
                 Spacer(modifier = Modifier.width(4.dp))
-                Button(onClick = onOpenSettings) {
+                Button(onClick = onOpenSettings, shape = RoundedCornerShape(12.dp)) {
                     Text("Setup")
                 }
             }
@@ -352,12 +310,25 @@ private fun GroupedMemoryCard(
     }
 
     val displayMemories = if (showAllItems) memories else memories.take(5)
+    
+    // Choose a pastel color based on the app name
+    val cardColor = remember(displayName) {
+        when {
+            displayName.contains("mail", ignoreCase = true) || displayName.contains("outlook", ignoreCase = true) -> PastelBlue
+            displayName.contains("calendar", ignoreCase = true) -> PastelGreen
+            displayName.contains("todoist", ignoreCase = true) -> PastelRed
+            displayName.contains("clipboard", ignoreCase = true) -> PastelYellow
+            else -> PastelPurple
+        }
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -366,39 +337,55 @@ private fun GroupedMemoryCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = displayName,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = RoundedCornerShape(8.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(cardColor),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = memories.size.toString(),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold
+                            text = displayName.take(1).uppercase(),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                         )
                     }
-
-                    val hasUnread = memories.any { !it.isRead }
-                    if (hasUnread) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Surface(
-                            modifier = Modifier.size(10.dp),
+                    
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    Column {
+                        Text(
+                            text = displayName,
+                            style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary,
-                            shape = RoundedCornerShape(5.dp)
-                        ) {}
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "${memories.size} items",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
                     }
                 }
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (isExpanded) "Collapse" else "Expand"
-                )
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val hasUnread = memories.any { !it.isRead }
+                    if (hasUnread) {
+                        Surface(
+                            modifier = Modifier.size(8.dp),
+                            color = PastelRedText,
+                            shape = RoundedCornerShape(4.dp)
+                        ) {}
+                        Spacer(modifier = Modifier.width(12.dp))
+                    }
+                    
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        tint = MaterialTheme.colorScheme.outline
+                    )
+                }
             }
 
             AnimatedVisibility(
@@ -407,24 +394,23 @@ private fun GroupedMemoryCard(
                 exit = shrinkVertically()
             ) {
                 Column {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     displayMemories.forEachIndexed { index, memory ->
                         MemoryItem(memory, onMarkAsRead = onMarkAsRead)
                         if (index < displayMemories.size - 1) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 8.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant
-                            )
+                            Spacer(modifier = Modifier.height(12.dp))
                         }
                     }
 
                     if (memories.size > 5) {
                         TextButton(
                             onClick = { showAllItems = !showAllItems },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                         ) {
-                            Text(if (showAllItems) "Show less" else "Show ${memories.size - 5} more...")
+                            Text(
+                                text = if (showAllItems) "Show less" else "Show ${memories.size - 5} more...",
+                                style = MaterialTheme.typography.labelMedium
+                            )
                         }
                     }
                 }
@@ -439,9 +425,10 @@ private fun MemoryItem(memory: MemoryEntity, onMarkAsRead: (Long) -> Unit) {
     val isLong = memory.content.length > 200 || memory.content.count { it == '\n' } > 5
     val context = LocalContext.current
 
-    Column(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .clickable {
                 onMarkAsRead(memory.id)
                 if (!memory.deepLink.isNullOrEmpty()) {
@@ -466,102 +453,81 @@ private fun MemoryItem(memory: MemoryEntity, onMarkAsRead: (Long) -> Unit) {
                     } catch (_: Exception) {
                     }
                 }
-            }
-            .padding(vertical = 4.dp)
+            },
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(32.dp)
-                    .background(
-                        if (!memory.isRead) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        RoundedCornerShape(2.dp)
-                    )
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                if (!memory.title.isNullOrEmpty()) {
-                    Text(
-                        text = memory.title,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = if (memory.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    if (!memory.title.isNullOrEmpty()) {
+                        Text(
+                            text = memory.title,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = if (memory.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    SelectionContainer {
+                        Text(
+                            text = memory.content,
+                            fontSize = 14.sp,
+                            maxLines = if (itemExpanded) Int.MAX_VALUE else 3,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (memory.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.height(2.dp))
-                SelectionContainer {
-                    Text(
-                        text = memory.content,
-                        fontSize = 14.sp,
-                        maxLines = if (itemExpanded) Int.MAX_VALUE else 5,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (memory.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
 
-            if (memory.duplicateCount > 1) {
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer,
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.padding(start = 8.dp)
-                ) {
-                    Text(
-                        text = "x${memory.duplicateCount}",
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Black,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
+                if (memory.duplicateCount > 1) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.padding(start = 8.dp)
+                    ) {
+                        Text(
+                            text = "x${memory.duplicateCount}",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
-        }
 
-        if (isLong) {
-            TextButton(
-                onClick = {
-                    itemExpanded = !itemExpanded
-                    onMarkAsRead(memory.id)
-                },
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.height(24.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    if (itemExpanded) "Read less" else "Read more...",
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (!memory.deepLink.isNullOrEmpty()) {
-                Text(
-                    text = "🔗 View original",
+                    text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(memory.timestamp)),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 4.dp)
+                    color = MaterialTheme.colorScheme.outline
                 )
-            } else {
-                Spacer(modifier = Modifier.width(1.dp))
+                
+                if (isLong) {
+                    TextButton(
+                        onClick = { 
+                            itemExpanded = !itemExpanded
+                            onMarkAsRead(memory.id)
+                        },
+                        contentPadding = PaddingValues(0.dp),
+                        modifier = Modifier.height(24.dp)
+                    ) {
+                        Text(
+                            if (itemExpanded) "Read less" else "Read more",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             }
-            Text(
-                text = SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(Date(memory.timestamp)),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.padding(top = 4.dp)
-            )
         }
     }
 }
