@@ -34,18 +34,26 @@ class ReflectionManager(private val context: Context) {
 
     suspend fun generateDailyReflection() {
         val calendar = Calendar.getInstance()
+        val hour = calendar.get(Calendar.HOUR_OF_DAY)
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
         
+        val isMorning = hour in 4..11
+        val summaryType = if (isMorning) "briefing" else "reflection"
+
         calendar.set(Calendar.HOUR_OF_DAY, 0)
         calendar.set(Calendar.MINUTE, 0)
         calendar.set(Calendar.SECOND, 0)
-        val startTime = calendar.timeInMillis
+        val startOfToday = calendar.timeInMillis
+
+        // For morning briefing, we look at items from the last 24 hours to get yesterday's context
+        // For evening reflection, we just look at today.
+        val searchStartTime = if (isMorning) startOfToday - (12 * 60 * 60 * 1000) else startOfToday
 
         // Sync latest digital time before reflection
         val digitalTimeManager = DigitalTimeManager(context)
         digitalTimeManager.syncUsageStats()
 
-        val memories = database.memoryDao().getMemoriesSince(startTime)
+        val memories = database.memoryDao().getMemoriesSince(searchStartTime)
         if (memories.isEmpty()) return
 
         val usageStats = database.memoryDao().getUsageStatsSince(todayStr)
@@ -73,11 +81,11 @@ class ReflectionManager(private val context: Context) {
             val promptContext = """
                 $rawData
                 
-                DIGITAL USAGE (Top Apps Today):
+                DIGITAL USAGE (Today's Totals):
                 $usageReport
             """.trimIndent()
 
-            val result = GeminiAgent(apiKey).summarizeMemories(promptContext, preferredModel)
+            val result = GeminiAgent(apiKey).summarizeMemories(promptContext, preferredModel, isMorningBriefing = isMorning)
             result.text to result.modelName
         } else {
             generateBasicSummary(memories) to "Local Template"
@@ -85,6 +93,7 @@ class ReflectionManager(private val context: Context) {
 
         val summaryEntity = DailySummaryEntity(
             date = todayStr,
+            type = summaryType,
             summary = summaryText,
             timestamp = System.currentTimeMillis(),
             modelName = modelUsed

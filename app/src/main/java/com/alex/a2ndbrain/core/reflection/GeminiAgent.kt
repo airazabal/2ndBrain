@@ -14,28 +14,42 @@ class GeminiAgent(private val apiKey: String) {
         requestOptions = RequestOptions(apiVersion = version)
     )
 
-    suspend fun summarizeMemories(memoriesText: String, preferredModel: String? = null): SummaryResult = withContext(Dispatchers.IO) {
-        if (memoriesText.isBlank()) return@withContext SummaryResult("No significant memories to process today.", "N/A")
+    suspend fun summarizeMemories(memoriesText: String, preferredModel: String? = null, isMorningBriefing: Boolean = false): SummaryResult = withContext(Dispatchers.IO) {
+        if (memoriesText.isBlank()) return@withContext SummaryResult("No significant memories to process yet.", "N/A")
         
+        val modeTask = if (isMorningBriefing) {
+            """
+            MORNING BRIEFING MODE:
+            - Focus on the day ahead. Look at Calendar events captured so far today.
+            - Review yesterday's unfinished business or recurring tasks from Todoist.
+            - Set the 'Focus of the Day'. Suggest which tasks are most realistic given the meeting schedule.
+            - Warn about potential conflicts (e.g., 'You have 3 meetings back-to-back, maybe don't try to finish that deep-work task today').
+            """.trimIndent()
+        } else {
+            """
+            EVENING REFLECTION MODE:
+            - Analyze how the day went. Compare intentions (Todoist) with reality (Digital Time usage).
+            - Identify 'Distraction Gaps': e.g., you spent 2 hours on social media while your Todoist was full of high-priority items.
+            - High-five productivity wins: Highlight when you stayed focused or hit key meetings.
+            - Correlate apps: Did an email trigger a calendar event? Did a message lead to a new task?
+            """.trimIndent()
+        }
+
         val prompt = """
-            You are a 'Second Brain' AI assistant. Analyze the following notification and clipboard captures from a user's day and provide a concise, personal, and insightful daily reflection.
+            You are a 'Second Brain' AI assistant. Analyze the following notification, clipboard, and usage data and provide a concise, personal, and highly intelligent synthesis.
             
-            CORE TASK:
-            Look for correlations, conflicts, and synergies between different apps:
-            - Compare Calendar events with Todoist tasks. Identify if a packed schedule might make it hard to finish specific tasks.
-            - Correlate Emails/Messages with Calendar/Todoist. (e.g., "You got an email about X, which relates to your Todoist task Y").
-            - Spot patterns: Are certain people mentioned across multiple platforms? Are there recurring themes?
+            $modeTask
             
             ADVISORY TONE:
-            Don't just list what happened. Provide 'Second Brain' advice:
-            - Suggest focus areas for tomorrow based on what wasn't finished or what seems urgent.
-            - Flag potential 'time crunches' where meetings and tasks overlap.
-            - Highlight key interactions or follow-ups that shouldn't be missed.
+            Don't just list what happened. Provide actionable advice:
+            - Suggest focus areas based on what wasn't finished or what seems urgent.
+            - Flag potential 'time crunches' or 'energy drains'.
+            - Spot patterns across People and Projects (mention them by name).
 
             FORMAT:
-            Friendly, journal-like, and insightful. Use bullet points for action items.
+            Friendly, professional, and insightful. Use clear headings. Keep it brief.
 
-            RAW MEMORIES (with timestamps):
+            RAW DATA (with timestamps):
             $memoriesText
         """.trimIndent()
 

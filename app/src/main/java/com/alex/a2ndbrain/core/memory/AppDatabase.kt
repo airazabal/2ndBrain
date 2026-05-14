@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class], version = 11, exportSchema = false)
+@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class], version = 12, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
 

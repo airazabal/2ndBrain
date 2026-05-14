@@ -34,6 +34,8 @@ import com.alex.a2ndbrain.BuildConfig
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.ui.theme.PastelBlue
+import com.alex.a2ndbrain.ui.theme.PastelGreen
+import com.alex.a2ndbrain.ui.theme.PastelGreenText
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -161,31 +163,43 @@ private fun SummaryCard(summary: DailySummaryEntity) {
                         modifier = Modifier
                             .size(40.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(PastelBlue),
+                            .background(if (summary.type == "briefing") PastelGreen else PastelBlue),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.AutoAwesome,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                            tint = if (summary.type == "briefing") PastelGreenText else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
                             modifier = Modifier.size(20.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(
-                            text = SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date(summary.timestamp)),
+                            text = if (summary.type == "briefing") "Morning Briefing" else "Evening Reflection",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        summary.modelName?.let { name ->
-                            Text(
-                                text = "Model: ${name.removePrefix("gemini-")}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
-                            )
-                        }
+                        Text(
+                            text = SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date(summary.timestamp)),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+                
+                Surface(
+                    color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.05f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    summary.modelName?.let { name ->
+                        Text(
+                            text = name.removePrefix("gemini-"),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
                     }
                 }
             }
