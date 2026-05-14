@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +48,7 @@ fun ReflectionScreen(
     onGenerateReflection: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val configuration = LocalConfiguration.current
     var selectedModel by remember { mutableStateOf(settingsManager.getGeminiModel()) }
     var isGenerating by remember { mutableStateOf(false) }
     
@@ -79,13 +81,17 @@ fun ReflectionScreen(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            val reflectButtonWidth = (configuration.screenWidthDp * 0.25).coerceIn(90.0, 140.0).dp
+            
             Button(
                 onClick = {
                     isGenerating = true
                     onGenerateReflection()
                 },
                 enabled = !isGenerating,
-                shape = RoundedCornerShape(12.dp)
+                modifier = Modifier.width(reflectButtonWidth),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(0.dp)
             ) {
                 if (isGenerating) {
                     CircularProgressIndicator(
@@ -93,8 +99,6 @@ fun ReflectionScreen(
                         color = MaterialTheme.colorScheme.onPrimary,
                         strokeWidth = 2.dp
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Thinking...")
                 } else {
                     Text("Reflect")
                 }

@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,6 +65,8 @@ fun MemoryScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+
     val scope = rememberCoroutineScope()
     var sortOption by remember { mutableStateOf(MemorySortOption.USAGE) }
     var unreadOnly by remember { mutableStateOf(false) }
@@ -97,12 +100,40 @@ fun MemoryScreen(
         }
         val unreadCount = remember(memories) { memories.count { !it.isRead } }
 
+        // Adaptive Header Row
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Feed",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                if (isScanning) {
+                    Text("Updating...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+
+            // Action Buttons with proportional spacing
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(if (configuration.screenWidthDp < 360) 4.dp else 8.dp)
+            ) {
+                // Clipboard Capture (Icon only on small screens)
+                if (configuration.screenWidthDp < 400) {
+                    IconButton(onClick = onCaptureClipboard) {
+                        Text("📋", fontSize = 16.sp)
+                    }
+                } else {
+                    TextButton(onClick = onCaptureClipboard) {
+                        Text("CAPTURE", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // SCAN Button
                 TextButton(
                     onClick = {
                         isScanning = true
@@ -111,26 +142,35 @@ fun MemoryScreen(
                         }
                         context.startService(scanIntent)
                     },
-                    enabled = !isScanning
+                    enabled = !isScanning,
+                    contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
                     if (isScanning) {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("SCAN", fontSize = 12.sp)
+                        Text("SCAN", fontSize = 10.sp)
                     }
                 }
-                TextButton(
-                    onClick = onCaptureClipboard,
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+
+                // Proportional Setup Button
+                val setupWidth = (configuration.screenWidthDp * 0.2).coerceIn(70.0, 110.0).dp
+                Button(
+                    onClick = onOpenSettings,
+                    modifier = Modifier.width(setupWidth),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text("📋 CAPTURE", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("Setup", style = MaterialTheme.typography.labelMedium)
                 }
-                TextButton(onClick = onClearAll) {
-                    Text("CLEAR", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-                Button(onClick = onOpenSettings, shape = RoundedCornerShape(12.dp)) {
-                    Text("Setup")
+                
+                // Clear (Icon only)
+                IconButton(onClick = onClearAll, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Search, 
+                        contentDescription = "Clear",
+                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
         }
