@@ -106,11 +106,12 @@ fun MemoryScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column {
                 Text(
                     text = "Feed",
                     style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    softWrap = false
                 )
                 if (isScanning) {
                     Text("Updating...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
@@ -120,7 +121,7 @@ fun MemoryScreen(
             // Action Buttons with proportional spacing
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(if (configuration.screenWidthDp < 360) 4.dp else 8.dp)
+                horizontalArrangement = Arrangement.End
             ) {
                 // Clipboard Capture (Icon only on small screens)
                 if (configuration.screenWidthDp < 400) {
@@ -143,26 +144,30 @@ fun MemoryScreen(
                         context.startService(scanIntent)
                     },
                     enabled = !isScanning,
-                    contentPadding = PaddingValues(horizontal = 4.dp)
+                    contentPadding = PaddingValues(horizontal = if (configuration.screenWidthDp < 360) 2.dp else 4.dp)
                 ) {
                     if (isScanning) {
                         CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
                     } else {
-                        Text("SCAN", fontSize = 10.sp)
+                        Text("SCAN", fontSize = if (configuration.screenWidthDp < 360) 9.sp else 10.sp)
                     }
                 }
 
+                Spacer(modifier = Modifier.width(if (configuration.screenWidthDp < 360) 2.dp else 4.dp))
+
                 // Proportional Setup Button
-                val setupWidth = (configuration.screenWidthDp * 0.2).coerceIn(70.0, 110.0).dp
+                val setupWidth = (configuration.screenWidthDp * 0.18).coerceIn(60.0, 110.0).dp
                 Button(
                     onClick = onOpenSettings,
                     modifier = Modifier.width(setupWidth),
                     shape = RoundedCornerShape(12.dp),
                     contentPadding = PaddingValues(0.dp)
                 ) {
-                    Text("Setup", style = MaterialTheme.typography.labelMedium)
+                    Text("Setup", style = if (configuration.screenWidthDp < 360) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium)
                 }
                 
+                Spacer(modifier = Modifier.width(if (configuration.screenWidthDp < 360) 2.dp else 4.dp))
+
                 // Clear (Icon only)
                 IconButton(onClick = onClearAll, modifier = Modifier.size(24.dp)) {
                     Icon(
