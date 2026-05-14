@@ -44,7 +44,6 @@ fun NotesScreen(
     val context = LocalContext.current
     var vaultUri by remember { mutableStateOf(settingsManager.getObsidianVaultUri()) }
     
-    // Navigation state
     var currentFolder by remember { mutableStateOf<DocumentFile?>(null) }
     var folderStack by remember { mutableStateOf(listOf<DocumentFile>()) }
     var items by remember { mutableStateOf<List<DocumentFile>>(emptyList()) }
@@ -61,13 +60,11 @@ fun NotesScreen(
             val uriString = it.toString()
             settingsManager.saveObsidianVaultUri(uriString)
             vaultUri = uriString
-            // Reset navigation when vault changes
             currentFolder = null
             folderStack = emptyList()
         }
     }
 
-    // Load items whenever vault or current folder changes
     LaunchedEffect(vaultUri, currentFolder) {
         if (vaultUri.isNotBlank()) {
             val folderToScan = currentFolder ?: DocumentFile.fromTreeUri(context, android.net.Uri.parse(vaultUri))
@@ -78,89 +75,102 @@ fun NotesScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (folderStack.isNotEmpty()) {
-                        IconButton(onClick = {
-                            val newStack = folderStack.dropLast(1)
-                            currentFolder = newStack.lastOrNull() // null means root
-                            folderStack = newStack
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            // Header Item
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        if (folderStack.isNotEmpty()) {
+                            IconButton(onClick = {
+                                val newStack = folderStack.dropLast(1)
+                                currentFolder = newStack.lastOrNull()
+                                folderStack = newStack
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                        }
+                        
+                        if (folderStack.isNotEmpty()) {
+                            Text(
+                                text = folderStack.last().name ?: "Notes",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Text(
+                                text = "Notebook",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                     
-                    if (folderStack.isNotEmpty()) {
-                        Text(
-                            text = folderStack.last().name ?: "Notes",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-                
-                if (vaultUri.isNotBlank()) {
-                    IconButton(onClick = { launcher.launch(null) }) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = "Change Vault")
+                    if (vaultUri.isNotBlank()) {
+                        IconButton(onClick = { launcher.launch(null) }) {
+                            Icon(Icons.Default.FolderOpen, contentDescription = "Change Vault")
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
             if (vaultUri.isBlank()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.Description,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Connect your Obsidian Vault")
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(onClick = { launcher.launch(null) }, shape = RoundedCornerShape(12.dp)) {
-                            Text("Select Folder")
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().height(400.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                Icons.Default.Description,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Connect your Obsidian Vault")
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(onClick = { launcher.launch(null) }, shape = RoundedCornerShape(12.dp)) {
+                                Text("Select Folder")
+                            }
                         }
                     }
                 }
             } else {
                 if (items.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("This folder is empty.", color = MaterialTheme.colorScheme.outline)
-                    }
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(items) { item ->
-                            NoteOrFolderItem(
-                                item = item,
-                                onFolderClick = { folder ->
-                                    folderStack = folderStack + folder
-                                    currentFolder = folder
-                                },
-                                onFileClick = { file ->
-                                    selectedNoteForPreview = file
-                                }
-                            )
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                            Text("This folder is empty.", color = MaterialTheme.colorScheme.outline)
                         }
                     }
+                } else {
+                    items(items) { item ->
+                        NoteOrFolderItem(
+                            item = item,
+                            onFolderClick = { folder ->
+                                folderStack = folderStack + folder
+                                currentFolder = folder
+                            },
+                            onFileClick = { file ->
+                                selectedNoteForPreview = file
+                            }
+                        )
+                    }
                 }
+            }
+            
+            item {
+                Spacer(modifier = Modifier.height(80.dp)) // Extra space for FAB
             }
         }
 
@@ -313,7 +323,6 @@ private fun openInObsidian(context: android.content.Context, file: DocumentFile,
     val root = DocumentFile.fromTreeUri(context, android.net.Uri.parse(vaultUri)) ?: return
     val vaultName = root.name ?: ""
     
-    // Construct the relative path from vault root
     val relativePath = getRelativePath(file, vaultUri)
     val fileNameWithoutExt = relativePath.removeSuffix(".md")
     
@@ -324,7 +333,6 @@ private fun openInObsidian(context: android.content.Context, file: DocumentFile,
         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     } catch (e: Exception) {
-        // Obsidian not installed
     }
 }
 

@@ -81,84 +81,97 @@ fun DigitalTimeScreen(
         }
     }
 
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isPermissionGranted) {
-                IconButton(
-                    onClick = {
-                        scope.launch {
-                            isSyncing = true
-                            digitalTimeManager.syncUsageStats()
-                            isSyncing = false
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (isPermissionGranted) {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                isSyncing = true
+                                digitalTimeManager.syncUsageStats()
+                                isSyncing = false
+                            }
+                        },
+                        enabled = !isSyncing
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                         }
-                    },
-                    enabled = !isSyncing
-                ) {
-                    if (isSyncing) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Period Selector
-        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            TimePeriod.entries.forEachIndexed { index, period ->
-                SegmentedButton(
-                    selected = selectedPeriod == period,
-                    onClick = { selectedPeriod = period },
-                    shape = SegmentedButtonDefaults.itemShape(index = index, count = TimePeriod.entries.size)
-                ) {
-                    Text(period.name.lowercase().replaceFirstChar { it.uppercase() })
+        item {
+            // Period Selector
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                TimePeriod.entries.forEachIndexed { index, period ->
+                    SegmentedButton(
+                        selected = selectedPeriod == period,
+                        onClick = { selectedPeriod = period },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = TimePeriod.entries.size)
+                    ) {
+                        Text(period.name.lowercase().replaceFirstChar { it.uppercase() })
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
         if (!isPermissionGranted) {
-            PermissionRequiredView {
-                context.startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            item {
+                PermissionRequiredView {
+                    context.startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                }
             }
         } else {
             if (consolidatedStats.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    if (isSyncing) CircularProgressIndicator()
-                    else Text("No usage data for this period.", color = MaterialTheme.colorScheme.outline)
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                        if (isSyncing) CircularProgressIndicator()
+                        else Text("No usage data for this period.", color = MaterialTheme.colorScheme.outline)
+                    }
                 }
             } else {
                 val totalTime = consolidatedStats.sumOf { it.totalTimeMs }
-                UsageSummaryCard(totalTime, selectedPeriod)
+                item {
+                    UsageSummaryCard(totalTime, selectedPeriod)
+                }
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                item {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Visual Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
+                
+                item {
+                    UsageBarChart(consolidatedStats.take(5))
+                }
 
-                Text("Visual Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
-                UsageBarChart(consolidatedStats.take(5))
+                item {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Most Used", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                }
 
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                Text("Most Used", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(consolidatedStats.take(30)) { stat ->
-                        ConsolidatedUsageItem(stat)
-                    }
+                items(consolidatedStats.take(30)) { stat ->
+                    ConsolidatedUsageItem(stat)
                 }
             }
+        }
+        
+        // Add a final spacer for better scrolling at the bottom
+        item {
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -323,7 +336,7 @@ fun UsageSummaryCard(totalTimeMs: Long, period: TimePeriod) {
 
 @Composable
 fun PermissionRequiredView(onGrantClick: () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.fillMaxWidth().height(400.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
             Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
             Spacer(modifier = Modifier.height(16.dp))

@@ -6,25 +6,13 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
@@ -66,13 +54,12 @@ fun MemoryScreen(
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-
     val scope = rememberCoroutineScope()
+    
     var sortOption by remember { mutableStateOf(MemorySortOption.USAGE) }
     var unreadOnly by remember { mutableStateOf(false) }
     var isScanning by remember { mutableStateOf(false) }
 
-    // Reset scan state after a short delay or when memories change
     LaunchedEffect(memories) {
         isScanning = false
     }
@@ -86,222 +73,207 @@ fun MemoryScreen(
         if (unreadOnly) filteredByMonitoring.filter { !it.isRead } else filteredByMonitoring
     }
 
-    Column(
+    val totalCount = memories.size
+    val clipboardCount = remember(memories) { memories.count { it.source == "clipboard" } }
+    val appCount = remember(memories) {
+        memories.filter { it.source == "notification" }
+            .mapNotNull { it.packageName }
+            .distinct().size
+    }
+    val unreadCount = remember(memories) { memories.count { !it.isRead } }
+
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        val totalCount = memories.size
-        val clipboardCount = remember(memories) { memories.count { it.source == "clipboard" } }
-        val appCount = remember(memories) {
-            memories.filter { it.source == "notification" }
-                .mapNotNull { it.packageName }
-                .distinct().size
-        }
-        val unreadCount = remember(memories) { memories.count { !it.isRead } }
-
-        // Adaptive Header Row
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text(
-                    text = "Feed",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    softWrap = false
-                )
-                if (isScanning) {
-                    Text("Updating...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                }
-            }
-
-            // Action Buttons with proportional spacing
+        // Adaptive Header Item
+        item {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Clipboard Capture (Icon only on small screens)
-                if (configuration.screenWidthDp < 400) {
-                    IconButton(onClick = onCaptureClipboard) {
-                        Text("📋", fontSize = 16.sp)
-                    }
-                } else {
-                    TextButton(onClick = onCaptureClipboard) {
-                        Text("CAPTURE", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-
-                // SCAN Button
-                TextButton(
-                    onClick = {
-                        isScanning = true
-                        val scanIntent = Intent(context, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java).apply {
-                            action = "CHECK_ACTIVE"
-                        }
-                        context.startService(scanIntent)
-                    },
-                    enabled = !isScanning,
-                    contentPadding = PaddingValues(horizontal = if (configuration.screenWidthDp < 360) 2.dp else 4.dp)
-                ) {
-                    if (isScanning) {
-                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text("SCAN", fontSize = if (configuration.screenWidthDp < 360) 9.sp else 10.sp)
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(if (configuration.screenWidthDp < 360) 2.dp else 4.dp))
-
-                // Proportional Setup Button
-                val setupWidth = (configuration.screenWidthDp * 0.18).coerceIn(60.0, 110.0).dp
-                Button(
-                    onClick = onOpenSettings,
-                    modifier = Modifier.width(setupWidth),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text("Setup", style = if (configuration.screenWidthDp < 360) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium)
-                }
-                
-                Spacer(modifier = Modifier.width(if (configuration.screenWidthDp < 360) 2.dp else 4.dp))
-
-                // Clear (Icon only)
-                IconButton(onClick = onClearAll, modifier = Modifier.size(24.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Search, 
-                        contentDescription = "Clear",
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
-                        modifier = Modifier.size(16.dp)
+                Column {
+                    Text(
+                        text = "Feed",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        softWrap = false
                     )
+                    if (isScanning) {
+                        Text("Updating...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
-            }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                CategoryChip(label = "Total", count = totalCount, color = MaterialTheme.colorScheme.primaryContainer)
-            }
-            item {
-                CategoryChip(
-                    label = "Unread",
-                    count = unreadCount,
-                    color = if (unreadCount > 0) {
-                        MaterialTheme.colorScheme.secondaryContainer
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    if (configuration.screenWidthDp < 400) {
+                        IconButton(onClick = onCaptureClipboard) {
+                            Text("📋", fontSize = 16.sp)
+                        }
                     } else {
-                        MaterialTheme.colorScheme.surfaceVariant
+                        TextButton(onClick = onCaptureClipboard) {
+                            Text("CAPTURE", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
-                )
-            }
-            item {
-                CategoryChip(label = "Apps", count = appCount, color = MaterialTheme.colorScheme.secondaryContainer)
-            }
-            item {
-                CategoryChip(label = "Clipboard", count = clipboardCount, color = MaterialTheme.colorScheme.tertiaryContainer)
-            }
-        }
 
-        Spacer(modifier = Modifier.height(12.dp))
-
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = onSearchQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search your brain...") },
-            singleLine = true,
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { onSearchQueryChange("") }) {
-                        Text("✕")
+                    TextButton(
+                        onClick = {
+                            isScanning = true
+                            val scanIntent = Intent(context, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java).apply {
+                                action = "CHECK_ACTIVE"
+                            }
+                            context.startService(scanIntent)
+                        },
+                        enabled = !isScanning,
+                        contentPadding = PaddingValues(horizontal = if (configuration.screenWidthDp < 360) 2.dp else 4.dp)
+                    ) {
+                        if (isScanning) {
+                            CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text("SCAN", fontSize = 10.sp)
+                        }
                     }
-                }
-            }
-        )
 
-        Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.width(if (configuration.screenWidthDp < 360) 2.dp else 4.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text("Sort:", style = MaterialTheme.typography.labelMedium)
-            FilterChip(
-                selected = sortOption == MemorySortOption.USAGE,
-                onClick = { sortOption = MemorySortOption.USAGE },
-                label = { Text("Used") }
-            )
-            FilterChip(
-                selected = sortOption == MemorySortOption.RECENCY,
-                onClick = { sortOption = MemorySortOption.RECENCY },
-                label = { Text("Recent") }
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            FilterChip(
-                selected = unreadOnly,
-                onClick = { unreadOnly = !unreadOnly },
-                label = { Text("Unread Only") },
-                leadingIcon = {
-                    if (unreadOnly) {
+                    val setupWidth = (configuration.screenWidthDp * 0.18).coerceIn(60.0, 110.0).dp
+                    Button(
+                        onClick = onOpenSettings,
+                        modifier = Modifier.width(setupWidth),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text("Setup", style = if (configuration.screenWidthDp < 360) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium)
+                    }
+                    
+                    Spacer(modifier = Modifier.width(if (configuration.screenWidthDp < 360) 2.dp else 4.dp))
+
+                    IconButton(onClick = onClearAll, modifier = Modifier.size(24.dp)) {
                         Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
+                            imageVector = Icons.Default.Search, 
+                            contentDescription = "Clear",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
                             modifier = Modifier.size(16.dp)
                         )
                     }
                 }
+            }
+        }
+
+        // Stats Row Item
+        item {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item { CategoryChip(label = "Total", count = totalCount, color = MaterialTheme.colorScheme.primaryContainer) }
+                item {
+                    CategoryChip(
+                        label = "Unread",
+                        count = unreadCount,
+                        color = if (unreadCount > 0) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+                item { CategoryChip(label = "Apps", count = appCount, color = MaterialTheme.colorScheme.secondaryContainer) }
+                item { CategoryChip(label = "Clipboard", count = clipboardCount, color = MaterialTheme.colorScheme.tertiaryContainer) }
+            }
+        }
+
+        // Search Field Item
+        item {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search captures...") },
+                singleLine = true,
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { onSearchQueryChange("") }) {
+                            Text("✕")
+                        }
+                    }
+                }
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        if (filteredByRead.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    if (searchQuery.isEmpty()) {
-                        if (unreadOnly) "No unread notifications!" else "No notifications captured yet."
-                    } else {
-                        "No matches found."
+        // Sort Row Item
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Sort:", style = MaterialTheme.typography.labelMedium)
+                FilterChip(
+                    selected = sortOption == MemorySortOption.USAGE,
+                    onClick = { sortOption = MemorySortOption.USAGE },
+                    label = { Text("Used") }
+                )
+                FilterChip(
+                    selected = sortOption == MemorySortOption.RECENCY,
+                    onClick = { sortOption = MemorySortOption.RECENCY },
+                    label = { Text("Recent") }
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                FilterChip(
+                    selected = unreadOnly,
+                    onClick = { unreadOnly = !unreadOnly },
+                    label = { Text("Unread Only") },
+                    leadingIcon = {
+                        if (unreadOnly) {
+                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
                     }
                 )
             }
-        } else {
-            val packageManager = context.packageManager
-            val sortedGroups by remember(filteredByRead, sortOption) {
-                derivedStateOf {
-                    filteredByRead.groupBy { memory ->
-                        val key = memory.packageName ?: memory.source
-                        try {
-                            val appInfo = packageManager.getApplicationInfo(key, 0)
-                            packageManager.getApplicationLabel(appInfo).toString()
-                        } catch (e: Exception) {
-                            if (key == "clipboard") "Clipboard" else key
-                        }
-                    }.toList().let { grouped ->
-                        when (sortOption) {
-                            MemorySortOption.USAGE -> grouped.sortedByDescending { it.second.size }
-                            MemorySortOption.RECENCY -> grouped.sortedByDescending { it.second.maxOf { m -> m.timestamp } }
-                        }
-                    }
-                }
-            }
+        }
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(sortedGroups) { (displayName, groupMemories) ->
-                    GroupedMemoryCard(
-                        displayName = displayName,
-                        memories = groupMemories,
-                        onMarkAsRead = onMarkAsRead
+        // Main List Content
+        if (filteredByRead.isEmpty()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        if (searchQuery.isEmpty()) {
+                            if (unreadOnly) "No unread notifications!" else "No notifications captured yet."
+                        } else "No matches found.",
+                        color = MaterialTheme.colorScheme.outline
                     )
                 }
             }
+        } else {
+            val packageManager = context.packageManager
+            val sortedGroups = filteredByRead.groupBy { memory ->
+                val key = memory.packageName ?: memory.source
+                try {
+                    val appInfo = packageManager.getApplicationInfo(key, 0)
+                    packageManager.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    if (key == "clipboard") "Clipboard" else key
+                }
+            }.toList().let { grouped ->
+                when (sortOption) {
+                    MemorySortOption.USAGE -> grouped.sortedByDescending { it.second.size }
+                    MemorySortOption.RECENCY -> grouped.sortedByDescending { it.second.maxOf { m -> m.timestamp } }
+                }
+            }
+
+            items(sortedGroups) { (displayName, groupMemories) ->
+                GroupedMemoryCard(
+                    displayName = displayName,
+                    memories = groupMemories,
+                    onMarkAsRead = onMarkAsRead
+                )
+            }
+        }
+        
+        item {
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
@@ -356,7 +328,6 @@ private fun GroupedMemoryCard(
 
     val displayMemories = if (showAllItems) memories else memories.take(5)
     
-    // Choose a pastel color based on the app name
     val cardColor = remember(displayName) {
         when {
             displayName.contains("mail", ignoreCase = true) || displayName.contains("outlook", ignoreCase = true) -> PastelBlue
@@ -536,7 +507,7 @@ private fun MemoryItem(memory: MemoryEntity, onMarkAsRead: (Long) -> Unit) {
                     ) {
                         Text(
                             text = "x${memory.duplicateCount}",
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary

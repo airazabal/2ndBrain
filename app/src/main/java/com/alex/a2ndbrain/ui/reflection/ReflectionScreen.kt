@@ -1,18 +1,5 @@
 package com.alex.a2ndbrain.ui.reflection
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -71,79 +58,84 @@ fun ReflectionScreen(
         baseModels
     }
 
-    Column(
+    LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val reflectButtonWidth = (configuration.screenWidthDp * 0.25).coerceIn(90.0, 140.0).dp
-            
-            Button(
-                onClick = {
-                    isGenerating = true
-                    onGenerateReflection()
-                },
-                enabled = !isGenerating,
-                modifier = Modifier.width(reflectButtonWidth),
-                shape = RoundedCornerShape(12.dp),
-                contentPadding = PaddingValues(0.dp)
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isGenerating) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text("Reflect")
+                val reflectButtonWidth = (configuration.screenWidthDp * 0.25).coerceIn(90.0, 140.0).dp
+                
+                Button(
+                    onClick = {
+                        isGenerating = true
+                        onGenerateReflection()
+                    },
+                    enabled = !isGenerating,
+                    modifier = Modifier.width(reflectButtonWidth),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    if (isGenerating) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Reflect")
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text("AI:", style = MaterialTheme.typography.labelMedium)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(models) { model ->
-                    FilterChip(
-                        selected = selectedModel == model,
-                        onClick = {
-                            selectedModel = model
-                            settingsManager.saveGeminiModel(model)
-                        },
-                        label = { Text(model.removePrefix("gemini-")) },
-                        shape = RoundedCornerShape(12.dp)
-                    )
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("AI:", style = MaterialTheme.typography.labelMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(models) { model ->
+                        FilterChip(
+                            selected = selectedModel == model,
+                            onClick = {
+                                selectedModel = model
+                                settingsManager.saveGeminiModel(model)
+                            },
+                            label = { Text(model.removePrefix("gemini-")) },
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
                 }
             }
         }
-
-        Spacer(modifier = Modifier.height(24.dp))
 
         if (summaries.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "Your daily synthesis will appear here.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.outline
-                )
-            }
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                items(summaries) { summary ->
-                    SummaryCard(summary)
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Your daily synthesis will appear here.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
             }
+        } else {
+            items(summaries) { summary ->
+                SummaryCard(summary)
+            }
+        }
+        
+        item {
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
