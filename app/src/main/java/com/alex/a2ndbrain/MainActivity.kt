@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
@@ -26,6 +27,7 @@ import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -37,12 +39,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.lifecycleScope
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
+import com.alex.a2ndbrain.ui.home.HomeScreen
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.notes.NotesScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
@@ -51,6 +55,9 @@ import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private lateinit var clipboardCaptureManager: ClipboardCaptureManager
@@ -81,6 +88,21 @@ class MainActivity : ComponentActivity() {
                     val database = AppDatabase.getDatabase(this)
                     val memories by database.memoryDao().getAllMemories().collectAsState(initial = emptyList())
                     val summaries by database.memoryDao().getAllSummaries().collectAsState(initial = emptyList())
+                    
+                    val today = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+                    val usageStats by database.memoryDao().getUsageStatsForDate(today).collectAsState(initial = emptyList())
+                    
+                    var vaultNotes by remember { mutableStateOf<List<DocumentFile>>(emptyList()) }
+                    val vaultUri = settingsManager.getObsidianVaultUri()
+                    
+                    LaunchedEffect(vaultUri) {
+                        if (vaultUri.isNotBlank()) {
+                            val root = DocumentFile.fromTreeUri(this@MainActivity, android.net.Uri.parse(vaultUri))
+                            vaultNotes = root?.listFiles()
+                                ?.filter { it.isFile && it.name?.endsWith(".md") == true }
+                                ?.sortedByDescending { it.lastModified() } ?: emptyList()
+                        }
+                    }
 
                     var searchQuery by remember { mutableStateOf("") }
                     val filteredMemories = if (searchQuery.isEmpty()) {
@@ -122,8 +144,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             ) {
                                 NavigationRailItem(
-                                    icon = { Icon(Icons.Default.Notifications, contentDescription = "Notifications") },
-                                    label = { Text("Feed") },
+                                    icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                                    label = { Text("Home") },
                                     selected = currentTab == 0,
                                     onClick = { currentTab = 0 },
                                     colors = NavigationRailItemDefaults.colors(
@@ -133,8 +155,8 @@ class MainActivity : ComponentActivity() {
                                     )
                                 )
                                 NavigationRailItem(
-                                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Reflection") },
-                                    label = { Text("Brain") },
+                                    icon = { Icon(Icons.Default.Notifications, contentDescription = "Notifications") },
+                                    label = { Text("Feed") },
                                     selected = currentTab == 1,
                                     onClick = { currentTab = 1 },
                                     colors = NavigationRailItemDefaults.colors(
@@ -144,8 +166,8 @@ class MainActivity : ComponentActivity() {
                                     )
                                 )
                                 NavigationRailItem(
-                                    icon = { Icon(Icons.Default.Description, contentDescription = "Notes") },
-                                    label = { Text("Notes") },
+                                    icon = { Icon(Icons.Default.AutoAwesome, contentDescription = "Reflection") },
+                                    label = { Text("Brain") },
                                     selected = currentTab == 2,
                                     onClick = { currentTab = 2 },
                                     colors = NavigationRailItemDefaults.colors(
@@ -155,10 +177,21 @@ class MainActivity : ComponentActivity() {
                                     )
                                 )
                                 NavigationRailItem(
-                                    icon = { Icon(Icons.Default.Schedule, contentDescription = "Digital Time") },
-                                    label = { Text("Time") },
+                                    icon = { Icon(Icons.Default.Description, contentDescription = "Notes") },
+                                    label = { Text("Notes") },
                                     selected = currentTab == 3,
                                     onClick = { currentTab = 3 },
+                                    colors = NavigationRailItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                    )
+                                )
+                                NavigationRailItem(
+                                    icon = { Icon(Icons.Default.Schedule, contentDescription = "Digital Time") },
+                                    label = { Text("Time") },
+                                    selected = currentTab == 4,
+                                    onClick = { currentTab = 4 },
                                     colors = NavigationRailItemDefaults.colors(
                                         selectedIconColor = MaterialTheme.colorScheme.primary,
                                         unselectedIconColor = MaterialTheme.colorScheme.secondary,
@@ -176,9 +209,10 @@ class MainActivity : ComponentActivity() {
                                 ) {
                                     Text(
                                         text = when(currentTab) {
-                                            0 -> "Your daily stream of captures"
-                                            1 -> "Reflections & daily insights"
-                                            2 -> "Your space for ideas & thoughts"
+                                            0 -> "Welcome to your 2ndBrain"
+                                            1 -> "Your daily stream of captures"
+                                            2 -> "Reflections & daily insights"
+                                            3 -> "Your space for ideas & thoughts"
                                             else -> "Understanding your routine"
                                         },
                                         style = MaterialTheme.typography.headlineLarge,
@@ -190,7 +224,15 @@ class MainActivity : ComponentActivity() {
 
                                 Box(modifier = Modifier.weight(1f)) {
                                     when (currentTab) {
-                                        0 -> MemoryScreen(
+                                        0 -> HomeScreen(
+                                            memories = memories,
+                                            latestReflection = summaries.firstOrNull(),
+                                            notes = vaultNotes,
+                                            usageStats = usageStats,
+                                            onNavigateToTab = { currentTab = it }
+                                        )
+
+                                        1 -> MemoryScreen(
                                             memories = filteredMemories,
                                             searchQuery = searchQuery,
                                             onSearchQueryChange = { searchQuery = it },
@@ -213,7 +255,7 @@ class MainActivity : ComponentActivity() {
                                             monitoredApps = settingsManager.getMonitoredApps()
                                         )
 
-                                        1 -> ReflectionScreen(
+                                        2 -> ReflectionScreen(
                                             summaries = summaries,
                                             settingsManager = settingsManager,
                                             onGenerateReflection = {
@@ -229,8 +271,8 @@ class MainActivity : ComponentActivity() {
                                             }
                                         )
 
-                                        2 -> NotesScreen(settingsManager = settingsManager)
-                                        3 -> DigitalTimeScreen()
+                                        3 -> NotesScreen(settingsManager = settingsManager)
+                                        4 -> DigitalTimeScreen()
                                     }
                                 }
                             }
