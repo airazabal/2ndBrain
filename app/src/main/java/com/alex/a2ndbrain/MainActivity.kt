@@ -41,6 +41,7 @@ import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
+import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.notes.NotesScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
@@ -53,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var clipboardCaptureManager: ClipboardCaptureManager
     private lateinit var settingsManager: CaptureSettingsManager
     private lateinit var reflectionManager: ReflectionManager
+    private lateinit var digitalTimeManager: DigitalTimeManager
 
     override fun onResume() {
         super.onResume()
@@ -64,8 +66,10 @@ class MainActivity : ComponentActivity() {
         settingsManager = CaptureSettingsManager(this)
         clipboardCaptureManager = ClipboardCaptureManager(this)
         reflectionManager = ReflectionManager(this)
+        digitalTimeManager = DigitalTimeManager(this)
 
         reflectionManager.schedulePeriodicReflection()
+        digitalTimeManager.schedulePeriodicSync()
 
         enableEdgeToEdge()
         setContent {

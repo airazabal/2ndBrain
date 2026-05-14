@@ -143,6 +143,12 @@ fun DigitalTimeScreen(
                 UsageSummaryCard(totalTime, selectedPeriod)
                 
                 Spacer(modifier = Modifier.height(24.dp))
+
+                Text("Visual Breakdown", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(12.dp))
+                UsageBarChart(consolidatedStats.take(5))
+
+                Spacer(modifier = Modifier.height(24.dp))
                 
                 Text("Most Used", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(12.dp))
@@ -163,6 +169,51 @@ data class ConsolidatedUsage(
     val deviceBreakdown: Map<String, Long>,
     val lastTimestamp: Long
 )
+
+@Composable
+fun UsageBarChart(topApps: List<ConsolidatedUsage>) {
+    val maxTime = topApps.firstOrNull()?.totalTimeMs ?: 1L
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White, RoundedCornerShape(24.dp))
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        topApps.forEach { app ->
+            val appName = remember(app.packageName) {
+                try {
+                    val appInfo = context.packageManager.getApplicationInfo(app.packageName, 0)
+                    context.packageManager.getApplicationLabel(appInfo).toString()
+                } catch (e: Exception) {
+                    app.packageName.substringAfterLast(".")
+                }
+            }
+            
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(appName, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                    Text(formatDuration(app.totalTimeMs), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                val fraction = (app.totalTimeMs.toFloat() / maxTime).coerceIn(0.05f, 1f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction)
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.8f))
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
