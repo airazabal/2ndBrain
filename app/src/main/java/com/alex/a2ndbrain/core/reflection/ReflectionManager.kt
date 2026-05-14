@@ -7,6 +7,7 @@ import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
+import kotlinx.coroutines.withTimeout
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
@@ -32,7 +33,7 @@ class ReflectionManager(private val context: Context) {
         )
     }
 
-    suspend fun generateDailyReflection() {
+    suspend fun generateDailyReflection(): String? {
         val calendar = Calendar.getInstance()
         val hour = calendar.get(Calendar.HOUR_OF_DAY)
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
@@ -54,7 +55,9 @@ class ReflectionManager(private val context: Context) {
         digitalTimeManager.syncUsageStats()
 
         val memories = database.memoryDao().getMemoriesSince(searchStartTime)
-        if (memories.isEmpty()) return
+        if (memories.isEmpty()) {
+            return "No sufficient data found to generate a reflection yet."
+        }
 
         val usageStats = database.memoryDao().getUsageStatsSince(todayStr)
         val usageByDevice = usageStats.groupBy { it.deviceName }
@@ -85,8 +88,15 @@ class ReflectionManager(private val context: Context) {
                 $usageReport
             """.trimIndent()
 
-            val result = GeminiAgent(apiKey).summarizeMemories(promptContext, preferredModel, isMorningBriefing = isMorning)
-            result.text to result.modelName
+            try {
+                // Apply a 30-second timeout for the AI response
+                withTimeout(30000L) {
+                    val result = GeminiAgent(apiKey).summarizeMemories(promptContext, preferredModel, isMorningBriefing = isMorning)
+                    result.text to result.modelName
+                }
+            } catch (e: Exception) {
+                "AI response timed out or failed. Please try again." to "Timeout"
+            }
         } else {
             generateBasicSummary(memories) to "Local Template"
         }
@@ -100,6 +110,7 @@ class ReflectionManager(private val context: Context) {
         )
 
         database.memoryDao().insertSummary(summaryEntity)
+        return null // Success
     }
 
     private fun generateBasicSummary(memories: List<MemoryEntity>): String = buildString {

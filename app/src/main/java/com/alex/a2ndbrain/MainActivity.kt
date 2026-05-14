@@ -50,6 +50,7 @@ import com.alex.a2ndbrain.ui.theme.BrainTheme
 import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private lateinit var clipboardCaptureManager: ClipboardCaptureManager
@@ -217,7 +218,13 @@ class MainActivity : ComponentActivity() {
                                             settingsManager = settingsManager,
                                             onGenerateReflection = {
                                                 lifecycleScope.launch(Dispatchers.IO) {
-                                                    reflectionManager.generateDailyReflection()
+                                                    val error = reflectionManager.generateDailyReflection()
+                                                    if (error != null) {
+                                                        // Show error toast on main thread
+                                                        withContext(Dispatchers.Main) {
+                                                            android.widget.Toast.makeText(this@MainActivity, error, android.widget.Toast.LENGTH_LONG).show()
+                                                        }
+                                                    }
                                                 }
                                             }
                                         )
