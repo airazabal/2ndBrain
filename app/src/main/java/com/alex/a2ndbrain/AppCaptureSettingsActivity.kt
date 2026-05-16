@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,6 +20,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+
 
 class AppCaptureSettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -162,9 +166,31 @@ fun AppCaptureSettingsScreen(
                         Text("Usage Access")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
-                    OutlinedButton(onClick = onRestartService) {
-                        Text("Refresh Connection")
+
+                    OutlinedButton(
+                        onClick = onRestartService,
+                        modifier = Modifier
+                            .width(130.dp)
+                            .height(40.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.primary,
+                            containerColor = Color.Transparent
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text(
+                            text = "Refresh",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
                     }
+
+
+
+
                 }
             }
         }
