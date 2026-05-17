@@ -27,7 +27,43 @@ val nextVersionName = "1.0.$nextVersionCode"
 versionProps["VERSION_CODE"] = nextVersionCode.toString()
 versionProps["VERSION_NAME"] = nextVersionName
 versionProps.store(FileOutputStream(versionPropsFile), null)
+dependencies {
+    implementation(libs.litert)
+    implementation(libs.litertlm)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.activity.compose)
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.material)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.navigation.compose)
 
+    // Room
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // WorkManager
+    implementation(libs.androidx.work.runtime.ktx)
+
+    // Gemini AI
+    implementation(libs.google.generativeai)
+    implementation(libs.kotlin.reflect.artifact)
+    implementation(libs.kotlin.stdlib.artifact)
+    implementation(libs.coroutines.core)
+    implementation(libs.coroutines.android)
+
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    debugImplementation(libs.androidx.compose.ui.tooling)
+}
 android {
     namespace = "com.alex.a2ndbrain"
     compileSdk = 36
@@ -62,49 +98,22 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
     // For AGP 9.0+, kotlin configuration is built-in
-    kotlin {
-        compilerOptions {
-            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
-        }
-    }
+    //kotlin {
+      //  compilerOptions {
+        //    jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        //}
+    //}
     buildFeatures {
         compose = true
         buildConfig = true
     }
+    packaging {
+        jniLibs {
+            pickFirsts += "**/libLiteRt*.so"
+        }
+        resources {
+            pickFirsts += "**/libLiteRt*.so"
+        }
+    }
 }
 
-dependencies {
-    implementation(libs.androidx.core.ktx)
-    implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
-    implementation(libs.androidx.compose.ui)
-    implementation(libs.androidx.compose.ui.graphics)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    implementation(libs.androidx.compose.material3)
-    implementation(libs.androidx.compose.material.icons.extended)
-    implementation(libs.material)
-    implementation(libs.androidx.lifecycle.viewmodel.compose)
-    implementation(libs.androidx.navigation.compose)
-
-    // Room
-    implementation(libs.androidx.room.runtime)
-    implementation(libs.androidx.room.ktx)
-    ksp(libs.androidx.room.compiler)
-    
-    // WorkManager
-    implementation(libs.androidx.work.runtime.ktx)
-
-    // Gemini AI
-    implementation(libs.google.generativeai)
-    implementation(libs.kotlin.reflect.artifact)
-    implementation(libs.kotlin.stdlib.artifact)
-    implementation(libs.coroutines.core)
-    implementation(libs.coroutines.android)
-
-    testImplementation(libs.junit)
-    androidTestImplementation(libs.androidx.junit)
-    androidTestImplementation(libs.androidx.espresso.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
-    debugImplementation(libs.androidx.compose.ui.tooling)
-}

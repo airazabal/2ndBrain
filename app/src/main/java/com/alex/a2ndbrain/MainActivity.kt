@@ -62,7 +62,7 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     private lateinit var clipboardCaptureManager: ClipboardCaptureManager
     private lateinit var settingsManager: CaptureSettingsManager
-    private lateinit var reflectionManager: ReflectionManager
+    private lateinit var reflectionPicker: ReflectionManager
     private lateinit var digitalTimeManager: DigitalTimeManager
 
     override fun onResume() {
@@ -74,10 +74,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         settingsManager = CaptureSettingsManager(this)
         clipboardCaptureManager = ClipboardCaptureManager(this)
-        reflectionManager = ReflectionManager(this)
+        reflectionPicker = ReflectionManager(this)
         digitalTimeManager = DigitalTimeManager(this)
 
-        reflectionManager.schedulePeriodicReflection()
+        reflectionPicker.schedulePeriodicReflection()
         digitalTimeManager.schedulePeriodicSync()
 
         enableEdgeToEdge()
@@ -260,13 +260,23 @@ class MainActivity : ComponentActivity() {
                                             settingsManager = settingsManager,
                                             onGenerateReflection = {
                                                 lifecycleScope.launch(Dispatchers.IO) {
-                                                    val error = reflectionManager.generateDailyReflection()
+                                                    val error = reflectionPicker.generateDailyReflection()
                                                     if (error != null) {
                                                         // Show error toast on main thread
                                                         withContext(Dispatchers.Main) {
                                                             android.widget.Toast.makeText(this@MainActivity, error, android.widget.Toast.LENGTH_LONG).show()
                                                         }
                                                     }
+                                                }
+                                            },
+                                            onClearAll = {
+                                                lifecycleScope.launch(Dispatchers.IO) {
+                                                    database.memoryDao().deleteAllSummaries()
+                                                }
+                                            },
+                                            onDeleteSummary = { id ->
+                                                lifecycleScope.launch(Dispatchers.IO) {
+                                                    database.memoryDao().deleteSummary(id)
                                                 }
                                             }
                                         )

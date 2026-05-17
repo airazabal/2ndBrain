@@ -18,6 +18,8 @@ generativeAi = "0.9.0"
 kotlinReflect = "2.1.0"
 kotlinStdlib = "2.1.0"
 kotlinxCoroutines = "1.10.1"
+litert = "2.1.4"
+litertlm = "0.11.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -46,6 +48,8 @@ kotlin-reflect-artifact = { group = "org.jetbrains.kotlin", name = "kotlin-refle
 kotlin-stdlib-artifact = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlinStdlib" }
 coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "kotlinxCoroutines" }
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
+litertlm = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

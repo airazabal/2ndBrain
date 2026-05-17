@@ -7,12 +7,14 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -53,7 +55,6 @@ fun AppCaptureSettingsScreen(
     onRestartService: () -> Unit
 ) {
     var monitoredApps by remember { mutableStateOf(settingsManager.getMonitoredApps()) }
-    var geminiApiKey by remember { mutableStateOf(settingsManager.getGeminiApiKey()) }
     val debugEvents by com.alex.a2ndbrain.core.capture.CaptureDebugStore.events.collectAsState()
     val context = LocalContext.current
     val packageManager = context.packageManager
@@ -230,32 +231,6 @@ fun AppCaptureSettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Gemini API Key Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Gemini AI Reflection", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("Enter your API key to enable AI-powered daily insights.", style = MaterialTheme.typography.bodySmall)
-                Spacer(modifier = Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = geminiApiKey,
-                    onValueChange = { 
-                        geminiApiKey = it
-                        settingsManager.saveGeminiApiKey(it)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Gemini API Key") },
-                    placeholder = { Text("Paste your key here...") },
-                    singleLine = true,
-                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        
         OutlinedTextField(
             value = appSearchQuery,
             onValueChange = { appSearchQuery = it },

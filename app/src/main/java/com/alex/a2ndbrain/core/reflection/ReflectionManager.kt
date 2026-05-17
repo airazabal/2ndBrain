@@ -2,6 +2,7 @@ package com.alex.a2ndbrain.core.reflection
 
 import android.content.Context
 import androidx.work.*
+import com.alex.a2ndbrain.core.usage.UsageSyncWorker
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
@@ -30,6 +31,25 @@ class ReflectionManager(private val context: Context) {
             "daily_reflection",
             ExistingPeriodicWorkPolicy.KEEP,
             request
+        )
+    }
+
+    fun scheduleExpeditedSync() {
+        val constraints = Constraints.Builder()
+            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiresBatteryNotLow(true)
+            .build()
+
+        val syncRequest = OneTimeWorkRequestBuilder<UsageSyncWorker>()
+            .setConstraints(constraints)
+            // This is the key to bypassing Samsung background freezing
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "usage_sync",
+            ExistingWorkPolicy.REPLACE,
+            syncRequest
         )
     }
 
@@ -71,34 +91,68 @@ class ReflectionManager(private val context: Context) {
             "Device: $device\n$topApps"
         }
 
+        val modelPicker = ModelPicker(context)
+        val selectedModel = modelPicker.getBestModel()
         val apiKey = settingsManager.getGeminiApiKey()
         val preferredModel = settingsManager.getGeminiModel()
         
-        val (summaryText, modelUsed) = if (apiKey.isNotBlank()) {
-            val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-            val rawData = memories.sortedBy { it.timestamp }.joinToString("\n") { 
-                val time = timeFormat.format(Date(it.timestamp))
-                "- [$time][${getAppName(it)}] ${it.title ?: ""}: ${it.content.take(150)}"
-            }
-            
-            val promptContext = """
-                $rawData
-                
-                DIGITAL USAGE (Today's Totals):
-                $usageReport
-            """.trimIndent()
-
-            try {
-                // Apply a 30-second timeout for the AI response
-                withTimeout(30000L) {
-                    val result = GeminiAgent(apiKey).summarizeMemories(promptContext, preferredModel, isMorningBriefing = isMorning)
-                    result.text to result.modelName
+        val (summaryText, modelUsed) = when (selectedModel) {
+            ModelPicker.ModelType.GEMINI_CLOUD -> {
+                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                val rawData = memories.sortedBy { it.timestamp }.joinToString("\n") { 
+                    val time = timeFormat.format(Date(it.timestamp))
+                    "- [$time][${getAppName(it)}] ${it.title ?: ""}: ${it.content.take(150)}"
                 }
-            } catch (e: Exception) {
-                "AI response timed out or failed. Please try again." to "Timeout"
+                
+                val promptContext = """
+                    $rawData
+                    
+                    DIGITAL USAGE (Today's Totals):
+                    $usageReport
+                """.trimIndent()
+
+                try {
+                    // Apply a 30-second timeout for the AI response
+                    withTimeout(30000L) {
+                        val result = GeminiAgent(apiKey).summarizeMemories(promptContext, preferredModel, isMorningBriefing = isMorning)
+                        result.text to result.modelName
+                    }
+                } catch (e: Exception) {
+                    "AI response timed out or failed. Please try again." to "Timeout"
+                }
             }
-        } else {
-            generateBasicSummary(memories) to "Local Template"
+            ModelPicker.ModelType.LITERT_LOCAL -> {
+                val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+                val rawData = memories.sortedBy { it.timestamp }.take(50).joinToString("\n") { 
+                    val time = timeFormat.format(Date(it.timestamp))
+                    "- [$time] ${it.content.take(200)}"
+                }
+                
+                val prompt = """
+                    You are a helpful personal assistant. Generate a long, detailed, and comprehensive daily reflection based on the user's memories provided below. 
+                    
+                    Instructions:
+                    - Provide a deep analysis of the day's events.
+                    - Highlight key achievements, connections, and potential action items.
+                    - Do NOT include any internal thought processes, reasoning, or <think> tags in your output.
+                    - Start directly with the reflection.
+                    - WRITING STYLE: Be descriptive and elaborate. Aim for at least 500 words.
+                    - STRUCTURE: Use several paragraphs to organize different aspects of the day.
+
+                    Memories:
+                    $rawData
+                    
+                    Reflection:
+                """.trimIndent()
+                
+                val rawResult = modelPicker.runLiteRTInference(prompt)
+                val cleanedResult = cleanLiteRTResponse(rawResult)
+                val selectedModelName = settingsManager.getSelectedLiteRTModel()
+                cleanedResult to "LiteRT ($selectedModelName)"
+            }
+            ModelPicker.ModelType.BASIC_TEMPLATE -> {
+                generateBasicSummary(memories) to "Local Template"
+            }
         }
 
         val summaryEntity = DailySummaryEntity(
@@ -111,6 +165,14 @@ class ReflectionManager(private val context: Context) {
 
         database.memoryDao().insertSummary(summaryEntity)
         return null // Success
+    }
+
+    private fun cleanLiteRTResponse(response: String): String {
+        // Remove everything between <think> and </think> (including the tags)
+        val thinkRemoved = response.replace(Regex("<think>.*?</think>", RegexOption.DOT_MATCHES_ALL), "")
+        
+        // Also remove any stray <think> or </think> tags if the model didn't close them properly
+        return thinkRemoved.replace("<think>", "").replace("</think>", "").trim()
     }
 
     private fun generateBasicSummary(memories: List<MemoryEntity>): String = buildString {

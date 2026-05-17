@@ -65,4 +65,20 @@ class CaptureSettingsManager(context: Context) {
     fun saveObsidianVaultUri(uri: String) {
         prefs.edit().putString("obsidian_vault_uri", uri).apply()
     }
+
+    fun getPreferredModelType(): String {
+        return prefs.getString("preferred_model_type", "AUTO") ?: "AUTO"
+    }
+
+    fun savePreferredModelType(type: String) {
+        prefs.edit().putString("preferred_model_type", type).apply()
+    }
+
+    fun getSelectedLiteRTModel(): String {
+        return prefs.getString("selected_litert_model", "Qwen3-0.6B") ?: "Qwen3-0.6B"
+    }
+
+    fun saveSelectedLiteRTModel(modelName: String) {
+        prefs.edit().putString("selected_litert_model", modelName).apply()
+    }
 }

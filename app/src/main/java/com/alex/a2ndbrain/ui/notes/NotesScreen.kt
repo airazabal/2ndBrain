@@ -55,7 +55,8 @@ fun NotesScreen(
         uri?.let {
             context.contentResolver.takePersistableUriPermission(
                 it,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or 
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             )
             val uriString = it.toString()
             settingsManager.saveObsidianVaultUri(uriString)
