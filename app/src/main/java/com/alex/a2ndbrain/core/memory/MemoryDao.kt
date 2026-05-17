@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.paging.PagingSource
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -16,6 +17,12 @@ interface MemoryDao {
 
     @Query("SELECT * FROM memories ORDER BY timestamp DESC")
     fun getAllMemories(): Flow<List<MemoryEntity>>
+
+    @Query("SELECT * FROM memories ORDER BY timestamp DESC")
+    fun getPagedMemories(): PagingSource<Int, MemoryEntity>
+
+    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' ORDER BY timestamp DESC")
+    fun searchPagedMemories(query: String): PagingSource<Int, MemoryEntity>
 
     @Query("SELECT * FROM memories WHERE source = 'clipboard' ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLastClipboardMemory(): MemoryEntity?

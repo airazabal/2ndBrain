@@ -35,12 +35,12 @@ enum class TimePeriod {
 
 @Composable
 fun DigitalTimeScreen(
+    digitalTimeManager: DigitalTimeManager,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val database = remember { AppDatabase.getDatabase(context) }
-    val digitalTimeManager = remember { DigitalTimeManager(context) }
     
     var selectedPeriod by remember { mutableStateOf(TimePeriod.TODAY) }
     var isPermissionGranted by remember { mutableStateOf(digitalTimeManager.isPermissionGranted()) }

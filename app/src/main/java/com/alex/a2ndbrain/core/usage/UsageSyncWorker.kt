@@ -13,7 +13,10 @@ class UsageSyncWorker(
     override suspend fun doWork(): Result {
         return try {
             Log.d("UsageSyncWorker", "Starting periodic background sync...")
-            val manager = DigitalTimeManager(applicationContext)
+            val database = com.alex.a2ndbrain.core.memory.AppDatabase.getDatabase(applicationContext)
+            val settingsManager = com.alex.a2ndbrain.core.capture.CaptureSettingsManager(applicationContext)
+            val usageRepository = UsageRepository(database.memoryDao())
+            val manager = DigitalTimeManager(applicationContext, usageRepository, settingsManager)
             manager.syncUsageStats()
             Result.success()
         } catch (e: Exception) {

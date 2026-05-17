@@ -6,19 +6,17 @@ import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.memory.MemoryEntity
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
 
 class NotificationCaptureService : NotificationListenerService() {
 
-    private val job = SupervisorJob()
-    private val scope = CoroutineScope(Dispatchers.IO + job)
-    private val database by lazy { AppDatabase.getDatabase(this) }
-    private val settingsManager by lazy { CaptureSettingsManager(this) }
+    private val memoryRepository: MemoryRepository by inject()
+    private val settingsManager: CaptureSettingsManager by inject()
+    private val applicationScope: CoroutineScope by inject()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == "CHECK_ACTIVE") {
@@ -54,10 +52,8 @@ class NotificationCaptureService : NotificationListenerService() {
         val packageName = sbn.packageName
         val notification = sbn.notification ?: return
 
-        // Respect monitored apps setting
         val monitoredApps = settingsManager.getMonitoredApps()
         if (monitoredApps.isNotEmpty() && !monitoredApps.contains(packageName)) {
-            Log.d("2ndBrain", "Skipping $packageName - not in monitored list")
             return
         }
 
@@ -70,7 +66,6 @@ class NotificationCaptureService : NotificationListenerService() {
         val infoText = extras.getCharSequence(Notification.EXTRA_INFO_TEXT)?.toString()?.trim() ?: ""
         val summaryText = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)?.toString()?.trim() ?: ""
         
-        // Messaging Style (SMS, WhatsApp, Gmail)
         val messagingMessages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
         val messagingContent = if (messagingMessages != null && messagingMessages.isNotEmpty()) {
             messagingMessages.joinToString("\n") { 
@@ -78,27 +73,20 @@ class NotificationCaptureService : NotificationListenerService() {
             }.trim()
         } else ""
 
-        // Inbox Style (Gmail Summary - fallback if not a group summary)
         val inboxLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
         val inboxContent = inboxLines?.filterNotNull()?.joinToString("\n") { it.toString().trim() } ?: ""
 
-        // Gmail duplication fix: Only ignore summaries if they DON'T have useful unique content
         val isSummary = (notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0
         if (packageName == "com.google.android.gm" && isSummary && inboxContent.isEmpty() && bigText.isEmpty()) {
-            Log.d("2ndBrain", "Skipping empty Gmail summary")
             return
         }
 
-        Log.d("2ndBrain", "Processing trigger from: $packageName (Manual: $isManual)")
         if (!isManual) CaptureDebugStore.logEvent("Post: ${packageName.split(".").lastOrNull() ?: packageName}")
 
         val bigTitle = extras.getCharSequence(Notification.EXTRA_TITLE_BIG)?.toString()?.trim() ?: ""
-
-        // Gmail specific logic: check for "android.text" if other things fail
         val androidText = extras.getCharSequence("android.text")?.toString()?.trim() ?: ""
         val ticker = notification.tickerText?.toString()?.trim() ?: ""
 
-        // Improved content selection priority
         val contentOptions = if (packageName == "com.google.android.gm" || packageName.contains("todoist")) {
             listOf(inboxContent, bigText, androidText, messagingContent, text, subText, infoText, summaryText, ticker)
         } else {
@@ -108,11 +96,9 @@ class NotificationCaptureService : NotificationListenerService() {
         val finalContent = contentOptions.firstOrNull { it.isNotBlank() } ?: ""
 
         if (title.isEmpty() && finalContent.isEmpty() && bigTitle.isEmpty()) {
-            Log.d("2ndBrain", "Skipping $packageName - no content found")
             return
         }
 
-        // Standardize title and append account only if it's an email address not already present
         var finalTitle = listOf(title, bigTitle, packageName).first { it.isNotEmpty() }
         if (packageName == "com.google.android.gm" && subText.isNotEmpty() && subText.contains("@") && !finalTitle.contains(subText)) {
             finalTitle = "$finalTitle ($subText)"
@@ -128,20 +114,37 @@ class NotificationCaptureService : NotificationListenerService() {
             deepLink = "geo:0,0?q=${android.net.Uri.encode(title)}"
         }
 
-        scope.launch {
+        applicationScope.launch {
             val contentToStore = finalContent.ifEmpty { "[Notification from $packageName]" }
-            // Strict duplicate check: only merge if it's the exact same content from the same sender
-            val existing = database.memoryDao().findExisting("notification", packageName, finalTitle, contentToStore)
+            
+            // Deduplication logic
+            val existing = memoryRepository.findExisting("notification", packageName, finalTitle, contentToStore)
             
             if (existing != null) {
-                // If it's the exact same notification (like a tray refresh), just update the time
-                val updated = existing.copy(
+                // Exact match, just update timestamp
+                val updated = existing.copy(timestamp = System.currentTimeMillis())
+                memoryRepository.insertMemory(updated)
+                return@launch
+            }
+            
+            // Fuzzy match: check if a recent notification from this app has very similar content 
+            // (e.g., progress bar update "Downloading... 10%" vs "Downloading... 20%")
+            val recentMemories = memoryRepository.getRecentMemories(System.currentTimeMillis() - 15 * 60 * 1000) // last 15 mins
+            val fuzzyMatch = recentMemories.find { 
+                it.packageName == packageName && 
+                it.title == finalTitle &&
+                it.content.take(15) == contentToStore.take(15) // simple heuristic for progress/status updates
+            }
+
+            if (fuzzyMatch != null && contentToStore.length - fuzzyMatch.content.length < 20) {
+                // It's likely a progress update. Replace it.
+                val updated = fuzzyMatch.copy(
+                    content = contentToStore,
                     timestamp = System.currentTimeMillis()
-                    // We don't mark as unread here because nothing actually changed
                 )
-                database.memoryDao().insert(updated)
+                memoryRepository.insertMemory(updated)
+                Log.d("2ndBrain", "Merged fuzzy duplicate: $finalTitle")
             } else {
-                // It's a new unique message or update, so create a new entry (default is unread)
                 val entity = MemoryEntity(
                     source = "notification",
                     packageName = packageName,
@@ -149,14 +152,9 @@ class NotificationCaptureService : NotificationListenerService() {
                     content = contentToStore,
                     deepLink = deepLink
                 )
-                database.memoryDao().insert(entity)
-                Log.d("2ndBrain", "Captured new unique memory: $finalTitle")
+                memoryRepository.insertMemory(entity)
+                Log.d("2ndBrain", "Captured new memory: $finalTitle")
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        job.cancel()
     }
 }

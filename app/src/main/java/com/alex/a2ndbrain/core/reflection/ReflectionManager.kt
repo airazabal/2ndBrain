@@ -71,7 +71,8 @@ class ReflectionManager(private val context: Context) {
         val searchStartTime = if (isMorning) startOfToday - (12 * 60 * 60 * 1000) else startOfToday
 
         // Sync latest digital time before reflection
-        val digitalTimeManager = DigitalTimeManager(context)
+        val usageRepository = com.alex.a2ndbrain.core.usage.UsageRepository(database.memoryDao())
+        val digitalTimeManager = DigitalTimeManager(context, usageRepository, settingsManager)
         digitalTimeManager.syncUsageStats()
 
         val memories = database.memoryDao().getMemoriesSince(searchStartTime)

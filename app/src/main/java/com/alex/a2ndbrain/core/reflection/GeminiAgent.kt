@@ -8,6 +8,10 @@ import android.util.Log
 
 class GeminiAgent(private val apiKey: String) {
 
+    companion object {
+        private var cachedModel: Pair<String, String>? = null
+    }
+
     private fun createModel(name: String, version: String) = GenerativeModel(
         modelName = name.trim(),
         apiKey = apiKey.trim(),
@@ -64,13 +68,15 @@ class GeminiAgent(private val apiKey: String) {
         )
         
         // Prioritize preferred model if provided
-        val attempts = if (preferredModel != null && preferredModel.isNotBlank()) {
+        val attempts = mutableListOf<Pair<String, String>>()
+        if (preferredModel != null && preferredModel.isNotBlank()) {
             val pref = preferredModel.trim()
             val version = if (pref.contains("2.0")) "v1beta" else "v1beta" // v1beta is safest for most
-            listOf(pref to version) + baseAttempts.filter { it.first != pref }
-        } else {
-            baseAttempts
+            attempts.add(pref to version)
+        } else if (cachedModel != null) {
+            attempts.add(cachedModel!!)
         }
+        attempts.addAll(baseAttempts.filter { it.first != preferredModel && it.first != cachedModel?.first })
         
         val keySnippet = if (apiKey.length > 6) "${apiKey.take(4)}...${apiKey.takeLast(2)}" else "Invalid/Short"
         val errorLog = mutableListOf<String>()
@@ -82,7 +88,10 @@ class GeminiAgent(private val apiKey: String) {
                 val model = createModel(name, version)
                 val response = model.generateContent(prompt)
                 val result = response.text
-                if (!result.isNullOrBlank()) return@withContext SummaryResult(result, name)
+                if (!result.isNullOrBlank()) {
+                    cachedModel = name to version
+                    return@withContext SummaryResult(result, name)
+                }
             } catch (e: Exception) {
                 val msg = e.message ?: "Unknown error"
                 Log.e("GeminiAgent", "Failed $name/$version: $msg")

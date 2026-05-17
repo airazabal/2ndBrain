@@ -29,20 +29,20 @@ class ModelDownloader(private val context: Context) {
             LiteRTModel(
                 name = "Gemma-4-E2B-it",
                 url = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true",
-                description = "Google's newest generation (2.5B). Optimized for 0.11.0 Engine.",
+                description = "Google Flagship (2.5B). Most stable choice.",
                 sizeLabel = "2.6GB"
+            ),
+            LiteRTModel(
+                name = "DeepSeek-R1-Distill-Qwen-1.5B",
+                url = "https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm?download=true",
+                description = "Reasoning model. Verified multi-prefill bundle.",
+                sizeLabel = "1.8GB"
             ),
             LiteRTModel(
                 name = "Phi-4-mini-it",
                 url = "https://huggingface.co/litert-community/Phi-4-mini-instruct/resolve/main/Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm?download=true",
-                description = "Microsoft Compact (3.8B). High intelligence, verified structural bundle.",
+                description = "Microsoft Compact (3.8B). High intelligence, un-gated.",
                 sizeLabel = "2.4GB"
-            ),
-            LiteRTModel(
-                name = "DeepSeek-R1-Qwen-1.5B",
-                url = "https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm?download=true",
-                description = "DeepSeek Reasoning model. Verified multi-prefill bundle.",
-                sizeLabel = "1.8GB"
             )
         )
     }

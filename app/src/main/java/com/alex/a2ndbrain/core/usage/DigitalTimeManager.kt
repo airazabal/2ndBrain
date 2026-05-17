@@ -6,7 +6,7 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.*
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
-import com.alex.a2ndbrain.core.memory.AppDatabase
+import com.alex.a2ndbrain.core.usage.UsageRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import org.json.JSONArray
 import org.json.JSONObject
@@ -14,9 +14,11 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
-class DigitalTimeManager(private val context: Context) {
-    private val database = AppDatabase.getDatabase(context)
-    private val settingsManager = CaptureSettingsManager(context)
+class DigitalTimeManager(
+    private val context: Context,
+    private val usageRepository: UsageRepository,
+    private val settingsManager: CaptureSettingsManager
+) {
     private val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
 
     fun schedulePeriodicSync() {
@@ -92,7 +94,7 @@ class DigitalTimeManager(private val context: Context) {
                     deviceName = deviceName,
                     lastTimestamp = stat.lastTimeUsed
                 )
-                database.memoryDao().insertUsageStat(entity)
+                usageRepository.insertUsageStat(entity)
             }
         }
 
@@ -116,7 +118,7 @@ class DigitalTimeManager(private val context: Context) {
             if (usageDir == null) return
 
             // 2. Export local stats for this date
-            val localStats = database.memoryDao().getUsageStatsForDateSync(date)
+            val localStats = usageRepository.getUsageStatsSince(date)
             if (localStats.isNotEmpty()) {
                 val json = JSONObject()
                 json.put("deviceName", myDeviceName)
@@ -174,7 +176,7 @@ class DigitalTimeManager(private val context: Context) {
                     deviceName = deviceName,
                     lastTimestamp = app.getLong("ts")
                 )
-                database.memoryDao().insertUsageStat(entity)
+                usageRepository.insertUsageStat(entity)
             }
         } catch (e: Exception) {
             Log.e("DigitalTime", "Failed to import ${file.name}", e)
@@ -186,7 +188,7 @@ class DigitalTimeManager(private val context: Context) {
         calendar.add(Calendar.DAY_OF_YEAR, -7)
         val startDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
         
-        val stats = database.memoryDao().getUsageStatsSince(startDate)
+        val stats = usageRepository.getUsageStatsSince(startDate)
         return stats.groupBy { it.packageName }
             .mapValues { entry -> entry.value.sumOf { it.totalTimeVisibleMs } }
     }

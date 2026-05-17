@@ -55,7 +55,7 @@ class ModelPicker(private val context: Context) {
 
             val engineConfig = EngineConfig(
                 modelPath = modelFile.absolutePath,
-                maxNumTokens = 2048
+                maxNumTokens = 4096
             )
 
             Engine(engineConfig).use { engine ->

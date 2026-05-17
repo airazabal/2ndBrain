@@ -1,20 +1,14 @@
 package com.alex.a2ndbrain.ui.memories
 
 import android.content.Intent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,21 +22,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.alex.a2ndbrain.BuildConfig
-import com.alex.a2ndbrain.core.capture.CaptureDebugStore
+import androidx.paging.LoadState
+import androidx.paging.compose.LazyPagingItems
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class MemorySortOption {
-    USAGE, RECENCY
-}
-
 @Composable
 fun MemoryScreen(
-    memories: List<MemoryEntity>,
+    pagedMemories: LazyPagingItems<MemoryEntity>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onOpenSettings: () -> Unit,
@@ -54,33 +44,8 @@ fun MemoryScreen(
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    val scope = rememberCoroutineScope()
     
-    var sortOption by remember { mutableStateOf(MemorySortOption.USAGE) }
-    var unreadOnly by remember { mutableStateOf(false) }
     var isScanning by remember { mutableStateOf(false) }
-
-    LaunchedEffect(memories) {
-        isScanning = false
-    }
-
-    val filteredByMonitoring = remember(memories, monitoredApps) {
-        if (monitoredApps.isEmpty()) memories
-        else memories.filter { it.source != "notification" || monitoredApps.contains(it.packageName) }
-    }
-
-    val filteredByRead = remember(filteredByMonitoring, unreadOnly) {
-        if (unreadOnly) filteredByMonitoring.filter { !it.isRead } else filteredByMonitoring
-    }
-
-    val totalCount = memories.size
-    val clipboardCount = remember(memories) { memories.count { it.source == "clipboard" } }
-    val appCount = remember(memories) {
-        memories.filter { it.source == "notification" }
-            .mapNotNull { it.packageName }
-            .distinct().size
-    }
-    val unreadCount = remember(memories) { memories.count { !it.isRead } }
 
     LazyColumn(
         modifier = modifier
@@ -128,6 +93,8 @@ fun MemoryScreen(
                                 action = "CHECK_ACTIVE"
                             }
                             context.startService(scanIntent)
+                            // Reset state quickly for UI
+                            isScanning = false
                         },
                         enabled = !isScanning,
                         contentPadding = PaddingValues(horizontal = if (configuration.screenWidthDp < 360) 2.dp else 4.dp)
@@ -150,37 +117,7 @@ fun MemoryScreen(
                     ) {
                         Text("Setup", style = if (configuration.screenWidthDp < 360) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium)
                     }
-                    
-                    Spacer(modifier = Modifier.width(if (configuration.screenWidthDp < 360) 2.dp else 4.dp))
-
-                    IconButton(onClick = onClearAll, modifier = Modifier.size(24.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Search, 
-                            contentDescription = "Clear",
-                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
                 }
-            }
-        }
-
-        // Stats Row Item
-        item {
-            LazyRow(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item { CategoryChip(label = "Total", count = totalCount, color = MaterialTheme.colorScheme.primaryContainer) }
-                item {
-                    CategoryChip(
-                        label = "Unread",
-                        count = unreadCount,
-                        color = if (unreadCount > 0) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                }
-                item { CategoryChip(label = "Apps", count = appCount, color = MaterialTheme.colorScheme.secondaryContainer) }
-                item { CategoryChip(label = "Clipboard", count = clipboardCount, color = MaterialTheme.colorScheme.tertiaryContainer) }
             }
         }
 
@@ -202,73 +139,42 @@ fun MemoryScreen(
             )
         }
 
-        // Sort Row Item
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text("Sort:", style = MaterialTheme.typography.labelMedium)
-                FilterChip(
-                    selected = sortOption == MemorySortOption.USAGE,
-                    onClick = { sortOption = MemorySortOption.USAGE },
-                    label = { Text("Used") }
-                )
-                FilterChip(
-                    selected = sortOption == MemorySortOption.RECENCY,
-                    onClick = { sortOption = MemorySortOption.RECENCY },
-                    label = { Text("Recent") }
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                FilterChip(
-                    selected = unreadOnly,
-                    onClick = { unreadOnly = !unreadOnly },
-                    label = { Text("Unread Only") },
-                    leadingIcon = {
-                        if (unreadOnly) {
-                            Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                    }
-                )
-            }
-        }
-
         // Main List Content
-        if (filteredByRead.isEmpty()) {
+        if (pagedMemories.loadState.refresh is LoadState.Loading) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+        } else if (pagedMemories.itemCount == 0) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
                     Text(
-                        if (searchQuery.isEmpty()) {
-                            if (unreadOnly) "No unread notifications!" else "No notifications captured yet."
-                        } else "No matches found.",
+                        if (searchQuery.isEmpty()) "No notifications captured yet." else "No matches found.",
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
             }
         } else {
-            val packageManager = context.packageManager
-            val sortedGroups = filteredByRead.groupBy { memory ->
-                val key = memory.packageName ?: memory.source
-                try {
-                    val appInfo = packageManager.getApplicationInfo(key, 0)
-                    packageManager.getApplicationLabel(appInfo).toString()
-                } catch (e: Exception) {
-                    if (key == "clipboard") "Clipboard" else key
-                }
-            }.toList().let { grouped ->
-                when (sortOption) {
-                    MemorySortOption.USAGE -> grouped.sortedByDescending { it.second.size }
-                    MemorySortOption.RECENCY -> grouped.sortedByDescending { it.second.maxOf { m -> m.timestamp } }
+            items(pagedMemories.itemCount) { index ->
+                val memory = pagedMemories[index]
+                if (memory != null) {
+                    // Respect monitored apps if it's a notification
+                    val shouldShow = if (monitoredApps.isEmpty() || memory.source != "notification") true
+                                     else monitoredApps.contains(memory.packageName)
+                                     
+                    if (shouldShow) {
+                        MemoryItem(memory = memory, onMarkAsRead = onMarkAsRead)
+                    }
                 }
             }
-
-            items(sortedGroups) { (displayName, groupMemories) ->
-                GroupedMemoryCard(
-                    displayName = displayName,
-                    memories = groupMemories,
-                    onMarkAsRead = onMarkAsRead
-                )
+            
+            if (pagedMemories.loadState.append is LoadState.Loading) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                    }
+                }
             }
         }
         
@@ -279,54 +185,21 @@ fun MemoryScreen(
 }
 
 @Composable
-private fun CategoryChip(label: String, count: Int, color: Color) {
-    Surface(
-        color = color,
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.size(20.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = count.toString(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-            }
+private fun MemoryItem(memory: MemoryEntity, onMarkAsRead: (Long) -> Unit) {
+    var itemExpanded by remember { mutableStateOf(false) }
+    val isLong = memory.content.length > 200 || memory.content.count { it == '\n' } > 5
+    val context = LocalContext.current
+    
+    val displayName = remember(memory) {
+        val pm = context.packageManager
+        val key = memory.packageName ?: memory.source
+        try {
+            val appInfo = pm.getApplicationInfo(key, 0)
+            pm.getApplicationLabel(appInfo).toString()
+        } catch (e: Exception) {
+            if (key == "clipboard") "Clipboard" else key
         }
     }
-}
-
-@Composable
-private fun GroupedMemoryCard(
-    displayName: String,
-    memories: List<MemoryEntity>,
-    onMarkAsRead: (Long) -> Unit
-) {
-    var isExpanded by remember { mutableStateOf(false) }
-    var showAllItems by remember { mutableStateOf(false) }
-
-    LaunchedEffect(isExpanded, memories) {
-        if (isExpanded) {
-            memories.filter { !it.isRead }.forEach { onMarkAsRead(it.id) }
-        }
-    }
-
-    val displayMemories = if (showAllItems) memories else memories.take(5)
     
     val cardColor = remember(displayName) {
         when {
@@ -337,109 +210,6 @@ private fun GroupedMemoryCard(
             else -> PastelPurple
         }
     }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded },
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(cardColor),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = displayName.take(1).uppercase(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(16.dp))
-                    
-                    Column {
-                        Text(
-                            text = displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "${memories.size} items",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-                
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val hasUnread = memories.any { !it.isRead }
-                    if (hasUnread) {
-                        Surface(
-                            modifier = Modifier.size(8.dp),
-                            color = PastelRedText,
-                            shape = RoundedCornerShape(4.dp)
-                        ) {}
-                        Spacer(modifier = Modifier.width(12.dp))
-                    }
-                    
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Collapse" else "Expand",
-                        tint = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
-
-            AnimatedVisibility(
-                visible = isExpanded,
-                enter = expandVertically(),
-                exit = shrinkVertically()
-            ) {
-                Column {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    displayMemories.forEachIndexed { index, memory ->
-                        MemoryItem(memory, onMarkAsRead = onMarkAsRead)
-                        if (index < displayMemories.size - 1) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                        }
-                    }
-
-                    if (memories.size > 5) {
-                        TextButton(
-                            onClick = { showAllItems = !showAllItems },
-                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                        ) {
-                            Text(
-                                text = if (showAllItems) "Show less" else "Show ${memories.size - 5} more...",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MemoryItem(memory: MemoryEntity, onMarkAsRead: (Long) -> Unit) {
-    var itemExpanded by remember { mutableStateOf(false) }
-    val isLong = memory.content.length > 200 || memory.content.count { it == '\n' } > 5
-    val context = LocalContext.current
 
     Surface(
         modifier = Modifier
@@ -454,7 +224,7 @@ private fun MemoryItem(memory: MemoryEntity, onMarkAsRead: (Long) -> Unit) {
                         context.startActivity(intent)
                     } catch (_: Exception) {
                         if (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) {
-                            val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName)
+                            val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName!!)
                             if (launchIntent != null) {
                                 context.startActivity(launchIntent)
                             }
@@ -462,7 +232,7 @@ private fun MemoryItem(memory: MemoryEntity, onMarkAsRead: (Long) -> Unit) {
                     }
                 } else if (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) {
                     try {
-                        val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName)
+                        val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName!!)
                         if (launchIntent != null) {
                             context.startActivity(launchIntent)
                         }
@@ -472,7 +242,41 @@ private fun MemoryItem(memory: MemoryEntity, onMarkAsRead: (Long) -> Unit) {
             },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(cardColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = displayName.take(1).uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                if (!memory.isRead) {
+                    Surface(
+                        modifier = Modifier.size(8.dp),
+                        color = PastelRedText,
+                        shape = RoundedCornerShape(4.dp)
+                    ) {}
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
@@ -522,7 +326,7 @@ private fun MemoryItem(memory: MemoryEntity, onMarkAsRead: (Long) -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(memory.timestamp)),
+                    text = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(memory.timestamp)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
