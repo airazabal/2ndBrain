@@ -1,6 +1,7 @@
 package com.alex.a2ndbrain.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +26,9 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,6 +64,7 @@ fun HomeScreen(
     pastWeekHabitCompletions: List<Pair<String, Float>> = emptyList(),
 
     senseOfDayScore: Int = 75,
+    senseOfDayContext: String = "🎯 Calibrating your day...",
     todayTimelineEvents: List<TimelineEvent> = emptyList(),
     modifier: Modifier = Modifier
 ) {
@@ -136,14 +141,27 @@ fun HomeScreen(
                     }
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    val ringColor = remember(senseOfDayScore) { Color.hsv(senseOfDayScore.toFloat() * 1.3f, 0.75f, 0.9f) }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        // Custom HSL Sense of Day Score Ring
+                        // Custom HSL Sense of Day Score Ring with radial glow
                         Box(
-                            modifier = Modifier.size(100.dp),
+                            modifier = Modifier
+                                .size(100.dp)
+                                .drawBehind {
+                                    drawCircle(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(ringColor.copy(alpha = 0.22f), Color.Transparent),
+                                            center = center,
+                                            radius = size.width / 1.4f
+                                        ),
+                                        radius = size.width / 1.4f
+                                    )
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             Canvas(modifier = Modifier.fillMaxSize()) {
@@ -153,7 +171,6 @@ fun HomeScreen(
                                 )
                                 // Dynamic HSV color representation (Green/Cyan for balanced days)
                                 val sweepAngle = (senseOfDayScore.toFloat() / 100f) * 360f
-                                val ringColor = Color.hsv(senseOfDayScore.toFloat() * 1.3f, 0.75f, 0.9f)
                                 drawArc(
                                     color = ringColor,
                                     startAngle = -90f,
@@ -229,6 +246,39 @@ fun HomeScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    // Adaptive AI Alignment Context Box
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = ringColor.copy(alpha = 0.06f)
+                        ),
+                        border = BorderStroke(1.dp, ringColor.copy(alpha = 0.16f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "AI ALIGNMENT",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = ringColor,
+                                modifier = Modifier
+                                    .border(BorderStroke(1.dp, ringColor.copy(alpha = 0.35f)), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                            Text(
+                                text = senseOfDayContext,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
 

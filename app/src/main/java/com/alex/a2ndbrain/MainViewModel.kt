@@ -161,6 +161,9 @@ class MainViewModel(
     private val _senseOfDayScore = MutableStateFlow(75)
     val senseOfDayScore = _senseOfDayScore.asStateFlow()
 
+    private val _senseOfDayContext = MutableStateFlow("🎯 Calibrating your day. Complete a daily routine or log a few steps to update your Sense of Day index.")
+    val senseOfDayContext = _senseOfDayContext.asStateFlow()
+
     // Health Connect Synchronization (Recommendation 6)
     private val _healthMetricsToday = MutableStateFlow(HealthMetrics())
     val healthMetricsToday = _healthMetricsToday.asStateFlow()
@@ -288,6 +291,28 @@ class MainViewModel(
             
             val calculated = (habitsRatio * 30f) + (stepsRatio * 30f) + (focusRatio * 40f)
             _senseOfDayScore.value = calculated.toInt().coerceIn(10, 100)
+            
+            val contextText = when {
+                stepsRatio >= 0.7f && habitsRatio >= 0.7f && focusRatio >= 0.7f -> {
+                    "🌟 A masterclass in balance today! High routine compliance, excellent focus, and physical energy."
+                }
+                stepsRatio < 0.4f && focusRatio >= 0.7f -> {
+                    "🏃 Checked off focus work, but you've been stationary. Step away for a brisk 10-minute stretch!"
+                }
+                focusRatio < 0.4f -> {
+                    "📱 Digital distractions are high today. Set a quick focus timer and reconnect with your space."
+                }
+                stepsRatio >= 0.6f && habitsRatio < 0.4f -> {
+                    "💊 Physically active, but falling behind on daily routines and medications. Let's get structured!"
+                }
+                completed == 0 && steps == 0L -> {
+                    "🎯 Calibrating your day. Complete a daily routine or log a few steps to update your Sense of Day index."
+                }
+                else -> {
+                    "⚡ Balanced progress! Continue checking off routines and keeping a healthy physical-digital ratio."
+                }
+            }
+            _senseOfDayContext.value = contextText
         }
     }
 

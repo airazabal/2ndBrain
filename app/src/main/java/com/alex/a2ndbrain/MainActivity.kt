@@ -179,6 +179,7 @@ class MainActivity : ComponentActivity() {
                                             val completedHabitIds by viewModel.completedHabitIdsToday.collectAsStateWithLifecycle()
                                             val pastWeekHabitCompletions by viewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
                                             val senseOfDayScore by viewModel.senseOfDayScore.collectAsStateWithLifecycle()
+                                            val senseOfDayContext by viewModel.senseOfDayContext.collectAsStateWithLifecycle()
                                             val todayTimelineEvents by viewModel.todayTimelineEvents.collectAsStateWithLifecycle()
 
                                             val requestPermissionLauncher = rememberLauncherForActivityResult(
@@ -208,6 +209,7 @@ class MainActivity : ComponentActivity() {
                                                 onToggleHabit = { id -> viewModel.toggleHabitCompletion(id) },
                                                 pastWeekHabitCompletions = pastWeekHabitCompletions,
                                                 senseOfDayScore = senseOfDayScore,
+                                                senseOfDayContext = senseOfDayContext,
                                                 todayTimelineEvents = todayTimelineEvents
                                             )
                                         }
