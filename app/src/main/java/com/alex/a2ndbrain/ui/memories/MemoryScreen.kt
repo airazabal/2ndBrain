@@ -334,9 +334,46 @@ private fun GroupedMemoryItem(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // List of items inside this group (newest first)
+            // List of items inside this group (newest first), dynamically deduplicated for display
             val sortedMemories = remember(memories) {
-                memories.sortedByDescending { it.timestamp }
+                val list = memories.sortedByDescending { it.timestamp }
+                val mergedList = mutableListOf<MemoryEntity>()
+                for (item in list) {
+                    val isChatApp = (item.packageName ?: "").contains("whatsapp") || 
+                                    (item.packageName ?: "").contains("telegram") || 
+                                    (item.packageName ?: "").contains("signal") || 
+                                    (item.packageName ?: "").contains("discord") || 
+                                    (item.packageName ?: "").contains("messenger") || 
+                                    (item.packageName ?: "").contains("slack")
+                    
+                    val existingIdx = mergedList.indexOfFirst { existing ->
+                        val similarity = calculateSimilarity(existing.content, item.content)
+                        val titleSimilarity = calculateSimilarity(existing.title ?: "", item.title ?: "")
+                        
+                        when {
+                            // Exact content match
+                            existing.content == item.content -> true
+                            // Chat app substring match
+                            isChatApp && (existing.content.contains(item.content) || item.content.contains(existing.content)) -> true
+                            // Fuzzy content similarity > 0.8
+                            similarity > 0.8 && (existing.title == item.title || titleSimilarity > 0.8) -> true
+                            // Prefix match
+                            existing.content.take(15) == item.content.take(15) -> true
+                            else -> false
+                        }
+                    }
+                    if (existingIdx != -1) {
+                        val existing = mergedList[existingIdx]
+                        // Keep the newer one (mergedList holds the newer one since list is sorted newest first)
+                        // Sum up duplicate counts
+                        mergedList[existingIdx] = existing.copy(
+                            duplicateCount = existing.duplicateCount + item.duplicateCount
+                        )
+                    } else {
+                        mergedList.add(item)
+                    }
+                }
+                mergedList
             }
 
             // Aggregated Heuristic Highlight (Recommendation 4)
@@ -539,4 +576,32 @@ private fun SingleMemoryRow(
             }
         }
     }
+}
+
+private fun calculateSimilarity(s1: String, s2: String): Double {
+    if (s1 == s2) return 1.0
+    if (s1.isEmpty() || s2.isEmpty()) return 0.0
+    val maxLen = maxOf(s1.length, s2.length)
+    val distance = levenshteinDistance(s1, s2)
+    return (maxLen - distance).toDouble() / maxLen.toDouble()
+}
+
+private fun levenshteinDistance(s1: String, s2: String): Int {
+    val len1 = s1.length
+    val len2 = s2.length
+    val dp = IntArray(len2 + 1) { it }
+    for (i in 1..len1) {
+        var prev = dp[0]
+        dp[0] = i
+        for (j in 1..len2) {
+            val temp = dp[j]
+            if (s1[i - 1] == s2[j - 1]) {
+                dp[j] = prev
+            } else {
+                dp[j] = minOf(dp[j] + 1, dp[j - 1] + 1, prev + 1)
+            }
+            prev = temp
+        }
+    }
+    return dp[len2]
 }

@@ -121,8 +121,11 @@ class NotificationCaptureService : NotificationListenerService() {
             val existing = memoryRepository.findExisting("notification", packageName, finalTitle, contentToStore)
             
             if (existing != null) {
-                // Exact match, just update timestamp
-                val updated = existing.copy(timestamp = System.currentTimeMillis())
+                // Exact match, just update timestamp and increment duplicateCount
+                val updated = existing.copy(
+                    timestamp = System.currentTimeMillis(),
+                    duplicateCount = existing.duplicateCount + 1
+                )
                 memoryRepository.insertMemory(updated)
                 return@launch
             }
@@ -157,7 +160,8 @@ class NotificationCaptureService : NotificationListenerService() {
                 if (shouldMerge) {
                     val updated = fuzzyMatch.copy(
                         content = contentToStore,
-                        timestamp = System.currentTimeMillis()
+                        timestamp = System.currentTimeMillis(),
+                        duplicateCount = fuzzyMatch.duplicateCount + 1
                     )
                     memoryRepository.insertMemory(updated)
                     Log.d("2ndBrain", "Merged fuzzy duplicate for $packageName: $finalTitle")
