@@ -2,19 +2,31 @@ package com.alex.a2ndbrain.core.reflection
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Scanner
 
-class ModelDownloader(private val context: Context) {
+class ModelDownloader(private val context: Context, private val scope: CoroutineScope) {
+
+    private val _downloadProgress = MutableStateFlow<Float?>(null)
+    val downloadProgress = _downloadProgress.asStateFlow()
+
+    private val _downloadingModelName = MutableStateFlow<String?>(null)
+    val downloadingModelName = _downloadingModelName.asStateFlow()
+
+    private val _downloadError = MutableStateFlow<String?>(null)
+    val downloadError = _downloadError.asStateFlow()
     data class LiteRTModel(
         val name: String,
         val url: String,
@@ -27,27 +39,25 @@ class ModelDownloader(private val context: Context) {
         
         val DEFAULT_MODELS = listOf(
             LiteRTModel(
-                name = "Gemma-4-E2B-it",
-                url = "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm?download=true",
-                description = "Google Flagship (2.5B). Most stable choice.",
-                sizeLabel = "2.6GB"
+                name = "Gemma-3-1B-IT",
+                url = "https://huggingface.co/lotapa/gemma3-1b-it-int4.litertlm/resolve/main/gemma3-1b-it-int4.litertlm?download=true",
+                description = "Google Gemma 3 (1B). Extremely fast and smart on-device flagship.",
+                sizeLabel = "584MB"
             ),
             LiteRTModel(
-                name = "DeepSeek-R1-Distill-Qwen-1.5B",
-                url = "https://huggingface.co/litert-community/DeepSeek-R1-Distill-Qwen-1.5B/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm?download=true",
-                description = "Reasoning model. Verified multi-prefill bundle.",
-                sizeLabel = "1.8GB"
-            ),
-            LiteRTModel(
-                name = "Phi-4-mini-it",
-                url = "https://huggingface.co/litert-community/Phi-4-mini-instruct/resolve/main/Phi-4-mini-instruct_multi-prefill-seq_q8_ekv4096.litertlm?download=true",
-                description = "Microsoft Compact (3.8B). High intelligence, un-gated.",
-                sizeLabel = "2.4GB"
+                name = "Qwen-3-0.6B",
+                url = "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B.litertlm?download=true",
+                description = "Qwen 3 0.6B parameter model. Highly efficient and fast.",
+                sizeLabel = "614MB"
             )
         )
     }
 
     suspend fun fetchAvailableModels(): List<LiteRTModel> = withContext(Dispatchers.IO) {
+        return@withContext getRegisteredModels()
+    }
+
+    suspend fun fetchRemoteRegistry(): List<LiteRTModel> = withContext(Dispatchers.IO) {
         try {
             val connection = createConnection(REGISTRY_URL)
             if (connection.responseCode == HttpURLConnection.HTTP_OK) {
@@ -96,7 +106,7 @@ class ModelDownloader(private val context: Context) {
         return result
     }
 
-    private fun createConnection(urlPath: String): HttpURLConnection {
+    private fun createConnection(urlPath: String, existingSize: Long = 0L): HttpURLConnection {
         var currentUrl = urlPath
         var connection: HttpURLConnection
         var redirectCount = 0
@@ -111,6 +121,9 @@ class ModelDownloader(private val context: Context) {
             connection.setRequestProperty("User-Agent", userAgent)
             connection.setRequestProperty("Accept", "*/*")
             connection.setRequestProperty("Accept-Language", "en-US,en;q=0.9")
+            if (existingSize > 0) {
+                connection.setRequestProperty("Range", "bytes=$existingSize-")
+            }
             connection.connectTimeout = 30000
             connection.readTimeout = 30000
             connection.instanceFollowRedirects = false // We handle it manually
@@ -141,64 +154,143 @@ class ModelDownloader(private val context: Context) {
         return connection
     }
 
-    fun downloadModel(model: LiteRTModel): Flow<DownloadStatus> = flow {
-        try {
-            emit(DownloadStatus.Starting)
-            val modelFile = File(context.filesDir, "models/${model.name}.litertlm")
-            val parentDir = modelFile.parentFile
-            if (parentDir != null && !parentDir.exists()) {
-                parentDir.mkdirs()
-            }
-
-            val connection = createConnection(model.url)
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                throw Exception("Server returned HTTP ${connection.responseCode}")
-            }
-
-            val fileLength = connection.contentLength
-            val inputStream = connection.inputStream
-            val outputStream = FileOutputStream(modelFile)
-
-            val data = ByteArray(8192)
-            var total: Long = 0
-            var count: Int
-            var lastUpdate = 0L
-            
-            while (inputStream.read(data).also { count = it } != -1) {
-                total += count
-                outputStream.write(data, 0, count)
+    fun startDownload(model: LiteRTModel) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                _downloadingModelName.value = model.name
+                _downloadProgress.value = 0f
+                _downloadError.value = null
                 
-                val now = System.currentTimeMillis()
-                if (fileLength > 0 && now - lastUpdate > 100) { // Throttle updates to 10Hz
-                    emit(DownloadStatus.Progress(total.toFloat() / fileLength))
-                    lastUpdate = now
+                val finalModelFile = File(context.filesDir, "models/${model.name}.litertlm")
+                val tmpModelFile = File(context.filesDir, "models/${model.name}.litertlm.tmp")
+                val parentDir = finalModelFile.parentFile
+                if (parentDir != null && !parentDir.exists()) {
+                    parentDir.mkdirs()
                 }
-            }
 
-            outputStream.flush()
-            outputStream.close()
-            inputStream.close()
-            
-            // Verify file size
-            val actualSize = modelFile.length()
-            Log.d("ModelDownloader", "Download complete. Expected: $fileLength, Actual: $actualSize")
-            
-            if (fileLength > 0 && actualSize < fileLength) {
-                modelFile.delete()
-                throw Exception("Download incomplete: $actualSize of $fileLength bytes received")
+                var existingSize = 0L
+                if (tmpModelFile.exists()) {
+                    existingSize = tmpModelFile.length()
+                } else if (finalModelFile.exists()) {
+                    // Already completely downloaded!
+                    _downloadProgress.value = null
+                    _downloadingModelName.value = null
+                    return@launch
+                }
+
+                val connection = createConnection(model.url, existingSize)
+                val isResuming = connection.responseCode == 206
+                
+                if (connection.responseCode != HttpURLConnection.HTTP_OK && connection.responseCode != 206) {
+                    throw Exception("Server returned HTTP ${connection.responseCode}")
+                }
+                
+                if (!isResuming && existingSize > 0) {
+                    existingSize = 0L
+                    tmpModelFile.delete()
+                }
+
+                val contentLength = connection.contentLengthLong
+                val totalLength = if (contentLength > 0) existingSize + contentLength else -1L
+
+                if (totalLength > 0 && existingSize == totalLength) {
+                    _downloadProgress.value = null
+                    _downloadingModelName.value = null
+                    return@launch
+                }
+
+                val inputStream = connection.inputStream
+                val outputStream = FileOutputStream(tmpModelFile, isResuming)
+
+                val data = ByteArray(8192)
+                var currentSize = existingSize
+                var count: Int
+                var lastUpdate = 0L
+                
+                while (inputStream.read(data).also { count = it } != -1) {
+                    currentSize += count
+                    outputStream.write(data, 0, count)
+                    
+                    val now = System.currentTimeMillis()
+                    if (totalLength > 0 && now - lastUpdate > 100) {
+                        _downloadProgress.value = currentSize.toFloat() / totalLength
+                        lastUpdate = now
+                    }
+                }
+
+                outputStream.flush()
+                outputStream.close()
+                inputStream.close()
+                
+                val finalSize = tmpModelFile.length()
+                Log.d("ModelDownloader", "Download complete. Expected: $totalLength, Actual: $finalSize")
+                
+                if (totalLength > 0 && finalSize < totalLength) {
+                    throw Exception("Download incomplete: $finalSize of $totalLength bytes received. Tap download to resume.")
+                }
+                
+                // Success! Rename the temp file to the final model file.
+                if (finalModelFile.exists()) {
+                    finalModelFile.delete()
+                }
+                tmpModelFile.renameTo(finalModelFile)
+                
+                _downloadProgress.value = null
+                _downloadingModelName.value = null
+            } catch (e: Exception) {
+                Log.e("ModelDownloader", "Download failed", e)
+                _downloadError.value = e.message ?: "Unknown error"
+                _downloadProgress.value = null
+                _downloadingModelName.value = null
             }
-            
-            emit(DownloadStatus.Success)
-        } catch (e: Exception) {
-            Log.e("ModelDownloader", "Download failed", e)
-            emit(DownloadStatus.Error(e.message ?: "Unknown error"))
         }
-    }.flowOn(Dispatchers.IO)
-
-    sealed class DownloadStatus {
-        object Starting : DownloadStatus()
-        data class Progress(val progress: Float) : DownloadStatus()
-        object Success : DownloadStatus()
-        data class Error(val message: String) : DownloadStatus()
     }
+
+    fun getRegisteredModels(): List<LiteRTModel> {
+        val prefs = context.getSharedPreferences("custom_models", Context.MODE_PRIVATE)
+        val json = prefs.getString("models_list", null)
+        if (json == null) {
+            // First boot: auto-populate with DEFAULT_MODELS!
+            saveRegisteredModels(DEFAULT_MODELS)
+            return DEFAULT_MODELS
+        }
+        return try {
+            parseModelsJson(json)
+        } catch (e: Exception) {
+            DEFAULT_MODELS
+        }
+    }
+
+    fun registerModel(model: LiteRTModel) {
+        val current = getRegisteredModels().toMutableList()
+        if (current.none { it.name == model.name }) {
+            current.add(model)
+            saveRegisteredModels(current)
+        }
+    }
+
+    fun unregisterModel(name: String) {
+        val current = getRegisteredModels().filter { it.name != name }
+        saveRegisteredModels(current)
+    }
+
+    private fun saveRegisteredModels(models: List<LiteRTModel>) {
+        val array = JSONArray()
+        for (m in models) {
+            val obj = JSONObject()
+            obj.put("name", m.name)
+            obj.put("url", m.url)
+            obj.put("description", m.description)
+            obj.put("sizeLabel", m.sizeLabel)
+            array.put(obj)
+        }
+        context.getSharedPreferences("custom_models", Context.MODE_PRIVATE)
+            .edit()
+            .putString("models_list", array.toString())
+            .apply()
+    }
+
+    fun getCustomModels(): List<LiteRTModel> = getRegisteredModels()
+    fun addCustomModel(model: LiteRTModel) = registerModel(model)
+    fun removeCustomModel(name: String) = unregisterModel(name)
 }

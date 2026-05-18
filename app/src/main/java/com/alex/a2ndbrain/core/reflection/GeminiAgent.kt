@@ -138,6 +138,45 @@ class GeminiAgent(private val apiKey: String) {
 
         return@withContext SummaryResult(finalResult, "Error Fallback")
     }
+
+    suspend fun chatInference(prompt: String, preferredModel: String? = null): SummaryResult = withContext(Dispatchers.IO) {
+        if (prompt.isBlank()) return@withContext SummaryResult("Prompt cannot be empty.", "N/A")
+        
+        val baseAttempts = listOf(
+            "gemini-3.1-flash-lite-preview" to "v1beta",
+            "gemini-3.1-pro-preview" to "v1beta",
+            "gemini-3-flash-preview" to "v1beta",
+            "gemini-2.5-flash" to "v1beta",
+            "gemini-2.5-pro" to "v1beta",
+            "gemini-2.0-flash" to "v1beta"
+        )
+        
+        val attempts = mutableListOf<Pair<String, String>>()
+        if (preferredModel != null && preferredModel.isNotBlank()) {
+            val pref = preferredModel.trim()
+            attempts.add(pref to "v1beta")
+        } else if (cachedModel != null) {
+            attempts.add(cachedModel!!)
+        }
+        attempts.addAll(baseAttempts.filter { it.first != preferredModel && it.first != cachedModel?.first })
+        
+        for ((name, version) in attempts) {
+            try {
+                Log.d("GeminiAgent", "Chat attempt $name with $version")
+                val model = createModel(name, version)
+                val response = model.generateContent(prompt)
+                val result = response.text
+                if (!result.isNullOrBlank()) {
+                    cachedModel = name to version
+                    return@withContext SummaryResult(result, name)
+                }
+            } catch (e: Exception) {
+                Log.e("GeminiAgent", "Chat failed $name/$version: ${e.message}")
+            }
+        }
+        
+        SummaryResult("All Gemini models failed. Please check network/billing.", "Error")
+    }
 }
 
 data class SummaryResult(val text: String, val modelName: String)

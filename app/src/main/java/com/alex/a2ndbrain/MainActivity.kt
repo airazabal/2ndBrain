@@ -1,6 +1,7 @@
 package com.alex.a2ndbrain
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -64,6 +65,7 @@ class MainActivity : ComponentActivity() {
                     val usageStats by viewModel.usageStats.collectAsStateWithLifecycle()
                     val vaultNotes by viewModel.vaultNotes.collectAsStateWithLifecycle()
                     val error by viewModel.errorFlow.collectAsStateWithLifecycle()
+                    val isGeneratingReflection by viewModel.isGeneratingReflection.collectAsStateWithLifecycle()
 
                     LaunchedEffect(error) {
                         error?.let {
@@ -106,7 +108,8 @@ class MainActivity : ComponentActivity() {
                                     Triple("Feed", Icons.Default.Notifications, 1),
                                     Triple("Brain", Icons.Default.AutoAwesome, 2),
                                     Triple("Notes", Icons.Default.Description, 3),
-                                    Triple("Time", Icons.Default.Schedule, 4)
+                                    Triple("Time", Icons.Default.Schedule, 4),
+                                    Triple("Co-pilot", Icons.Default.QuestionAnswer, 6)
                                 )
                                 
                                 tabs.forEach { (label, icon, index) ->
@@ -122,6 +125,20 @@ class MainActivity : ComponentActivity() {
                                         )
                                     )
                                 }
+
+                                Spacer(modifier = Modifier.weight(1f))
+
+                                NavigationRailItem(
+                                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                                    label = { Text("Settings") },
+                                    selected = currentTab == 5,
+                                    onClick = { viewModel.setTab(5) },
+                                    colors = NavigationRailItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                    )
+                                )
                             }
 
                             Column(modifier = Modifier.weight(1f)) {
@@ -137,7 +154,10 @@ class MainActivity : ComponentActivity() {
                                             1 -> "Your daily stream of captures"
                                             2 -> "Reflections & daily insights"
                                             3 -> "Your space for ideas & thoughts"
-                                            else -> "Understanding your routine"
+                                            4 -> "Understanding your routine"
+                                            5 -> "Configure capture and permissions"
+                                            6 -> "Ask your 2ndBrain Co-Pilot"
+                                            else -> "2ndBrain"
                                         },
                                         style = MaterialTheme.typography.headlineLarge,
                                         fontWeight = FontWeight.Black,
@@ -160,9 +180,6 @@ class MainActivity : ComponentActivity() {
                                             pagedMemories = pagedMemories,
                                             searchQuery = searchQuery,
                                             onSearchQueryChange = { viewModel.setSearchQuery(it) },
-                                            onOpenSettings = {
-                                                startActivity(Intent(this@MainActivity, AppCaptureSettingsActivity::class.java))
-                                            },
                                             onCaptureClipboard = {
                                                 clipboardCaptureManager.captureCurrentClipboard()
                                             },
@@ -174,13 +191,33 @@ class MainActivity : ComponentActivity() {
                                         2 -> ReflectionScreen(
                                             summaries = summaries,
                                             settingsManager = settingsManager,
+                                            isGenerating = isGeneratingReflection,
                                             onGenerateReflection = { viewModel.generateReflection() },
+                                            onCancelReflection = { viewModel.cancelReflection() },
                                             onClearAll = { viewModel.clearAllSummaries() },
                                             onDeleteSummary = { id -> viewModel.deleteSummary(id) }
                                         )
 
                                         3 -> NotesScreen(settingsManager = settingsManager)
                                         4 -> DigitalTimeScreen(digitalTimeManager = digitalTimeManager)
+                                        5 -> AppCaptureSettingsScreen(
+                                            settingsManager = settingsManager,
+                                            onBack = { viewModel.setTab(0) },
+                                            onRestartService = {
+                                                val componentName = android.content.ComponentName(this@MainActivity, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java)
+                                                packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+                                                packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+                                            }
+                                        )
+                                        6 -> {
+                                            val chatMessages by viewModel.chatMessages.collectAsState()
+                                            val chatIsThinking by viewModel.chatIsThinking.collectAsState()
+                                            com.alex.a2ndbrain.ui.chat.BrainChatScreen(
+                                                messages = chatMessages,
+                                                isThinking = chatIsThinking,
+                                                onSendMessage = { viewModel.sendChatMessage(it) }
+                                            )
+                                        }
                                     }
                                 }
                             }

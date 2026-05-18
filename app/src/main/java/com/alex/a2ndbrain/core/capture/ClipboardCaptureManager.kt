@@ -38,7 +38,7 @@ class ClipboardCaptureManager(private val context: Context) {
                 database.memoryDao().insert(updated)
                 Log.d("ClipboardCapture", "Updated duplicate: count=${updated.duplicateCount}")
             } else {
-                val entity = MemoryEntity(
+                val entity = MemoryEntity.create(
                     source = "clipboard",
                     packageName = null,
                     title = "Copied Text",

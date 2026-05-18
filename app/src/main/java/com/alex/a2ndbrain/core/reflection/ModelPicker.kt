@@ -55,8 +55,41 @@ class ModelPicker(private val context: Context) {
 
             val engineConfig = EngineConfig(
                 modelPath = modelFile.absolutePath,
-                maxNumTokens = 4096
+                backend = com.google.ai.edge.litertlm.Backend.CPU(numOfThreads = 4),
+                maxNumTokens = 1024
             )
+
+            // Chat template wrapping based on model architecture
+            val isGemma = selectedModel.contains("Gemma", ignoreCase = true)
+            val formattedPrompt = if (isGemma) {
+                "<start_of_turn>system\n" +
+                "You are a helpful personal assistant. Generate a high-quality daily reflection based on the user's memories.\n" +
+                "Instructions:\n" +
+                "- Summarize the day's main activities and mood.\n" +
+                "- Highlight key connections or interesting events.\n" +
+                "- Provide a brief, encouraging thought for tomorrow.\n" +
+                "- Be concise (aim for 2-3 short, descriptive paragraphs).\n" +
+                "- Do NOT include any internal thought processes, reasoning, or <think> tags.\n" +
+                "- Start directly with the reflection.\n" +
+                "<end_of_turn>\n" +
+                "<start_of_turn>user\n" +
+                "Memories:\n$prompt<end_of_turn>\n" +
+                "<start_of_turn>model\n"
+            } else {
+                "<|im_start|>system\n" +
+                "You are a helpful personal assistant. Generate a high-quality daily reflection based on the user's memories.\n" +
+                "Instructions:\n" +
+                "- Summarize the day's main activities and mood.\n" +
+                "- Highlight key connections or interesting events.\n" +
+                "- Provide a brief, encouraging thought for tomorrow.\n" +
+                "- Be concise (aim for 2-3 short, descriptive paragraphs).\n" +
+                "- Do NOT include any internal thought processes, reasoning, or <think> tags.\n" +
+                "- Start directly with the reflection.\n" +
+                "<|im_end|>\n" +
+                "<|im_start|>user\n" +
+                "Memories:\n$prompt<|im_end|>\n" +
+                "<|im_start|>assistant\n"
+            }
 
             Engine(engineConfig).use { engine ->
                 engine.initialize()
@@ -69,7 +102,7 @@ class ModelPicker(private val context: Context) {
                 
                 engine.createConversation(conversationConfig).use { conversation ->
                     val response = StringBuilder()
-                    conversation.sendMessageAsync(prompt).collect { chunk ->
+                    conversation.sendMessageAsync(formattedPrompt).collect { chunk ->
                         response.append(chunk)
                     }
                     response.toString()

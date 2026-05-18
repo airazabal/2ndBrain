@@ -115,8 +115,11 @@ class ReflectionManager(private val context: Context) {
                 try {
                     // Apply a 30-second timeout for the AI response
                     withTimeout(30000L) {
+                        val startTime = System.currentTimeMillis()
                         val result = GeminiAgent(apiKey).summarizeMemories(promptContext, preferredModel, isMorningBriefing = isMorning)
-                        result.text to result.modelName
+                        val elapsedMs = System.currentTimeMillis() - startTime
+                        val timeStr = String.format(Locale.getDefault(), "%.1fs", elapsedMs / 1000f)
+                        result.text to "${result.modelName} ($timeStr)"
                     }
                 } catch (e: Exception) {
                     "AI response timed out or failed. Please try again." to "Timeout"
@@ -129,30 +132,21 @@ class ReflectionManager(private val context: Context) {
                     "- [$time] ${it.content.take(200)}"
                 }
                 
-                val prompt = """
-                    You are a helpful personal assistant. Generate a long, detailed, and comprehensive daily reflection based on the user's memories provided below. 
-                    
-                    Instructions:
-                    - Provide a deep analysis of the day's events.
-                    - Highlight key achievements, connections, and potential action items.
-                    - Do NOT include any internal thought processes, reasoning, or <think> tags in your output.
-                    - Start directly with the reflection.
-                    - WRITING STYLE: Be descriptive and elaborate. Aim for at least 500 words.
-                    - STRUCTURE: Use several paragraphs to organize different aspects of the day.
-
-                    Memories:
-                    $rawData
-                    
-                    Reflection:
-                """.trimIndent()
+                val startTime = System.currentTimeMillis()
+                val rawResult = modelPicker.runLiteRTInference(rawData)
+                val elapsedMs = System.currentTimeMillis() - startTime
+                val timeStr = String.format(Locale.getDefault(), "%.1fs", elapsedMs / 1000f)
                 
-                val rawResult = modelPicker.runLiteRTInference(prompt)
                 val cleanedResult = cleanLiteRTResponse(rawResult)
                 val selectedModelName = settingsManager.getSelectedLiteRTModel()
-                cleanedResult to "LiteRT ($selectedModelName)"
+                cleanedResult to "LiteRT ($selectedModelName) - $timeStr"
             }
             ModelPicker.ModelType.BASIC_TEMPLATE -> {
-                generateBasicSummary(memories) to "Local Template"
+                val startTime = System.currentTimeMillis()
+                val result = generateBasicSummary(memories)
+                val elapsedMs = System.currentTimeMillis() - startTime
+                val timeStr = String.format(Locale.getDefault(), "%.1fs", elapsedMs / 1000f)
+                result to "Local Template ($timeStr)"
             }
         }
 
@@ -236,6 +230,41 @@ class ReflectionManager(private val context: Context) {
             context.packageManager.getApplicationLabel(appInfo).toString()
         } catch (e: Exception) {
             if (key == "clipboard") "Clipboard" else key
+        }
+    }
+
+    suspend fun runChatInference(promptContext: String): Pair<String, String> {
+        val modelPicker = ModelPicker(context)
+        val selectedModel = modelPicker.getBestModel()
+        val apiKey = settingsManager.getGeminiApiKey()
+        val preferredModel = settingsManager.getGeminiModel()
+        
+        return when (selectedModel) {
+            ModelPicker.ModelType.GEMINI_CLOUD -> {
+                try {
+                    withTimeout(30000L) {
+                        val startTime = System.currentTimeMillis()
+                        val result = GeminiAgent(apiKey).chatInference(promptContext, preferredModel)
+                        val elapsedMs = System.currentTimeMillis() - startTime
+                        val timeStr = String.format(Locale.getDefault(), "%.1fs", elapsedMs / 1000f)
+                        result.text to "${result.modelName} ($timeStr)"
+                    }
+                } catch (e: Exception) {
+                    "Chat response timed out or failed: ${e.message}" to "Timeout"
+                }
+            }
+            ModelPicker.ModelType.LITERT_LOCAL -> {
+                val startTime = System.currentTimeMillis()
+                val rawResult = modelPicker.runLiteRTInference(promptContext)
+                val elapsedMs = System.currentTimeMillis() - startTime
+                val timeStr = String.format(Locale.getDefault(), "%.1fs", elapsedMs / 1000f)
+                val cleanedResult = cleanLiteRTResponse(rawResult)
+                val selectedModelName = settingsManager.getSelectedLiteRTModel()
+                cleanedResult to "LiteRT ($selectedModelName) - $timeStr"
+            }
+            ModelPicker.ModelType.BASIC_TEMPLATE -> {
+                "Ask your 2ndBrain requires local model download or Gemini API key configuration to run private AI chats." to "Local Chat requires setup"
+            }
         }
     }
 }

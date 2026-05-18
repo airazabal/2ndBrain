@@ -75,7 +75,7 @@ class CaptureSettingsManager(context: Context) {
     }
 
     fun getSelectedLiteRTModel(): String {
-        return prefs.getString("selected_litert_model", "Qwen3-0.6B") ?: "Qwen3-0.6B"
+        return prefs.getString("selected_litert_model", "Gemma-3-1B-IT") ?: "Gemma-3-1B-IT"
     }
 
     fun saveSelectedLiteRTModel(modelName: String) {

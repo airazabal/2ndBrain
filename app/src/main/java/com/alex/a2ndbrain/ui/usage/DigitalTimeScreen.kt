@@ -148,6 +148,61 @@ fun DigitalTimeScreen(
                 item {
                     UsageSummaryCard(totalTime, selectedPeriod)
                 }
+
+                // Digital Habits Correlation Insights (Recommendation 5)
+                item {
+                    val habitCorrelationText = remember(consolidatedStats) {
+                        val socialMediaApps = listOf("com.instagram.android", "com.zhiliaoapp.musically", "com.twitter.android", "com.facebook.katana", "com.whatsapp", "com.snapchat.android")
+                        val productivityApps = listOf("com.todoist", "com.microsoft.todos", "com.google.android.apps.tasks", "com.google.android.calendar", "com.alex.a2ndbrain")
+                        
+                        val socialTimeMs = consolidatedStats.filter { socialMediaApps.contains(it.packageName) }.sumOf { it.totalTimeMs }
+                        val prodTimeMs = consolidatedStats.filter { productivityApps.contains(it.packageName) }.sumOf { it.totalTimeMs }
+                        
+                        val socialMins = socialTimeMs / 1000 / 60
+                        val prodMins = prodTimeMs / 1000 / 60
+                        
+                        when {
+                            socialMins > 60 && prodMins < 15 -> {
+                                "⚠️ High distraction pattern detected. You've spent ${socialMins}m on social/chat apps, which is 4x more than your focused productivity apps today. Consider a quick digital detox to stay on track!"
+                            }
+                            prodMins > 30 -> {
+                                "🎉 Fantastic focus today! Your productivity app usage is active at ${prodMins}m. This correlation indicates a strong alignment with your daily intentional schedule!"
+                            }
+                            socialMins > 0 -> {
+                                "💡 Co-Pilot Insight: Moderate social media balance (${socialMins}m) observed today. Maintain this healthy distraction boundary for high mental energy!"
+                            }
+                            else -> {
+                                "💡 Co-Pilot Insight: Safe, minimal distraction pattern logged today. Keep up the clean focus flow!"
+                            }
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "HABIT CORRELATIONS",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = habitCorrelationText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
+                }
                 
                 item {
                     Spacer(modifier = Modifier.height(12.dp))

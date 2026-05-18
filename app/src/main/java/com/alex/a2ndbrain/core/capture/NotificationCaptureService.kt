@@ -145,7 +145,7 @@ class NotificationCaptureService : NotificationListenerService() {
                 memoryRepository.insertMemory(updated)
                 Log.d("2ndBrain", "Merged fuzzy duplicate: $finalTitle")
             } else {
-                val entity = MemoryEntity(
+                val entity = MemoryEntity.create(
                     source = "notification",
                     packageName = packageName,
                     title = finalTitle,

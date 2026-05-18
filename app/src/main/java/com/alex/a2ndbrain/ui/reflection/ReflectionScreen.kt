@@ -10,6 +10,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
+import kotlinx.coroutines.launch
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,7 +40,9 @@ import java.util.Locale
 fun ReflectionScreen(
     summaries: List<DailySummaryEntity>,
     settingsManager: CaptureSettingsManager,
+    isGenerating: Boolean,
     onGenerateReflection: () -> Unit,
+    onCancelReflection: () -> Unit,
     onClearAll: () -> Unit,
     onDeleteSummary: (Long) -> Unit,
     modifier: Modifier = Modifier
@@ -46,28 +51,47 @@ fun ReflectionScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val modelPicker = remember { ModelPicker(context) }
+    val modelDownloader = remember { ModelDownloader(context, scope) }
     
     var selectedModel by remember { mutableStateOf(settingsManager.getPreferredModelType()) }
-    var isGenerating by remember { mutableStateOf(false) }
 
     var availableModels by remember { mutableStateOf<List<ModelDownloader.LiteRTModel>>(emptyList()) }
     var isLoadingModels by remember { mutableStateOf(false) }
     var selectedLiteRTModel by remember { mutableStateOf(settingsManager.getSelectedLiteRTModel()) }
-    var downloadProgress by remember { mutableStateOf<Float?>(null) }
-    var downloadingModelName by remember { mutableStateOf<String?>(null) }
-    var downloadError by remember { mutableStateOf<String?>(null) }
+    val downloadProgress by modelDownloader.downloadProgress.collectAsState()
+    val downloadingModelName by modelDownloader.downloadingModelName.collectAsState()
+    val downloadError by modelDownloader.downloadError.collectAsState()
     
     var geminiApiKey by remember { mutableStateOf(settingsManager.getGeminiApiKey()) }
     var geminiModel by remember { mutableStateOf(settingsManager.getGeminiModel()) }
+
+    var showAddCustomModelDialog by remember { mutableStateOf(false) }
+    var customModelName by remember { mutableStateOf("") }
+    var customModelUrl by remember { mutableStateOf("") }
+    var customModelDesc by remember { mutableStateOf("") }
+    var customModelSize by remember { mutableStateOf("") }
+
+    var showModelLibraryDialog by remember { mutableStateOf(false) }
+    var remoteRegistryModels by remember { mutableStateOf<List<ModelDownloader.LiteRTModel>>(emptyList()) }
+    var isLoadingRegistryModels by remember { mutableStateOf(false) }
     
     LaunchedEffect(Unit) {
         isLoadingModels = true
-        availableModels = ModelDownloader(context).fetchAvailableModels()
+        availableModels = modelDownloader.fetchAvailableModels()
         isLoadingModels = false
     }
     
-    LaunchedEffect(summaries) {
-        isGenerating = false
+    
+    LaunchedEffect(downloadingModelName) {
+        if (downloadingModelName == null && downloadError == null && selectedLiteRTModel == "") {
+            val downloaded = availableModels.find { model ->
+                java.io.File(context.filesDir, "models/${model.name}.litertlm").exists()
+            }
+            if (downloaded != null) {
+                selectedLiteRTModel = downloaded.name
+                settingsManager.saveSelectedLiteRTModel(downloaded.name)
+            }
+        }
     }
 
     val models = remember {
@@ -99,23 +123,36 @@ fun ReflectionScreen(
 
                 val reflectButtonWidth = (configuration.screenWidthDp * 0.25).coerceIn(90.0, 140.0).dp
                 
-                Button(
-                    onClick = {
-                        isGenerating = true
-                        onGenerateReflection()
-                    },
-                    enabled = !isGenerating,
-                    modifier = Modifier.width(reflectButtonWidth),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    if (isGenerating) {
+                if (isGenerating) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = MaterialTheme.colorScheme.primary,
                             strokeWidth = 2.dp
                         )
-                    } else {
+                        Text(
+                            "Thinking...", 
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        TextButton(
+                            onClick = onCancelReflection,
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = onGenerateReflection,
+                        modifier = Modifier.width(reflectButtonWidth),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
                         Text("Reflect")
                     }
                 }
@@ -186,14 +223,43 @@ fun ReflectionScreen(
                                     }
                                 ) {
                                     Column(modifier = Modifier.padding(12.dp)) {
-                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                        val isCustom = remember(model.name) {
+                                            modelDownloader.getCustomModels().any { it.name == model.name }
+                                        }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
                                             Text(
                                                 text = model.name, 
                                                 style = MaterialTheme.typography.labelLarge,
                                                 fontWeight = FontWeight.Bold,
-                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.weight(1f)
                                             )
-                                            Text(model.sizeLabel, style = MaterialTheme.typography.labelSmall)
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(model.sizeLabel, style = MaterialTheme.typography.labelSmall)
+                                                if (isCustom) {
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    IconButton(
+                                                        onClick = {
+                                                            modelDownloader.removeCustomModel(model.name)
+                                                            scope.launch {
+                                                                availableModels = modelDownloader.fetchAvailableModels()
+                                                            }
+                                                        },
+                                                        modifier = Modifier.size(24.dp)
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.Delete,
+                                                            contentDescription = "Delete Model",
+                                                            tint = MaterialTheme.colorScheme.error,
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
                                         Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                                         
@@ -228,28 +294,7 @@ fun ReflectionScreen(
                                             Spacer(modifier = Modifier.height(8.dp))
                                             Button(
                                                 onClick = {
-                                                    scope.launch {
-                                                        downloadingModelName = model.name
-                                                        ModelDownloader(context).downloadModel(model).collect { status ->
-                                                            when (status) {
-                                                                is ModelDownloader.DownloadStatus.Starting -> downloadProgress = 0f
-                                                                is ModelDownloader.DownloadStatus.Progress -> downloadProgress = status.progress
-                                                                is ModelDownloader.DownloadStatus.Success -> {
-                                                                    downloadProgress = null
-                                                                    downloadingModelName = null
-                                                                    if (selectedLiteRTModel == "") {
-                                                                        selectedLiteRTModel = model.name
-                                                                        settingsManager.saveSelectedLiteRTModel(model.name)
-                                                                    }
-                                                                }
-                                                                is ModelDownloader.DownloadStatus.Error -> {
-                                                                    downloadProgress = null
-                                                                    downloadingModelName = null
-                                                                    downloadError = status.message
-                                                                }
-                                                            }
-                                                        }
-                                                    }
+                                                    modelDownloader.startDownload(model)
                                                 },
                                                 modifier = Modifier.height(32.dp),
                                                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
@@ -260,7 +305,244 @@ fun ReflectionScreen(
                                     }
                                 }
                             }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { showModelLibraryDialog = true },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.Search, contentDescription = "Browse Model Library")
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Browse Model Library")
+                                }
+                                
+                                OutlinedButton(
+                                    onClick = { showAddCustomModelDialog = true },
+                                    modifier = Modifier.weight(0.7f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = "Add Custom")
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Custom")
+                                }
+                            }
                         }
+
+                        if (showAddCustomModelDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showAddCustomModelDialog = false },
+                                title = { Text("Add Custom LiteRT Model") },
+                                text = {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        OutlinedTextField(
+                                            value = customModelName,
+                                            onValueChange = { customModelName = it },
+                                            label = { Text("Model Name") },
+                                            placeholder = { Text("e.g. DeepSeek-Qwen-1.5B") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        OutlinedTextField(
+                                            value = customModelUrl,
+                                            onValueChange = { customModelUrl = it },
+                                            label = { Text("Download URL") },
+                                            placeholder = { Text("https://huggingface.co/...") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        OutlinedTextField(
+                                            value = customModelDesc,
+                                            onValueChange = { customModelDesc = it },
+                                            label = { Text("Description") },
+                                            placeholder = { Text("Model description") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        OutlinedTextField(
+                                            value = customModelSize,
+                                            onValueChange = { customModelSize = it },
+                                            label = { Text("Size Label") },
+                                            placeholder = { Text("e.g. 1.2GB") },
+                                            singleLine = true,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                },
+                                confirmButton = {
+                                    Button(
+                                        onClick = {
+                                            if (customModelName.isNotBlank() && customModelUrl.isNotBlank()) {
+                                                val newModel = ModelDownloader.LiteRTModel(
+                                                    name = customModelName.trim(),
+                                                    url = customModelUrl.trim(),
+                                                    description = customModelDesc.trim().ifBlank { "Custom registered LiteRT model." },
+                                                    sizeLabel = customModelSize.trim().ifBlank { "Custom" }
+                                                )
+                                                modelDownloader.addCustomModel(newModel)
+                                                scope.launch {
+                                                    availableModels = modelDownloader.fetchAvailableModels()
+                                                }
+                                                showAddCustomModelDialog = false
+                                                customModelName = ""
+                                                customModelUrl = ""
+                                                customModelDesc = ""
+                                                customModelSize = ""
+                                            }
+                                        }
+                                    ) {
+                                        Text("Add")
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { showAddCustomModelDialog = false }) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            )
+                        }
+
+                        LaunchedEffect(showModelLibraryDialog) {
+                            if (showModelLibraryDialog) {
+                                isLoadingRegistryModels = true
+                                remoteRegistryModels = modelDownloader.fetchRemoteRegistry()
+                                isLoadingRegistryModels = false
+                            }
+                        }
+
+                        if (showModelLibraryDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showModelLibraryDialog = false },
+                                title = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Search, 
+                                            contentDescription = "Search Catalog",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Text("Compatible Model Library")
+                                    }
+                                },
+                                text = {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 400.dp),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Text(
+                                            "Browse and choose compatible local LiteRT models to add to your capture selection. Once added, you can download them directly.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                        
+                                        if (isLoadingRegistryModels) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(120.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                CircularProgressIndicator()
+                                            }
+                                        } else if (remoteRegistryModels.isEmpty()) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(120.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text("No models found in registry.", color = MaterialTheme.colorScheme.error)
+                                            }
+                                        } else {
+                                            LazyColumn(
+                                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                items(remoteRegistryModels) { model ->
+                                                    val isAlreadyAdded = availableModels.any { it.name == model.name }
+                                                    Card(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                                                        ),
+                                                        shape = RoundedCornerShape(8.dp)
+                                                    ) {
+                                                        Column(modifier = Modifier.padding(12.dp)) {
+                                                            Row(
+                                                                modifier = Modifier.fillMaxWidth(),
+                                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                                verticalAlignment = Alignment.CenterVertically
+                                                            ) {
+                                                                Column(modifier = Modifier.weight(1f)) {
+                                                                    Text(
+                                                                        model.name, 
+                                                                        fontWeight = FontWeight.Bold, 
+                                                                        style = MaterialTheme.typography.bodyMedium
+                                                                    )
+                                                                    Text(
+                                                                        model.sizeLabel, 
+                                                                        style = MaterialTheme.typography.labelSmall,
+                                                                        color = MaterialTheme.colorScheme.primary
+                                                                    )
+                                                                }
+                                                                
+                                                                if (isAlreadyAdded) {
+                                                                    Surface(
+                                                                        color = Color(0xFFE8F5E9),
+                                                                        shape = RoundedCornerShape(4.dp)
+                                                                    ) {
+                                                                        Text(
+                                                                            "ADDED", 
+                                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                                                            style = MaterialTheme.typography.labelSmall,
+                                                                            color = Color(0xFF2E7D32),
+                                                                            fontWeight = FontWeight.Bold
+                                                                        )
+                                                                    }
+                                                                } else {
+                                                                    Button(
+                                                                        onClick = {
+                                                                            modelDownloader.registerModel(model)
+                                                                            scope.launch {
+                                                                                availableModels = modelDownloader.fetchAvailableModels()
+                                                                            }
+                                                                        },
+                                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                                                        modifier = Modifier.height(30.dp),
+                                                                        shape = RoundedCornerShape(6.dp)
+                                                                    ) {
+                                                                        Text("Choose", fontSize = 11.sp)
+                                                                    }
+                                                                }
+                                                            }
+                                                            Spacer(modifier = Modifier.height(4.dp))
+                                                            Text(
+                                                                model.description, 
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.outline
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = { showModelLibraryDialog = false }) {
+                                        Text("Close")
+                                    }
+                                }
+                            )
+                        }
+
                         downloadError?.let {
                             Text("Error: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                         }

@@ -18,11 +18,21 @@ class ReflectionWorker(
     override suspend fun doWork(): Result {
         return try {
             Log.d("ReflectionWorker", "Starting daily reflection generation...")
-            manager.generateDailyReflection()
-            Result.success()
+            val errorMsg = manager.generateDailyReflection()
+            if (errorMsg != null) {
+                val data = androidx.work.Data.Builder()
+                    .putString("error", errorMsg)
+                    .build()
+                Result.failure(data)
+            } else {
+                Result.success()
+            }
         } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) {
+                throw e
+            }
             Log.e("ReflectionWorker", "Error generating reflection", e)
-            Result.retry()
+            Result.failure()
         }
     }
 }

@@ -21,13 +21,13 @@ interface MemoryDao {
     @Query("SELECT * FROM memories ORDER BY timestamp DESC")
     fun getPagedMemories(): PagingSource<Int, MemoryEntity>
 
-    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' ORDER BY timestamp DESC")
+    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%' ORDER BY timestamp DESC")
     fun searchPagedMemories(query: String): PagingSource<Int, MemoryEntity>
 
     @Query("SELECT * FROM memories WHERE source = 'clipboard' ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLastClipboardMemory(): MemoryEntity?
 
-    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%'")
+    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%'")
     fun searchMemories(query: String): Flow<List<MemoryEntity>>
 
     @Query("SELECT * FROM memories WHERE timestamp >= :startTime")
@@ -62,4 +62,10 @@ interface MemoryDao {
 
     @Query("SELECT * FROM usage_stats WHERE date >= :startDate")
     suspend fun getUsageStatsSince(startDate: String): List<UsageStatEntity>
+
+    @Query("SELECT * FROM memories ORDER BY timestamp DESC LIMIT 50")
+    suspend fun getRecentMemoriesSync(): List<MemoryEntity>
+
+    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%' ORDER BY timestamp DESC LIMIT 30")
+    suspend fun searchMemoriesSync(query: String): List<MemoryEntity>
 }

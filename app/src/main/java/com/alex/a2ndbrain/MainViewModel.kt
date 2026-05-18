@@ -3,6 +3,10 @@ package com.alex.a2ndbrain
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
@@ -12,6 +16,7 @@ import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,8 +24,13 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 
 class MainViewModel(
     private val memoryRepository: MemoryRepository,
@@ -38,8 +48,16 @@ class MainViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val pagedMemories: Flow<PagingData<MemoryEntity>> = _searchQuery
-        .flatMapLatest { query ->
-            memoryRepository.getPagedMemories(query)
+        .flatMapLatest { rawQuery ->
+            val expandedQuery = when (rawQuery.lowercase().trim()) {
+                "workout", "fitness", "exercise", "sleep", "heart", "steps", "health" -> "#Health"
+                "task", "todoist", "calendar", "meeting", "schedule", "work" -> "#Work"
+                "pay", "spent", "money", "bank", "card", "transaction", "finance" -> "#Finance"
+                "clipboard", "copied", "url", "copy", "reference" -> "#Reference"
+                "gmail", "email", "whatsapp", "message", "chat", "social" -> "#Social"
+                else -> rawQuery
+            }
+            memoryRepository.getPagedMemories(expandedQuery)
         }.cachedIn(viewModelScope)
 
     val summaries: StateFlow<List<DailySummaryEntity>> = memoryRepository.getAllSummariesFlow()
@@ -57,8 +75,32 @@ class MainViewModel(
     private val _errorFlow = MutableStateFlow<String?>(null)
     val errorFlow = _errorFlow.asStateFlow()
 
+    val isGeneratingReflection: StateFlow<Boolean> = WorkManager.getInstance(applicationContext)
+        .getWorkInfosForUniqueWorkFlow("manual_reflection")
+        .map { infos ->
+            infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
+        }
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
     init {
         loadVaultNotes()
+        observeWorkManagerErrors()
+    }
+
+    private fun observeWorkManagerErrors() {
+        viewModelScope.launch {
+            WorkManager.getInstance(applicationContext)
+                .getWorkInfosForUniqueWorkFlow("manual_reflection")
+                .collect { infos ->
+                    val failedInfo = infos.find { it.state == WorkInfo.State.FAILED }
+                    if (failedInfo != null) {
+                        val error = failedInfo.outputData.getString("error")
+                        if (error != null) {
+                            _errorFlow.value = error
+                        }
+                    }
+                }
+        }
     }
 
     fun setTab(tabIndex: Int) {
@@ -99,12 +141,16 @@ class MainViewModel(
     }
 
     fun generateReflection() {
-        viewModelScope.launch {
-            val error = reflectionManager.generateDailyReflection()
-            if (error != null) {
-                _errorFlow.value = error
-            }
-        }
+        val request = OneTimeWorkRequestBuilder<com.alex.a2ndbrain.core.reflection.ReflectionWorker>().build()
+        WorkManager.getInstance(applicationContext).enqueueUniqueWork(
+            "manual_reflection",
+            ExistingWorkPolicy.REPLACE,
+            request
+        )
+    }
+
+    fun cancelReflection() {
+        WorkManager.getInstance(applicationContext).cancelUniqueWork("manual_reflection")
     }
 
     fun clearError() {
@@ -122,4 +168,74 @@ class MainViewModel(
             memoryRepository.deleteSummary(id)
         }
     }
+
+    // Interactive Q&A Co-Pilot State (Recommendation 1)
+    private val _chatMessages = MutableStateFlow<List<ChatMessage>>(listOf(
+        ChatMessage(
+            text = "Hello! I am your 2ndBrain Co-Pilot. Ask me anything about your captured notifications, clipboard history, or daily digital usages!",
+            isUser = false
+        )
+    ))
+    val chatMessages = _chatMessages.asStateFlow()
+
+    private val _chatIsThinking = MutableStateFlow(false)
+    val chatIsThinking = _chatIsThinking.asStateFlow()
+
+    fun sendChatMessage(message: String) {
+        if (message.isBlank()) return
+        val userMsg = ChatMessage(text = message, isUser = true)
+        _chatMessages.value = _chatMessages.value + userMsg
+        _chatIsThinking.value = true
+        
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Keyword match search
+                val words = message.split(" ").filter { it.length > 3 }
+                val contextMemories = if (words.isEmpty()) {
+                    memoryRepository.getRecentMemoriesSync()
+                } else {
+                    memoryRepository.searchMemoriesSync(words.first())
+                }
+                
+                val promptContext = buildString {
+                    append("You are the user's personal 2ndBrain assistant. You have access to their captured memories below.\n")
+                    append("Answer the user's question accurately, concisely, and friendly based on these memories. If the memories do not contain relevant details, politely state that you can't find it in their recent logs.\n\n")
+                    append("USER'S MEMORIES:\n")
+                    if (contextMemories.isEmpty()) {
+                        append("- (No memories logged matching these keywords yet)\n")
+                    } else {
+                        contextMemories.forEach { mem ->
+                            val dateStr = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(mem.timestamp))
+                            append("- [$dateStr][${mem.tags ?: ""}] ${mem.content}\n")
+                        }
+                    }
+                    append("\nUSER'S QUESTION: $message\n")
+                }
+                
+                val (replyText, modelUsed) = reflectionManager.runChatInference(promptContext)
+                
+                _chatMessages.value = _chatMessages.value + ChatMessage(
+                    text = replyText,
+                    isUser = false,
+                    modelUsed = modelUsed
+                )
+            } catch (e: Exception) {
+                _chatMessages.value = _chatMessages.value + ChatMessage(
+                    text = "Sorry, I ran into an error generating a response: ${e.message}",
+                    isUser = false,
+                    modelUsed = "Error"
+                )
+            } finally {
+                _chatIsThinking.value = false
+            }
+        }
+    }
 }
+
+data class ChatMessage(
+    val id: String = UUID.randomUUID().toString(),
+    val text: String,
+    val isUser: Boolean,
+    val timestamp: Long = System.currentTimeMillis(),
+    val modelUsed: String? = null
+)

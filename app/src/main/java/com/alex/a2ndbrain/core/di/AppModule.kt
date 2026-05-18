@@ -2,6 +2,7 @@ package com.alex.a2ndbrain.core.di
 
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.AppDatabase
+import com.alex.a2ndbrain.core.reflection.ModelDownloader
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.MainViewModel
 import com.alex.a2ndbrain.core.memory.MemoryRepository
@@ -26,6 +27,7 @@ val appModule = module {
     single { CaptureSettingsManager(androidContext()) }
     single { DigitalTimeManager(androidContext(), get(), get()) }
     single { ReflectionManager(androidContext()) }
+    single { ModelDownloader(androidContext(), get()) }
 
     // ViewModels
     factory { MainViewModel(get(), get(), get(), get(), androidContext()) }
