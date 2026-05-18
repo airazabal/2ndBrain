@@ -522,6 +522,7 @@ private fun GroupedMemoryItem(
 
                         val uniqueTransactions = mutableSetOf<Transaction>()
                         for (item in memories) {
+                            if (item.isRead) continue
                             val matches = Regex("\\$(\\d+(?:\\.\\d{2})?)").findAll(item.content)
                             for (match in matches) {
                                 val amount = match.groupValues[1].toDoubleOrNull() ?: continue
@@ -532,8 +533,7 @@ private fun GroupedMemoryItem(
                                                    lowerLine.contains("returned") || lowerLine.contains("code") ||
                                                    lowerLine.contains("statement") || lowerLine.contains("notice") ||
                                                    lowerLine.contains("level you set") || lowerLine.contains("limit") ||
-                                                   lowerLine.contains("balance") || lowerLine.contains("above the") ||
-                                                   lowerLine.contains("harris teeter") || lowerLine.contains("harris")
+                                                   lowerLine.contains("balance") || lowerLine.contains("above the")
                                 if (hasExclusion) continue
                                 
                                 val hasContext = lowerLine.contains("transaction") || lowerLine.contains("spent") || 
