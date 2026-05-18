@@ -36,6 +36,9 @@ import android.speech.RecognizerIntent
 import android.app.Activity
 import android.widget.Toast
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import java.io.File
 
 @Composable
 fun MemoryScreen(
@@ -47,7 +50,7 @@ fun MemoryScreen(
     onClearAll: () -> Unit,
     monitoredApps: Set<String> = emptySet(),
     vaultUri: String = "",
-    onSaveVoiceNote: ((String) -> Unit)? = null,
+    onSaveVoiceNote: ((String, String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -55,18 +58,15 @@ fun MemoryScreen(
     
     var isScanning by remember { mutableStateOf(false) }
     var selectedTag by remember { mutableStateOf("All") }
+    var showRecordingDialog by remember { mutableStateOf(false) }
 
-    val speechLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data
-            val matches = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            val transcript = matches?.firstOrNull()
-            if (!transcript.isNullOrBlank()) {
-                onSaveVoiceNote?.invoke(transcript)
-                Toast.makeText(context, "Voice memo captured successfully!", Toast.LENGTH_LONG).show()
-            }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            showRecordingDialog = true
+        } else {
+            Toast.makeText(context, "Audio recording permission is required to record voice notes.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -260,15 +260,15 @@ fun MemoryScreen(
         // Floating action button for quick speech dictation
         FloatingActionButton(
             onClick = {
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to your 2ndBrain...")
-                }
-                try {
-                    speechLauncher.launch(intent)
-                } catch (e: Exception) {
-                    Toast.makeText(context, "Speech recognition is not supported on this device.", Toast.LENGTH_SHORT).show()
+                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.RECORD_AUDIO
+                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                
+                if (hasPermission) {
+                    showRecordingDialog = true
+                } else {
+                    permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
                 }
             },
             modifier = Modifier
@@ -285,6 +285,16 @@ fun MemoryScreen(
                 modifier = Modifier.size(28.dp)
             )
         }
+    }
+
+    if (showRecordingDialog) {
+        VoiceRecordingDialog(
+            onDismiss = { showRecordingDialog = false },
+            onFinished = { transcript, audioPath ->
+                showRecordingDialog = false
+                onSaveVoiceNote?.invoke(transcript, audioPath)
+            }
+        )
     }
 }
 
@@ -530,7 +540,7 @@ private fun SingleMemoryRow(
             .fillMaxWidth()
             .clickable {
                 onMarkAsRead(memory.id)
-                if (!memory.deepLink.isNullOrEmpty()) {
+                if (memory.source != "voice" && !memory.deepLink.isNullOrEmpty()) {
                     try {
                         val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(memory.deepLink))
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -626,6 +636,14 @@ private fun SingleMemoryRow(
                 )
             }
         }
+
+        if (memory.source == "voice" && !memory.deepLink.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            AudioPlayerControl(
+                audioPath = memory.deepLink,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
     }
 }
 
@@ -655,4 +673,345 @@ private fun levenshteinDistance(s1: String, s2: String): Int {
         }
     }
     return dp[len2]
+}
+
+@Composable
+fun VoiceRecordingDialog(
+    onDismiss: () -> Unit,
+    onFinished: (String, String) -> Unit
+) {
+    val context = LocalContext.current
+    var isRecording by remember { mutableStateOf(true) }
+    var secondsElapsed by remember { mutableStateOf(0) }
+    var transcribedText by remember { mutableStateOf("") }
+    
+    // File to save the original high-fidelity audio
+    val audioFile = remember {
+        val dir = File(context.filesDir, "audio")
+        if (!dir.exists()) dir.mkdirs()
+        File(dir, "voice-memo-${System.currentTimeMillis()}.m4a")
+    }
+
+    // MediaRecorder setup
+    val mediaRecorder = remember {
+        android.media.MediaRecorder().apply {
+            setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+            setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+            setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
+            setOutputFile(audioFile.absolutePath)
+        }
+    }
+
+    // SpeechRecognizer setup
+    val speechRecognizer = remember { android.speech.SpeechRecognizer.createSpeechRecognizer(context) }
+    val recognizerIntent = remember {
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        }
+    }
+
+    // Timer and active listening lifecycles
+    LaunchedEffect(Unit) {
+        // Start MediaRecorder
+        try {
+            mediaRecorder.prepare()
+            mediaRecorder.start()
+        } catch (e: Exception) {
+            android.util.Log.e("2ndBrain", "Failed to start MediaRecorder", e)
+        }
+
+        // Setup and start SpeechRecognizer
+        speechRecognizer.setRecognitionListener(object : android.speech.RecognitionListener {
+            override fun onReadyForSpeech(params: android.os.Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onError(error: Int) {
+                android.util.Log.e("2ndBrain", "SpeechRecognizer error: $error")
+            }
+            override fun onResults(results: android.os.Bundle?) {
+                val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = matches?.firstOrNull()
+                if (!text.isNullOrBlank()) {
+                    transcribedText = text
+                }
+            }
+            override fun onPartialResults(partialResults: android.os.Bundle?) {
+                val matches = partialResults?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
+                val text = matches?.firstOrNull()
+                if (!text.isNullOrBlank()) {
+                    transcribedText = text
+                }
+            }
+            override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+        })
+        speechRecognizer.startListening(recognizerIntent)
+
+        // Increment timer
+        while (isRecording) {
+            kotlinx.coroutines.delay(1000)
+            secondsElapsed++
+        }
+    }
+
+    // Release native resources safely
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                speechRecognizer.destroy()
+            } catch (_: Exception) {}
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (isRecording) {
+                isRecording = false
+                try {
+                    mediaRecorder.stop()
+                    mediaRecorder.release()
+                } catch (_: Exception) {}
+            }
+            onDismiss()
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    isRecording = false
+                    try {
+                        mediaRecorder.stop()
+                        mediaRecorder.release()
+                    } catch (_: Exception) {}
+                    
+                    try {
+                        speechRecognizer.stopListening()
+                    } catch (_: Exception) {}
+
+                    val finalTranscript = transcribedText.ifBlank {
+                        val sdf = SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault())
+                        "Voice Note captured on ${sdf.format(Date())}"
+                    }
+                    onFinished(finalTranscript, audioFile.absolutePath)
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text("Stop & Save", color = Color.White)
+            }
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(PastelRed)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Listening to your thoughts...",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                val mins = secondsElapsed / 60
+                val secs = secondsElapsed % 60
+                Text(
+                    text = String.format(Locale.getDefault(), "%02d:%02d", mins, secs),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Show dynamic transcript box as they speak
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth().height(100.dp)
+                ) {
+                    Box(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = transcribedText.ifBlank { "Start speaking to record a transcript..." },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (transcribedText.isBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surface
+    )
+}
+
+@Composable
+fun AudioPlayerControl(
+    audioPath: String,
+    modifier: Modifier = Modifier
+) {
+    var isPlaying by remember { mutableStateOf(false) }
+    var currentPosition by remember { mutableStateOf(0) }
+    var duration by remember { mutableStateOf(0) }
+    var playbackSpeed by remember { mutableStateOf(1.0f) }
+
+    val mediaPlayer = remember { android.media.MediaPlayer() }
+
+    // Initialize MediaPlayer safely
+    LaunchedEffect(audioPath) {
+        try {
+            mediaPlayer.reset()
+            mediaPlayer.setDataSource(audioPath)
+            mediaPlayer.prepare()
+            duration = mediaPlayer.duration
+            
+            mediaPlayer.setOnCompletionListener {
+                isPlaying = false
+                currentPosition = 0
+                mediaPlayer.seekTo(0)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("2ndBrain", "Failed to initialize MediaPlayer for $audioPath", e)
+        }
+    }
+
+    // Periodically update progress slider
+    LaunchedEffect(isPlaying) {
+        while (isPlaying) {
+            currentPosition = mediaPlayer.currentPosition
+            kotlinx.coroutines.delay(200)
+        }
+    }
+
+    // Safe lifecycle resource release
+    DisposableEffect(Unit) {
+        onDispose {
+            try {
+                mediaPlayer.stop()
+                mediaPlayer.release()
+            } catch (_: Exception) {}
+        }
+    }
+
+    // Set playback speed
+    LaunchedEffect(playbackSpeed) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            try {
+                if (mediaPlayer.isPlaying) {
+                    mediaPlayer.playbackParams = mediaPlayer.playbackParams.setSpeed(playbackSpeed)
+                } else {
+                    // Cache speed change
+                    val params = mediaPlayer.playbackParams
+                    mediaPlayer.playbackParams = params.setSpeed(playbackSpeed)
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // 1. Play/Pause Button
+        IconButton(
+            onClick = {
+                try {
+                    if (isPlaying) {
+                        mediaPlayer.pause()
+                        isPlaying = false
+                    } else {
+                        // Apply speed before playing
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                            mediaPlayer.playbackParams = mediaPlayer.playbackParams.setSpeed(playbackSpeed)
+                        }
+                        mediaPlayer.start()
+                        isPlaying = true
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("2ndBrain", "MediaPlayer play/pause failed", e)
+                }
+            },
+            modifier = Modifier.size(36.dp)
+        ) {
+            Icon(
+                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                contentDescription = if (isPlaying) "Pause" else "Play",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(4.dp))
+
+        // 2. Progressive Progress Bar / Slider
+        val displayPos = currentPosition.coerceIn(0, duration)
+        Slider(
+            value = if (duration > 0) displayPos.toFloat() / duration.toFloat() else 0f,
+            onValueChange = { fraction ->
+                if (duration > 0) {
+                    val dest = (fraction * duration).toInt()
+                    currentPosition = dest
+                    mediaPlayer.seekTo(dest)
+                }
+            },
+            modifier = Modifier.weight(1f),
+            colors = SliderDefaults.colors(
+                thumbColor = MaterialTheme.colorScheme.primary,
+                activeTrackColor = MaterialTheme.colorScheme.primary,
+                inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+            )
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // 3. Current elapsed time / Duration (e.g. 0:05 / 0:22)
+        val posMins = displayPos / 1000 / 60
+        val posSecs = (displayPos / 1000) % 60
+        val durMins = duration / 1000 / 60
+        val durSecs = (duration / 1000) % 60
+        
+        Text(
+            text = String.format(Locale.getDefault(), "%d:%02d / %d:%02d", posMins, posSecs, durMins, durSecs),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // 4. Playback Speed Selector (Cycles: 1x -> 1.5x -> 2x)
+        TextButton(
+            onClick = {
+                playbackSpeed = when (playbackSpeed) {
+                    1.0f -> 1.5f
+                    1.5f -> 2.0f
+                    else -> 1.0f
+                }
+            },
+            contentPadding = PaddingValues(0.dp),
+            modifier = Modifier.width(44.dp)
+        ) {
+            Text(
+                text = "${playbackSpeed}x",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
 }

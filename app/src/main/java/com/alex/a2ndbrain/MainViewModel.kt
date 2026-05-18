@@ -514,10 +514,8 @@ class MainViewModel(
         }
     }
 
-    fun saveVoiceNote(transcript: String, vaultUri: String) {
+    fun saveVoiceNote(transcript: String, audioPath: String, vaultUri: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            var savedFileUri: String? = null
-            
             // 1. If vault is connected, write the markdown file directly via SAF tree Uri
             if (vaultUri.isNotEmpty()) {
                 try {
@@ -542,7 +540,6 @@ class MainViewModel(
                                 """.trimIndent()
                                 stream.write(fileContent.toByteArray())
                             }
-                            savedFileUri = file.uri.toString()
                         }
                     }
                 } catch (e: Exception) {
@@ -551,12 +548,13 @@ class MainViewModel(
             }
             
             // 2. Insert into the local database repository so it is shown on the Feed tab
+            // We store the local audio path in the deepLink field of the MemoryEntity!
             val entity = MemoryEntity.create(
                 source = "voice",
                 packageName = null,
                 title = "Voice Memo",
                 content = transcript,
-                deepLink = savedFileUri
+                deepLink = audioPath
             )
             memoryRepository.insertMemory(entity)
         }

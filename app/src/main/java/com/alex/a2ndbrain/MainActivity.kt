@@ -225,8 +225,8 @@ class MainActivity : ComponentActivity() {
                                             onClearAll = { viewModel.clearAllMemories() },
                                             monitoredApps = settingsManager.getMonitoredApps(),
                                             vaultUri = settingsManager.getObsidianVaultUri(),
-                                            onSaveVoiceNote = { text ->
-                                                viewModel.saveVoiceNote(text, settingsManager.getObsidianVaultUri())
+                                            onSaveVoiceNote = { text, audioPath ->
+                                                viewModel.saveVoiceNote(text, audioPath, settingsManager.getObsidianVaultUri())
                                             }
                                         )
 
