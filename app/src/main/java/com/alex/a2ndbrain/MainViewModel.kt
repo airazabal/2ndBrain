@@ -533,6 +533,7 @@ class MainViewModel(
                                 # Voice Note
                                 - **Captured**: $dateStr
                                 - **Tags**: #audio #voice-capture
+                                - **Audio Reference**: [Play Audio](file://$audioPath)
                                 
                                 ---
                                 
