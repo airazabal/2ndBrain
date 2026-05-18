@@ -223,7 +223,11 @@ class MainActivity : ComponentActivity() {
                                             },
                                             onMarkAsRead = { id -> viewModel.markAsRead(id) },
                                             onClearAll = { viewModel.clearAllMemories() },
-                                            monitoredApps = settingsManager.getMonitoredApps()
+                                            monitoredApps = settingsManager.getMonitoredApps(),
+                                            vaultUri = settingsManager.getObsidianVaultUri(),
+                                            onSaveVoiceNote = { text ->
+                                                viewModel.saveVoiceNote(text, settingsManager.getObsidianVaultUri())
+                                            }
                                         )
 
                                         2 -> ReflectionScreen(

@@ -30,6 +30,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.speech.RecognizerIntent
+import android.app.Activity
+import android.widget.Toast
+import androidx.compose.material.icons.filled.Mic
+
 @Composable
 fun MemoryScreen(
     pagedMemories: LazyPagingItems<MemoryEntity>,
@@ -39,6 +46,8 @@ fun MemoryScreen(
     onMarkAsRead: (Long) -> Unit,
     onClearAll: () -> Unit,
     monitoredApps: Set<String> = emptySet(),
+    vaultUri: String = "",
+    onSaveVoiceNote: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -46,6 +55,20 @@ fun MemoryScreen(
     
     var isScanning by remember { mutableStateOf(false) }
     var selectedTag by remember { mutableStateOf("All") }
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            val matches = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+            val transcript = matches?.firstOrNull()
+            if (!transcript.isNullOrBlank()) {
+                onSaveVoiceNote?.invoke(transcript)
+                Toast.makeText(context, "Voice memo captured successfully!", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     // Group loaded non-null memories dynamically by category key: Pair(source, packageName)
     val itemsList = (0 until pagedMemories.itemCount).mapNotNull { index ->
@@ -67,12 +90,13 @@ fun MemoryScreen(
             .sortedByDescending { (_, list) -> list.maxOfOrNull { it.timestamp } ?: 0L }
     }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
         // Adaptive Header Item
         item {
             Row(
@@ -231,8 +255,35 @@ fun MemoryScreen(
             }
         }
         
-        item {
-            Spacer(modifier = Modifier.height(24.dp))
+        }
+        
+        // Floating action button for quick speech dictation
+        FloatingActionButton(
+            onClick = {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                    putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to your 2ndBrain...")
+                }
+                try {
+                    speechLauncher.launch(intent)
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Speech recognition is not supported on this device.", Toast.LENGTH_SHORT).show()
+                }
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(24.dp)
+                .size(64.dp),
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = Color.White
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Mic,
+                contentDescription = "Quick Voice Capture",
+                modifier = Modifier.size(28.dp)
+            )
         }
     }
 }

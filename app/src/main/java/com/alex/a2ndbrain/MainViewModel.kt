@@ -513,6 +513,54 @@ class MainViewModel(
             }
         }
     }
+
+    fun saveVoiceNote(transcript: String, vaultUri: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            var savedFileUri: String? = null
+            
+            // 1. If vault is connected, write the markdown file directly via SAF tree Uri
+            if (vaultUri.isNotEmpty()) {
+                try {
+                    val root = androidx.documentfile.provider.DocumentFile.fromTreeUri(applicationContext, android.net.Uri.parse(vaultUri))
+                    if (root != null && root.exists() && root.canWrite()) {
+                        val timestamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.getDefault()).format(java.util.Date())
+                        val newNoteName = "VoiceNote-$timestamp"
+                        
+                        // Create the file in the vault root
+                        val file = root.createFile("text/markdown", newNoteName)
+                        if (file != null) {
+                            applicationContext.contentResolver.openOutputStream(file.uri)?.use { stream ->
+                                val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                                val fileContent = """
+                                # Voice Note
+                                - **Captured**: $dateStr
+                                - **Tags**: #audio #voice-capture
+                                
+                                ---
+                                
+                                $transcript
+                                """.trimIndent()
+                                stream.write(fileContent.toByteArray())
+                            }
+                            savedFileUri = file.uri.toString()
+                        }
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("2ndBrain", "Failed to write voice note directly to Obsidian Vault", e)
+                }
+            }
+            
+            // 2. Insert into the local database repository so it is shown on the Feed tab
+            val entity = MemoryEntity.create(
+                source = "voice",
+                packageName = null,
+                title = "Voice Memo",
+                content = transcript,
+                deepLink = savedFileUri
+            )
+            memoryRepository.insertMemory(entity)
+        }
+    }
 }
 
 data class ChatMessage(
