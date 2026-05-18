@@ -551,12 +551,18 @@ class MainViewModel(
                         if (markdownDocFile != null) {
                             applicationContext.contentResolver.openOutputStream(markdownDocFile.uri)?.use { stream ->
                                 val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                                val dateIso = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
                                 
                                 // Standard relative wiki attachment notation ensures Obsidian renders an inline audio player natively!
                                 val fileContent = """
+                                ---
+                                created: $dateIso
+                                tags:
+                                  - audio
+                                  - voice-capture
+                                ---
                                 # Voice Note
                                 - **Captured**: $dateStr
-                                - **Tags**: #audio #voice-capture
                                 
                                 ---
                                 
