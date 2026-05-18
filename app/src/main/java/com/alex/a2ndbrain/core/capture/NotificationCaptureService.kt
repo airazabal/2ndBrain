@@ -128,23 +128,44 @@ class NotificationCaptureService : NotificationListenerService() {
             }
             
             // Fuzzy match: check if a recent notification from this app has very similar content 
-            // (e.g., progress bar update "Downloading... 10%" vs "Downloading... 20%")
-            val recentMemories = memoryRepository.getRecentMemories(System.currentTimeMillis() - 15 * 60 * 1000) // last 15 mins
+            // or is part of a chat thread (e.g. WhatsApp/Telegram appends, progress bar updates)
+            val recentMemories = memoryRepository.getRecentMemories(System.currentTimeMillis() - 30 * 60 * 1000) // last 30 mins
             val fuzzyMatch = recentMemories.find { 
                 it.packageName == packageName && 
-                it.title == finalTitle &&
-                it.content.take(15) == contentToStore.take(15) // simple heuristic for progress/status updates
+                it.title == finalTitle
             }
 
-            if (fuzzyMatch != null && contentToStore.length - fuzzyMatch.content.length < 20) {
-                // It's likely a progress update. Replace it.
-                val updated = fuzzyMatch.copy(
-                    content = contentToStore,
-                    timestamp = System.currentTimeMillis()
-                )
-                memoryRepository.insertMemory(updated)
-                Log.d("2ndBrain", "Merged fuzzy duplicate: $finalTitle")
-            } else {
+            val isChatApp = packageName.contains("whatsapp") || 
+                            packageName.contains("telegram") || 
+                            packageName.contains("signal") || 
+                            packageName.contains("discord") || 
+                            packageName.contains("messenger") || 
+                            packageName.contains("slack")
+
+            var merged = false
+            if (fuzzyMatch != null) {
+                val shouldMerge = when {
+                    // Chat app: new content contains the old content as a prefix/substring
+                    isChatApp && contentToStore.contains(fuzzyMatch.content) -> true
+                    // Progress bar or slight edit: similarity > 80%
+                    calculateSimilarity(fuzzyMatch.content, contentToStore) > 0.8 -> true
+                    // Start prefix match (e.g. "Downloading... 10%" vs "Downloading... 20%")
+                    contentToStore.take(15) == fuzzyMatch.content.take(15) -> true
+                    else -> false
+                }
+
+                if (shouldMerge) {
+                    val updated = fuzzyMatch.copy(
+                        content = contentToStore,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    memoryRepository.insertMemory(updated)
+                    Log.d("2ndBrain", "Merged fuzzy duplicate for $packageName: $finalTitle")
+                    merged = true
+                }
+            }
+
+            if (!merged) {
                 val entity = MemoryEntity.create(
                     source = "notification",
                     packageName = packageName,
@@ -156,5 +177,33 @@ class NotificationCaptureService : NotificationListenerService() {
                 Log.d("2ndBrain", "Captured new memory: $finalTitle")
             }
         }
+    }
+
+    private fun calculateSimilarity(s1: String, s2: String): Double {
+        if (s1 == s2) return 1.0
+        if (s1.isEmpty() || s2.isEmpty()) return 0.0
+        val maxLen = maxOf(s1.length, s2.length)
+        val distance = levenshteinDistance(s1, s2)
+        return (maxLen - distance).toDouble() / maxLen.toDouble()
+    }
+
+    private fun levenshteinDistance(s1: String, s2: String): Int {
+        val len1 = s1.length
+        val len2 = s2.length
+        val dp = IntArray(len2 + 1) { it }
+        for (i in 1..len1) {
+            var prev = dp[0]
+            dp[0] = i
+            for (j in 1..len2) {
+                val temp = dp[j]
+                if (s1[i - 1] == s2[j - 1]) {
+                    dp[j] = prev
+                } else {
+                    dp[j] = minOf(dp[j] + 1, dp[j - 1] + 1, prev + 1)
+                }
+                prev = temp
+            }
+        }
+        return dp[len2]
     }
 }

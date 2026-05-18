@@ -81,4 +81,12 @@ class CaptureSettingsManager(context: Context) {
     fun saveSelectedLiteRTModel(modelName: String) {
         prefs.edit().putString("selected_litert_model", modelName).apply()
     }
+
+    fun getLastSuccessfulModel(): String {
+        return prefs.getString("last_successful_model", "") ?: ""
+    }
+
+    fun saveLastSuccessfulModel(modelName: String) {
+        prefs.edit().putString("last_successful_model", modelName).apply()
+    }
 }

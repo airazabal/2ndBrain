@@ -157,7 +157,14 @@ class ReflectionManager(private val context: Context) {
                     // Apply a 30-second timeout for the AI response
                     withTimeout(30000L) {
                         val startTime = System.currentTimeMillis()
-                        val result = GeminiAgent(apiKey).summarizeMemories(promptContext, preferredModel, isMorningBriefing = isMorning)
+                        val lastSuccessful = settingsManager.getLastSuccessfulModel()
+                        val result = GeminiAgent(apiKey).summarizeMemories(
+                            memoriesText = promptContext, 
+                            preferredModel = preferredModel, 
+                            lastSuccessfulModel = lastSuccessful,
+                            onSuccessModel = { settingsManager.saveLastSuccessfulModel(it) },
+                            isMorningBriefing = isMorning
+                        )
                         val elapsedMs = System.currentTimeMillis() - startTime
                         val timeStr = String.format(Locale.getDefault(), "%.1fs", elapsedMs / 1000f)
                         result.text to "${result.modelName} ($timeStr)"
@@ -293,7 +300,13 @@ class ReflectionManager(private val context: Context) {
                 try {
                     withTimeout(30000L) {
                         val startTime = System.currentTimeMillis()
-                        val result = GeminiAgent(apiKey).chatInference(promptContext, preferredModel)
+                        val lastSuccessful = settingsManager.getLastSuccessfulModel()
+                        val result = GeminiAgent(apiKey).chatInference(
+                            prompt = promptContext, 
+                            preferredModel = preferredModel,
+                            lastSuccessfulModel = lastSuccessful,
+                            onSuccessModel = { settingsManager.saveLastSuccessfulModel(it) }
+                        )
                         val elapsedMs = System.currentTimeMillis() - startTime
                         val timeStr = String.format(Locale.getDefault(), "%.1fs", elapsedMs / 1000f)
                         result.text to "${result.modelName} ($timeStr)"

@@ -18,7 +18,13 @@ class GeminiAgent(private val apiKey: String) {
         requestOptions = RequestOptions(apiVersion = version)
     )
 
-    suspend fun summarizeMemories(memoriesText: String, preferredModel: String? = null, isMorningBriefing: Boolean = false): SummaryResult = withContext(Dispatchers.IO) {
+    suspend fun summarizeMemories(
+        memoriesText: String, 
+        preferredModel: String? = null, 
+        lastSuccessfulModel: String? = null,
+        onSuccessModel: ((String) -> Unit)? = null,
+        isMorningBriefing: Boolean = false
+    ): SummaryResult = withContext(Dispatchers.IO) {
         if (memoriesText.isBlank()) return@withContext SummaryResult("No significant memories to process yet.", "N/A")
         
         val modeTask = if (isMorningBriefing) {
@@ -67,16 +73,18 @@ class GeminiAgent(private val apiKey: String) {
             "gemini-2.0-flash" to "v1beta"
         )
         
-        // Prioritize preferred model if provided
+        // Prioritize preferred model, then persistent lastSuccessfulModel, then in-memory cachedModel
         val attempts = mutableListOf<Pair<String, String>>()
         if (preferredModel != null && preferredModel.isNotBlank()) {
             val pref = preferredModel.trim()
             val version = if (pref.contains("2.0")) "v1beta" else "v1beta" // v1beta is safest for most
             attempts.add(pref to version)
+        } else if (lastSuccessfulModel != null && lastSuccessfulModel.isNotBlank()) {
+            attempts.add(lastSuccessfulModel.trim() to "v1beta")
         } else if (cachedModel != null) {
             attempts.add(cachedModel!!)
         }
-        attempts.addAll(baseAttempts.filter { it.first != preferredModel && it.first != cachedModel?.first })
+        attempts.addAll(baseAttempts.filter { it.first != preferredModel && it.first != lastSuccessfulModel && it.first != cachedModel?.first })
         
         val keySnippet = if (apiKey.length > 6) "${apiKey.take(4)}...${apiKey.takeLast(2)}" else "Invalid/Short"
         val errorLog = mutableListOf<String>()
@@ -90,6 +98,7 @@ class GeminiAgent(private val apiKey: String) {
                 val result = response.text
                 if (!result.isNullOrBlank()) {
                     cachedModel = name to version
+                    onSuccessModel?.invoke(name)
                     return@withContext SummaryResult(result, name)
                 }
             } catch (e: Exception) {
@@ -139,7 +148,12 @@ class GeminiAgent(private val apiKey: String) {
         return@withContext SummaryResult(finalResult, "Error Fallback")
     }
 
-    suspend fun chatInference(prompt: String, preferredModel: String? = null): SummaryResult = withContext(Dispatchers.IO) {
+    suspend fun chatInference(
+        prompt: String, 
+        preferredModel: String? = null,
+        lastSuccessfulModel: String? = null,
+        onSuccessModel: ((String) -> Unit)? = null
+    ): SummaryResult = withContext(Dispatchers.IO) {
         if (prompt.isBlank()) return@withContext SummaryResult("Prompt cannot be empty.", "N/A")
         
         val baseAttempts = listOf(
@@ -155,10 +169,12 @@ class GeminiAgent(private val apiKey: String) {
         if (preferredModel != null && preferredModel.isNotBlank()) {
             val pref = preferredModel.trim()
             attempts.add(pref to "v1beta")
+        } else if (lastSuccessfulModel != null && lastSuccessfulModel.isNotBlank()) {
+            attempts.add(lastSuccessfulModel.trim() to "v1beta")
         } else if (cachedModel != null) {
             attempts.add(cachedModel!!)
         }
-        attempts.addAll(baseAttempts.filter { it.first != preferredModel && it.first != cachedModel?.first })
+        attempts.addAll(baseAttempts.filter { it.first != preferredModel && it.first != lastSuccessfulModel && it.first != cachedModel?.first })
         
         for ((name, version) in attempts) {
             try {
@@ -168,6 +184,7 @@ class GeminiAgent(private val apiKey: String) {
                 val result = response.text
                 if (!result.isNullOrBlank()) {
                     cachedModel = name to version
+                    onSuccessModel?.invoke(name)
                     return@withContext SummaryResult(result, name)
                 }
             } catch (e: Exception) {
