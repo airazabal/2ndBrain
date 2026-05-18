@@ -908,12 +908,8 @@ fun AudioPlayerControl(
     LaunchedEffect(playbackSpeed) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             try {
-                if (mediaPlayer.isPlaying) {
+                if (isPlaying) {
                     mediaPlayer.playbackParams = mediaPlayer.playbackParams.setSpeed(playbackSpeed)
-                } else {
-                    // Cache speed change
-                    val params = mediaPlayer.playbackParams
-                    mediaPlayer.playbackParams = params.setSpeed(playbackSpeed)
                 }
             } catch (_: Exception) {}
         }
