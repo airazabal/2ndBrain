@@ -71,7 +71,10 @@ fun NotesScreen(
             val folderToScan = currentFolder ?: DocumentFile.fromTreeUri(context, android.net.Uri.parse(vaultUri))
             items = folderToScan?.listFiles()
                 ?.filter { it.isDirectory || it.name?.endsWith(".md") == true }
-                ?.sortedWith(compareBy({ !it.isDirectory }, { it.name?.lowercase() })) ?: emptyList()
+                ?.sortedWith(compareBy<DocumentFile> { !it.isDirectory }
+                    .thenByDescending { if (it.isDirectory) 0L else it.lastModified() }
+                    .thenBy { it.name?.lowercase() }
+                ) ?: emptyList()
         }
     }
 
