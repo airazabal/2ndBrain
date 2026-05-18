@@ -16,6 +16,8 @@ import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
+import com.alex.a2ndbrain.core.health.HealthConnectManager
+import com.alex.a2ndbrain.core.health.HealthMetrics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -37,6 +39,7 @@ class MainViewModel(
     private val usageRepository: UsageRepository,
     private val settingsManager: CaptureSettingsManager,
     private val reflectionManager: ReflectionManager,
+    val healthConnectManager: HealthConnectManager,
     private val applicationContext: android.content.Context
 ) : ViewModel() {
 
@@ -169,10 +172,32 @@ class MainViewModel(
         }
     }
 
+    // Health Connect Synchronization (Recommendation 6)
+    private val _healthMetricsToday = MutableStateFlow(HealthMetrics())
+    val healthMetricsToday = _healthMetricsToday.asStateFlow()
+
+    private val _healthPermissionsGranted = MutableStateFlow(false)
+    val healthPermissionsGranted = _healthPermissionsGranted.asStateFlow()
+
+    fun checkHealthPermissionsAndSync() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val granted = healthConnectManager.hasPermissions()
+            _healthPermissionsGranted.value = granted
+            if (granted) {
+                val metrics = healthConnectManager.fetchHealthMetricsToday()
+                _healthMetricsToday.value = metrics
+            }
+        }
+    }
+
+    init {
+        checkHealthPermissionsAndSync()
+    }
+
     // Interactive Q&A Co-Pilot State (Recommendation 1)
     private val _chatMessages = MutableStateFlow<List<ChatMessage>>(listOf(
         ChatMessage(
-            text = "Hello! I am your 2ndBrain Co-Pilot. Ask me anything about your captured notifications, clipboard history, or daily digital usages!",
+            text = "Hello! I am your 2ndBrain Co-Pilot. Ask me anything about your captured notifications, clipboard history, daily digital usages, or smartwatch health stats!",
             isUser = false
         )
     ))
@@ -200,6 +225,15 @@ class MainViewModel(
                 val promptContext = buildString {
                     append("You are the user's personal 2ndBrain assistant. You have access to their captured memories below.\n")
                     append("Answer the user's question accurately, concisely, and friendly based on these memories. If the memories do not contain relevant details, politely state that you can't find it in their recent logs.\n\n")
+                    
+                    if (_healthPermissionsGranted.value) {
+                        val metrics = _healthMetricsToday.value
+                        append("USER'S CURRENT HEALTH CONNECT METRICS:\n")
+                        append("- Active Steps Today: ${metrics.steps} steps\n")
+                        append("- Sleep Last Night: ${metrics.sleepMinutes / 60}h ${metrics.sleepMinutes % 60}m\n")
+                        append("- Heart Rate Range: ${metrics.minHeartRate} - ${metrics.maxHeartRate} BPM (Avg: ${metrics.avgHeartRate} BPM)\n\n")
+                    }
+
                     append("USER'S MEMORIES:\n")
                     if (contextMemories.isEmpty()) {
                         append("- (No memories logged matching these keywords yet)\n")

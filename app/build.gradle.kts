@@ -52,6 +52,9 @@ dependencies {
     // WorkManager
     implementation(libs.androidx.work.runtime.ktx)
 
+    // Health Connect
+    implementation(libs.androidx.health.connect)
+
     // Gemini AI
     implementation(libs.google.generativeai)
     implementation(libs.kotlin.reflect.artifact)

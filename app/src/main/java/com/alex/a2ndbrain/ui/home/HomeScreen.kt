@@ -14,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -37,6 +38,10 @@ fun HomeScreen(
     notes: List<DocumentFile>,
     usageStats: List<UsageStatEntity>,
     onNavigateToTab: (Int) -> Unit,
+    healthMetrics: com.alex.a2ndbrain.core.health.HealthMetrics = com.alex.a2ndbrain.core.health.HealthMetrics(),
+    healthPermissionGranted: Boolean = false,
+    healthConnectAvailable: Boolean = false,
+    onConnectHealth: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val unreadCount = remember(memories) { memories.count { !it.isRead } }
@@ -72,6 +77,112 @@ fun HomeScreen(
                 appsCount = appCount,
                 onCardClick = { onNavigateToTab(1) } // Feed is now index 1
             )
+        }
+
+        // Smartwatch Health Connect Card (Recommendation 6)
+        if (healthConnectAvailable) {
+            item {
+                HomeSectionCard(
+                    title = "Smartwatch Wellness (Health Connect)",
+                    icon = Icons.Default.Favorite,
+                    iconColor = PastelGreen,
+                    onClick = { if (!healthPermissionGranted) onConnectHealth() }
+                ) {
+                    if (healthPermissionGranted) {
+                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                            // Steps Row
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Steps Today",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${healthMetrics.steps} / 10,000",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                val progress = (healthMetrics.steps.toFloat() / 10000f).coerceIn(0f, 1f)
+                                LinearProgressIndicator(
+                                    progress = progress,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(8.dp)
+                                        .clip(RoundedCornerShape(4.dp)),
+                                    color = PastelGreen,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
+                            }
+
+                            // Sleep & Heart Rate Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                // Sleep Card
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text("Last Sleep", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        val h = healthMetrics.sleepMinutes / 60
+                                        val m = healthMetrics.sleepMinutes % 60
+                                        Text(
+                                            text = if (healthMetrics.sleepMinutes > 0) "${h}h ${m}m" else "--",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+
+                                // Heart Rate Card
+                                Card(
+                                    modifier = Modifier.weight(1f),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Text("Heart Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = if (healthMetrics.avgHeartRate > 0) "${healthMetrics.avgHeartRate} BPM" else "--",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = "Synchronize physical health logs (Steps, Sleep, and Heart Rate) generated by your Zepp watch and other devices.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 12.dp)
+                            )
+                            Button(
+                                onClick = onConnectHealth,
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                            ) {
+                                Icon(Icons.Default.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Connect Health Connect", color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         if (latestReflection != null) {

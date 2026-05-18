@@ -23,6 +23,8 @@ import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.health.connect.client.PermissionController
 import com.alex.a2ndbrain.ui.home.HomeScreen
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.notes.NotesScreen
@@ -168,13 +170,35 @@ class MainActivity : ComponentActivity() {
 
                                 Box(modifier = Modifier.weight(1f)) {
                                     when (currentTab) {
-                                        0 -> HomeScreen(
-                                            memories = allMemoriesForHome,
-                                            latestReflection = summaries.firstOrNull(),
-                                            notes = vaultNotes,
-                                            usageStats = usageStats,
-                                            onNavigateToTab = { viewModel.setTab(it) }
-                                        )
+                                        0 -> {
+                                            val healthMetrics by viewModel.healthMetricsToday.collectAsStateWithLifecycle()
+                                            val healthPermissionGranted by viewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
+                                            val healthConnectManager = viewModel.healthConnectManager
+
+                                            val requestPermissionLauncher = rememberLauncherForActivityResult(
+                                                contract = PermissionController.createRequestPermissionResultContract()
+                                            ) { grantedPermissions ->
+                                                viewModel.checkHealthPermissionsAndSync()
+                                            }
+
+                                            LaunchedEffect(Unit) {
+                                                viewModel.checkHealthPermissionsAndSync()
+                                            }
+
+                                            HomeScreen(
+                                                memories = allMemoriesForHome,
+                                                latestReflection = summaries.firstOrNull(),
+                                                notes = vaultNotes,
+                                                usageStats = usageStats,
+                                                onNavigateToTab = { viewModel.setTab(it) },
+                                                healthMetrics = healthMetrics,
+                                                healthPermissionGranted = healthPermissionGranted,
+                                                healthConnectAvailable = healthConnectManager.isAvailable(),
+                                                onConnectHealth = {
+                                                    requestPermissionLauncher.launch(healthConnectManager.permissions)
+                                                }
+                                            )
+                                        }
 
                                         1 -> MemoryScreen(
                                             pagedMemories = pagedMemories,

@@ -5,6 +5,7 @@ import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.reflection.ModelDownloader
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.MainViewModel
+import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
@@ -28,9 +29,10 @@ val appModule = module {
     single { DigitalTimeManager(androidContext(), get(), get()) }
     single { ReflectionManager(androidContext()) }
     single { ModelDownloader(androidContext(), get()) }
+    single { HealthConnectManager(androidContext()) }
 
     // ViewModels
-    factory { MainViewModel(get(), get(), get(), get(), androidContext()) }
+    factory { MainViewModel(get(), get(), get(), get(), get(), androidContext()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
