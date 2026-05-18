@@ -9,6 +9,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import java.util.UUID
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
@@ -20,19 +21,19 @@ import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.health.HealthMetrics
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
+
+data class TimelineEvent(
+    val time: String,
+    val title: String,
+    val description: String,
+    val appName: String
+)
 
 class MainViewModel(
     private val memoryRepository: MemoryRepository,
@@ -72,6 +73,48 @@ class MainViewModel(
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    // Proactive Timeline & Schedule Extractor (Recommendation B)
+    val todayTimelineEvents: StateFlow<List<TimelineEvent>> = allMemoriesForHome
+        .map { memories ->
+            val startOfToday = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            
+            memories.filter { mem ->
+                mem.timestamp >= startOfToday && (
+                    mem.packageName?.contains("calendar") == true ||
+                    mem.packageName?.contains("outlook") == true ||
+                    mem.content.lowercase().contains("meeting") ||
+                    mem.content.lowercase().contains("appointment") ||
+                    mem.content.lowercase().contains("schedule") ||
+                    mem.content.lowercase().contains("scheduled") ||
+                    mem.content.lowercase().contains("meet") ||
+                    mem.content.lowercase().contains("reminder")
+                )
+            }.map { mem ->
+                val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+                val timeStr = timeFormat.format(Date(mem.timestamp))
+                
+                val cleanTitle = mem.title ?: if (mem.content.length > 35) mem.content.take(35) + "..." else mem.content
+                
+                val appName = when {
+                    mem.packageName?.contains("calendar") == true -> "Calendar"
+                    mem.packageName?.contains("outlook") == true -> "Outlook"
+                    else -> "System"
+                }
+
+                TimelineEvent(
+                    time = timeStr,
+                    title = cleanTitle,
+                    description = mem.content,
+                    appName = appName
+                )
+            }
+        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
     private val _vaultNotes = MutableStateFlow<List<DocumentFile>>(emptyList())
     val vaultNotes = _vaultNotes.asStateFlow()
 
@@ -85,9 +128,106 @@ class MainViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
+    // Habit Persistence & Cockpit Integration (Recommendation A)
+    private val sharedPrefs by lazy {
+        applicationContext.getSharedPreferences("second_brain_habits", android.content.Context.MODE_PRIVATE)
+    }
+
+    private val _medsAmTaken = MutableStateFlow(false)
+    val medsAmTaken = _medsAmTaken.asStateFlow()
+
+    private val _walkCompleted = MutableStateFlow(false)
+    val walkCompleted = _walkCompleted.asStateFlow()
+
+    private val _reflectionCompleted = MutableStateFlow(false)
+    val reflectionCompleted = _reflectionCompleted.asStateFlow()
+
+    private val _senseOfDayScore = MutableStateFlow(75)
+    val senseOfDayScore = _senseOfDayScore.asStateFlow()
+
+    private fun getHabitKey(habit: String): String {
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        return "${todayStr}_$habit"
+    }
+
+    private fun loadDailyHabits() {
+        _medsAmTaken.value = sharedPrefs.getBoolean(getHabitKey("meds_am"), false)
+        _walkCompleted.value = sharedPrefs.getBoolean(getHabitKey("walk"), false)
+        _reflectionCompleted.value = sharedPrefs.getBoolean(getHabitKey("reflection"), false)
+        updateSenseOfDayScore()
+    }
+
+    fun toggleMedsAm() {
+        val key = getHabitKey("meds_am")
+        val next = !_medsAmTaken.value
+        sharedPrefs.edit().putBoolean(key, next).apply()
+        _medsAmTaken.value = next
+        updateSenseOfDayScore()
+    }
+
+    fun toggleWalk() {
+        val key = getHabitKey("walk")
+        val next = !_walkCompleted.value
+        sharedPrefs.edit().putBoolean(key, next).apply()
+        _walkCompleted.value = next
+        updateSenseOfDayScore()
+    }
+
+    fun toggleReflection() {
+        val key = getHabitKey("reflection")
+        val next = !_reflectionCompleted.value
+        sharedPrefs.edit().putBoolean(key, next).apply()
+        _reflectionCompleted.value = next
+        updateSenseOfDayScore()
+    }
+
+    private fun updateSenseOfDayScore() {
+        viewModelScope.launch(Dispatchers.Default) {
+            // 1. Habits (30%)
+            var completed = 0
+            if (_medsAmTaken.value) completed++
+            if (_walkCompleted.value) completed++
+            if (_reflectionCompleted.value) completed++
+            val habitsRatio = completed.toFloat() / 3f
+            
+            // 2. Physical (30%)
+            val steps = _healthMetricsToday.value.steps
+            val stepsRatio = (steps.toFloat() / 10000f).coerceIn(0f, 1f)
+            
+            // 3. Digital Focus Ratio (40%)
+            var totalFocusMs = 0L
+            var totalSocialMs = 0L
+            usageStats.value.forEach { stat ->
+                val pkg = stat.packageName.lowercase()
+                if (pkg.contains("todoist") || pkg.contains("calendar") || pkg.contains("chrome") || pkg.contains("keep") || pkg.contains("brain")) {
+                    totalFocusMs += stat.totalTimeVisibleMs
+                } else if (pkg.contains("instagram") || pkg.contains("facebook") || pkg.contains("tiktok") || pkg.contains("youtube") || pkg.contains("twitter") || pkg.contains("x.android")) {
+                    totalSocialMs += stat.totalTimeVisibleMs
+                }
+            }
+            val totalTime = totalFocusMs + totalSocialMs
+            val focusRatio = if (totalTime == 0L) {
+                1f
+            } else {
+                totalFocusMs.toFloat() / totalTime.toFloat()
+            }
+            
+            val calculated = (habitsRatio * 30f) + (stepsRatio * 30f) + (focusRatio * 40f)
+            _senseOfDayScore.value = calculated.toInt().coerceIn(10, 100)
+        }
+    }
+
     init {
         loadVaultNotes()
         observeWorkManagerErrors()
+        loadDailyHabits()
+        
+        // Recalculate score whenever metrics or usages shift
+        viewModelScope.launch {
+            combine(_healthMetricsToday, usageStats) { _, _ -> }.collect {
+                updateSenseOfDayScore()
+            }
+        }
     }
 
     private fun observeWorkManagerErrors() {

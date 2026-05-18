@@ -175,6 +175,12 @@ class MainActivity : ComponentActivity() {
                                             val healthPermissionGranted by viewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
                                             val healthConnectManager = viewModel.healthConnectManager
 
+                                            val medsAmTaken by viewModel.medsAmTaken.collectAsStateWithLifecycle()
+                                            val walkCompleted by viewModel.walkCompleted.collectAsStateWithLifecycle()
+                                            val reflectionCompleted by viewModel.reflectionCompleted.collectAsStateWithLifecycle()
+                                            val senseOfDayScore by viewModel.senseOfDayScore.collectAsStateWithLifecycle()
+                                            val todayTimelineEvents by viewModel.todayTimelineEvents.collectAsStateWithLifecycle()
+
                                             val requestPermissionLauncher = rememberLauncherForActivityResult(
                                                 contract = PermissionController.createRequestPermissionResultContract()
                                             ) { grantedPermissions ->
@@ -196,7 +202,15 @@ class MainActivity : ComponentActivity() {
                                                 healthConnectAvailable = healthConnectManager.isAvailable(),
                                                 onConnectHealth = {
                                                     requestPermissionLauncher.launch(healthConnectManager.permissions)
-                                                }
+                                                },
+                                                medsAmTaken = medsAmTaken,
+                                                walkCompleted = walkCompleted,
+                                                reflectionCompleted = reflectionCompleted,
+                                                senseOfDayScore = senseOfDayScore,
+                                                todayTimelineEvents = todayTimelineEvents,
+                                                onToggleMedsAm = { viewModel.toggleMedsAm() },
+                                                onToggleWalk = { viewModel.toggleWalk() },
+                                                onToggleReflection = { viewModel.toggleReflection() }
                                             )
                                         }
 
