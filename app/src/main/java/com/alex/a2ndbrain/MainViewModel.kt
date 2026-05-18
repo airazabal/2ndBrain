@@ -516,26 +516,51 @@ class MainViewModel(
 
     fun saveVoiceNote(transcript: String, audioPath: String, vaultUri: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            // 1. If vault is connected, write the markdown file directly via SAF tree Uri
+            var finalAudioLink = audioPath
+
+            // 1. If vault is connected, write both the audio and the markdown note into the Obsidian Vault!
             if (vaultUri.isNotEmpty()) {
                 try {
                     val root = androidx.documentfile.provider.DocumentFile.fromTreeUri(applicationContext, android.net.Uri.parse(vaultUri))
                     if (root != null && root.exists() && root.canWrite()) {
                         val timestamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.getDefault()).format(java.util.Date())
+                        val audioFileName = "VoiceNote-$timestamp.m4a"
                         val newNoteName = "VoiceNote-$timestamp"
                         
-                        // Create the file in the vault root
-                        val file = root.createFile("text/markdown", newNoteName)
-                        if (file != null) {
-                            applicationContext.contentResolver.openOutputStream(file.uri)?.use { stream ->
+                        // Copy the local temporary recording over to the Obsidian Vault
+                        val audioDocFile = root.createFile("audio/m4a", audioFileName)
+                        if (audioDocFile != null) {
+                            try {
+                                val tempFile = java.io.File(audioPath)
+                                if (tempFile.exists()) {
+                                    applicationContext.contentResolver.openOutputStream(audioDocFile.uri)?.use { outputStream ->
+                                        tempFile.inputStream().use { inputStream ->
+                                            inputStream.copyTo(outputStream)
+                                        }
+                                    }
+                                    tempFile.delete() // Clean up local temporary sandbox file
+                                    finalAudioLink = audioDocFile.uri.toString() // Save the public content:// Uri
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.e("2ndBrain", "Failed to copy audio file to Obsidian Vault", e)
+                            }
+                        }
+
+                        // Create the Markdown note inside the Obsidian Vault
+                        val markdownDocFile = root.createFile("text/markdown", newNoteName)
+                        if (markdownDocFile != null) {
+                            applicationContext.contentResolver.openOutputStream(markdownDocFile.uri)?.use { stream ->
                                 val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                                
+                                // Standard relative wiki attachment notation ensures Obsidian renders an inline audio player natively!
                                 val fileContent = """
                                 # Voice Note
                                 - **Captured**: $dateStr
                                 - **Tags**: #audio #voice-capture
-                                - **Audio Reference**: [Play Audio](file://$audioPath)
                                 
                                 ---
+                                
+                                ![[VoiceNote-$timestamp.m4a]]
                                 
                                 $transcript
                                 """.trimIndent()
@@ -549,13 +574,13 @@ class MainViewModel(
             }
             
             // 2. Insert into the local database repository so it is shown on the Feed tab
-            // We store the local audio path in the deepLink field of the MemoryEntity!
+            // We store the copied audio Uri (or temporary file path) in the deepLink field of the MemoryEntity!
             val entity = MemoryEntity.create(
                 source = "voice",
                 packageName = null,
                 title = "Voice Memo",
                 content = transcript,
-                deepLink = audioPath
+                deepLink = finalAudioLink
             )
             memoryRepository.insertMemory(entity)
         }

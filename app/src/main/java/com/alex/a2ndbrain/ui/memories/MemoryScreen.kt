@@ -866,13 +866,18 @@ fun AudioPlayerControl(
     var duration by remember { mutableStateOf(0) }
     var playbackSpeed by remember { mutableStateOf(1.0f) }
 
+    val context = LocalContext.current
     val mediaPlayer = remember { android.media.MediaPlayer() }
 
     // Initialize MediaPlayer safely
     LaunchedEffect(audioPath) {
         try {
             mediaPlayer.reset()
-            mediaPlayer.setDataSource(audioPath)
+            if (audioPath.startsWith("content://")) {
+                mediaPlayer.setDataSource(context, android.net.Uri.parse(audioPath))
+            } else {
+                mediaPlayer.setDataSource(audioPath)
+            }
             mediaPlayer.prepare()
             duration = mediaPlayer.duration
             
