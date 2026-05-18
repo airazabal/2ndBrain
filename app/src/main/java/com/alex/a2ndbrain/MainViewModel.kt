@@ -472,20 +472,55 @@ class MainViewModel(
                 }
                 
                 val promptContext = buildString {
-                    append("You are the user's personal 2ndBrain assistant. You have access to their captured memories below.\n")
-                    append("Answer the user's question accurately, concisely, and friendly based on these memories. If the memories do not contain relevant details, politely state that you can't find it in their recent logs.\n\n")
+                    append("You are the user's personal 2ndBrain assistant. You have access to their captured daily routines, smartwatch physical states, mobile screen time metrics, and memory logs below.\n")
+                    append("Answer the user's question accurately, concisely, and friendly based on this deep unified context. If the metrics do not contain relevant details for their question, politely state that you can't find it in their current logs.\n\n")
                     
+                    // 1. Physical Health Connect Metrics
                     if (_healthPermissionsGranted.value) {
                         val metrics = _healthMetricsToday.value
-                        append("USER'S CURRENT HEALTH CONNECT METRICS:\n")
-                        append("- Active Steps Today: ${metrics.steps} steps\n")
+                        append("USER'S CURRENT PHYSICAL HEALTH STATS TODAY:\n")
+                        append("- Active Steps Today: ${metrics.steps} steps (Goal: 10,000 steps)\n")
                         append("- Sleep Last Night: ${metrics.sleepMinutes / 60}h ${metrics.sleepMinutes % 60}m\n")
                         append("- Heart Rate Range: ${metrics.minHeartRate} - ${metrics.maxHeartRate} BPM (Avg: ${metrics.avgHeartRate} BPM)\n\n")
                     }
 
-                    append("USER'S MEMORIES:\n")
+                    // 2. Room Habits Compliance Checklist
+                    val habits = activeHabitsToday.value
+                    val completedIds = completedHabitIdsToday.value
+                    append("USER'S DAILY COMPLETED & PENDING HABITS TODAY:\n")
+                    if (habits.isEmpty()) {
+                        append("- (No routines configured)\n\n")
+                    } else {
+                        habits.forEach { habit ->
+                            val status = if (completedIds.contains(habit.id)) "DONE (Completed)" else "PENDING (Unfinished)"
+                            append("- [${status}] ${habit.name} (${habit.timeString})\n")
+                        }
+                        append("\n")
+                    }
+
+                    // 3. Screen-Time Visible Usage Metrics
+                    val stats = usageStats.value
+                    append("USER'S ACTIVE APP SCREEN TIME TODAY:\n")
+                    val activeStats = stats.filter { (it.totalTimeVisibleMs / 60000L) > 0 }
+                    if (activeStats.isEmpty()) {
+                        append("- (No screen time registered today yet)\n\n")
+                    } else {
+                        activeStats.forEach { stat ->
+                            val mins = stat.totalTimeVisibleMs / 60000L
+                            val label = stat.packageName.split(".").lastOrNull()?.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() } ?: stat.packageName
+                            append("- ${label}: ${mins} mins\n")
+                        }
+                        append("\n")
+                    }
+
+                    // 4. Unified Daily Wellness Cockpit Score
+                    append("USER'S UNIFIED WELLNESS COCKPIT SCORE:\n")
+                    append("- Sense of Day Wellness Score: ${senseOfDayScore.value} / 100\n\n")
+
+                    // 5. Memory Logs Keyword Matches
+                    append("USER'S CAPTURED MEMORY LOGS:\n")
                     if (contextMemories.isEmpty()) {
-                        append("- (No memories logged matching these keywords yet)\n")
+                        append("- (No recent memories logged matching keyword matches)\n")
                     } else {
                         contextMemories.forEach { mem ->
                             val dateStr = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(mem.timestamp))
