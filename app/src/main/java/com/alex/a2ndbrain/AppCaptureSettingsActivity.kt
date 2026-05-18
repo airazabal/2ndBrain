@@ -100,182 +100,184 @@ fun AppCaptureSettingsScreen(
         }
     }
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column {
-                Text("Capture Settings", style = MaterialTheme.typography.headlineSmall)
-                Text(
-                    text = "v${com.alex.a2ndbrain.BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("Capture Settings", style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        text = "v${com.alex.a2ndbrain.BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+                Button(onClick = onBack) { Text("Done") }
             }
-            Button(onClick = onBack) { Text("Done") }
         }
         
-        Spacer(modifier = Modifier.height(16.dp))
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // System Permissions Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = if (isListenerEnabled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.errorContainer
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("System Access", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    TextButton(onClick = { showDebugLogs = !showDebugLogs }) {
-                        Text(if (showDebugLogs) "Hide Logs" else "Show Logs", fontSize = 12.sp)
-                    }
-                }
-                Text(
-                    if (isListenerEnabled) "✓ Notification access granted" else "✗ Notification access required",
-                    style = MaterialTheme.typography.bodySmall
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isListenerEnabled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.errorContainer
                 )
-                
-                if (showDebugLogs) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(4.dp),
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        LazyColumn(modifier = Modifier.padding(8.dp)) {
-                            items(debugEvents) { log ->
-                                Text(log, style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                        Text("System Access", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        TextButton(onClick = { showDebugLogs = !showDebugLogs }) {
+                            Text(if (showDebugLogs) "Hide Logs" else "Show Logs", fontSize = 12.sp)
+                        }
+                    }
+                    Text(
+                        if (isListenerEnabled) "✓ Notification access granted" else "✗ Notification access required",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    
+                    if (showDebugLogs) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp)
+                        ) {
+                            LazyColumn(modifier = Modifier.padding(8.dp)) {
+                                items(debugEvents) { log ->
+                                    Text(log, style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                                }
                             }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
-                Row {
-                    Button(onClick = {
-                        context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
-                    }) {
-                        Text("System")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row {
+                        Button(onClick = {
+                            context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+                        }) {
+                            Text("System")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(onClick = {
+                            context.startActivity(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
+                        }) {
+                            Text("Usage Access")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        OutlinedButton(
+                            onClick = onRestartService,
+                            modifier = Modifier
+                                .width(130.dp)
+                                .height(40.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.primary,
+                                containerColor = Color.Transparent
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                        ) {
+                            Text(
+                                text = "Refresh",
+                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = {
-                        context.startActivity(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                    }) {
-                        Text("Usage Access")
-                    }
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    OutlinedButton(
-                        onClick = onRestartService,
-                        modifier = Modifier
-                            .width(130.dp)
-                            .height(40.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary,
-                            containerColor = Color.Transparent
-                        ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                    ) {
-                        Text(
-                            text = "Refresh",
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
-                    }
-
-
-
-
                 }
             }
         }
 
         if (!isListenerEnabled) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                modifier = Modifier.padding(vertical = 8.dp)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        text = "⚠️ Notification Access is Restricted",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "To fix this:\n1. Click 'OPEN APP INFO' below.\n2. In that screen, if you don't see (⋮), SCROLL DOWN and tap 'Notifications' or 'Advanced' first.\n3. If still not there, return to 'System' and try to toggle the greyed-out switch again to 'trigger' the menu.\n4. Once unblocked, the switch in 'System' will work.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = android.net.Uri.fromParts("package", context.packageName, null)
-                            }
-                            context.startActivity(intent)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Text("OPEN APP INFO")
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "⚠️ Notification Access is Restricted",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "To fix this:\n1. Click 'OPEN APP INFO' below.\n2. In that screen, if you don't see (⋮), SCROLL DOWN and tap 'Notifications' or 'Advanced' first.\n3. If still not there, return to 'System' and try to toggle the greyed-out switch again to 'trigger' the menu.\n4. Once unblocked, the switch in 'System' will work.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = android.net.Uri.fromParts("package", context.packageName, null)
+                                }
+                                context.startActivity(intent)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        ) {
+                            Text("OPEN APP INFO")
+                        }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+        }
 
         // Daily Habits & Routines Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "💊 Daily Routines & Medications",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = "Configure daily checklists, medications, and custom alarms.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // List of existing habits
-                if (activeHabits.isEmpty()) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "No routines configured.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.padding(vertical = 8.dp)
+                        text = "💊 Daily Routines & Medications",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
                     )
-                } else {
-                    Box(modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 160.dp)
-                    ) {
-                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                            items(activeHabits) { habit ->
+                    Text(
+                        text = "Configure daily checklists, medications, and custom alarms.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // List of existing habits
+                    if (activeHabits.isEmpty()) {
+                        Text(
+                            text = "No routines configured.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    } else {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            activeHabits.forEach { habit ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -333,172 +335,174 @@ fun AppCaptureSettingsScreen(
                             }
                         }
                     }
-                }
 
-                Spacer(modifier = Modifier.height(12.dp))
-                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)))
-                Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                // Add Custom Habit Form
-                Text(
-                    text = "Add Custom Habit / Medication",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                var newHabitName by remember { mutableStateOf("") }
-                var newHabitTime by remember { mutableStateOf("") }
-                var newHabitIsMedication by remember { mutableStateOf(false) }
-                var validationError by remember { mutableStateOf<String?>(null) }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = newHabitName,
-                        onValueChange = { newHabitName = it },
-                        label = { Text("Name (e.g. Vitamin D)") },
-                        modifier = Modifier.weight(1.5f),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium
-                    )
-
-                    OutlinedTextField(
-                        value = newHabitTime,
-                        onValueChange = { newHabitTime = it },
-                        label = { Text("Time (e.g. 08:30)") },
-                        modifier = Modifier.weight(1f),
-                        singleLine = true,
-                        placeholder = { Text("HH:mm") },
-                        textStyle = MaterialTheme.typography.bodyMedium
-                    )
-                }
-
-                if (validationError != null) {
+                    // Add Custom Habit Form
                     Text(
-                        text = validationError!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(top = 4.dp)
+                        text = "Add Custom Habit / Medication",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
                     )
-                }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                    var newHabitName by remember { mutableStateOf("") }
+                    var newHabitTime by remember { mutableStateOf("") }
+                    var newHabitIsMedication by remember { mutableStateOf(false) }
+                    var validationError by remember { mutableStateOf<String?>(null) }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = newHabitIsMedication,
-                            onCheckedChange = { newHabitIsMedication = it }
-                        )
-                        Text(
-                            text = "Is Medication",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    Button(
-                        onClick = {
-                            if (newHabitName.isBlank()) {
-                                validationError = "Name cannot be empty"
-                                return@Button
-                            }
-                            val parts = newHabitTime.split(":")
-                            if (parts.size != 2 || parts[0].toIntOrNull() == null || parts[1].toIntOrNull() == null || 
-                                parts[0].toInt() !in 0..23 || parts[1].toInt() !in 0..59) {
-                                validationError = "Use 24h format (e.g. 08:30 or 21:15)"
-                                return@Button
-                            }
-                            
-                            validationError = null
-                            onAddCustomHabit(newHabitName.trim(), newHabitTime.trim(), newHabitIsMedication)
-                            newHabitName = ""
-                            newHabitTime = ""
-                            newHabitIsMedication = false
-                        },
-                        shape = RoundedCornerShape(8.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Add Routine", fontSize = 12.sp)
-                    }
-                }
-            }
-        }
+                        OutlinedTextField(
+                            value = newHabitName,
+                            onValueChange = { newHabitName = it },
+                            label = { Text("Name (e.g. Vitamin D)") },
+                            modifier = Modifier.weight(1.5f),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium
+                        )
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = appSearchQuery,
-            onValueChange = { appSearchQuery = it },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Search apps (e.g. Gmail)") },
-            singleLine = true,
-            trailingIcon = {
-                if (appSearchQuery.isNotEmpty()) {
-                    IconButton(onClick = { appSearchQuery = "" }) {
-                        Text("✕")
-                    }
-                }
-            }
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Monitor Apps", style = MaterialTheme.typography.titleMedium)
-            Row {
-                TextButton(onClick = {
-                    val allPackageNames = allApps.map { it.packageName }.toSet()
-                    settingsManager.saveMonitoredApps(allPackageNames)
-                    monitoredApps = allPackageNames
-                }) {
-                    Text("Select All", fontSize = 12.sp)
-                }
-                TextButton(onClick = {
-                    settingsManager.saveMonitoredApps(emptySet())
-                    monitoredApps = emptySet()
-                }) {
-                    Text("Deselect All", fontSize = 12.sp)
-                }
-            }
-        }
-        
-        LazyColumn {
-            items(filteredApps) { pkg ->
-                val appName = packageManager.getApplicationLabel(pkg.applicationInfo ?: return@items).toString()
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(
-                        checked = monitoredApps.contains(pkg.packageName),
-                        onCheckedChange = { checked ->
-                            val current = monitoredApps.toMutableSet()
-                            if (checked) current.add(pkg.packageName) else current.remove(pkg.packageName)
-                            settingsManager.saveMonitoredApps(current)
-                            monitoredApps = current
-                        }
-                    )
-                    Column(modifier = Modifier.padding(start = 8.dp)) {
-                        Text(appName, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            text = pkg.packageName,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
+                        OutlinedTextField(
+                            value = newHabitTime,
+                            onValueChange = { newHabitTime = it },
+                            label = { Text("Time (e.g. 08:30)") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            placeholder = { Text("HH:mm") },
+                            textStyle = MaterialTheme.typography.bodyMedium
                         )
                     }
+
+                    if (validationError != null) {
+                        Text(
+                            text = validationError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(
+                                checked = newHabitIsMedication,
+                                onCheckedChange = { newHabitIsMedication = it }
+                            )
+                            Text(
+                                text = "Is Medication Alarm",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                if (newHabitName.isBlank()) {
+                                    validationError = "Please enter habit name."
+                                    return@Button
+                                }
+                                if (!newHabitTime.matches(Regex("^([01]?[0-9]|2[0-3]):[0-5][0-9]$"))) {
+                                    validationError = "Use HH:mm format (e.g. 08:30)."
+                                    return@Button
+                                }
+                                validationError = null
+                                onAddCustomHabit(newHabitName.trim(), newHabitTime.trim(), newHabitIsMedication)
+                                newHabitName = ""
+                                newHabitTime = ""
+                                newHabitIsMedication = false
+                            }
+                        ) {
+                            Text("Add Alarm")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        item {
+            OutlinedTextField(
+                value = appSearchQuery,
+                onValueChange = { appSearchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Search apps (e.g. Gmail)") },
+                singleLine = true,
+                trailingIcon = {
+                    if (appSearchQuery.isNotEmpty()) {
+                        IconButton(onClick = { appSearchQuery = "" }) {
+                            Text("✕")
+                        }
+                    }
+                }
+            )
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+        
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Monitor Apps", style = MaterialTheme.typography.titleMedium)
+                Row {
+                    TextButton(onClick = {
+                        val allPackageNames = allApps.map { it.packageName }.toSet()
+                        settingsManager.saveMonitoredApps(allPackageNames)
+                        monitoredApps = allPackageNames
+                    }) {
+                        Text("Select All", fontSize = 12.sp)
+                    }
+                    TextButton(onClick = {
+                        settingsManager.saveMonitoredApps(emptySet())
+                        monitoredApps = emptySet()
+                    }) {
+                        Text("Deselect All", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        
+        items(filteredApps) { pkg ->
+            val appName = packageManager.getApplicationLabel(pkg.applicationInfo ?: return@items).toString()
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Checkbox(
+                    checked = monitoredApps.contains(pkg.packageName),
+                    onCheckedChange = { checked ->
+                        val current = monitoredApps.toMutableSet()
+                        if (checked) current.add(pkg.packageName) else current.remove(pkg.packageName)
+                        settingsManager.saveMonitoredApps(current)
+                        monitoredApps = current
+                    }
+                )
+                Column(modifier = Modifier.padding(start = 8.dp)) {
+                    Text(appName, style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = pkg.packageName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
                 }
             }
         }
