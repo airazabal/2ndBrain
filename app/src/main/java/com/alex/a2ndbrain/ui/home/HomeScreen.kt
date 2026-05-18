@@ -192,10 +192,11 @@ fun HomeScreen(
                                         .padding(vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    val isPendingMedication = !isCompleted && habit.isMedication
                                     Icon(
                                         imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                                         contentDescription = null,
-                                        tint = if (isCompleted) PastelGreen else MaterialTheme.colorScheme.outline,
+                                        tint = if (isCompleted) PastelGreen else if (isPendingMedication) Color.Red else MaterialTheme.colorScheme.outline,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -208,7 +209,7 @@ fun HomeScreen(
                                             text = habit.timeString,
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
+                                            color = if (isPendingMedication) Color.Red else MaterialTheme.colorScheme.primary
                                         )
                                         
                                         Spacer(modifier = Modifier.height(2.dp))
@@ -216,29 +217,15 @@ fun HomeScreen(
                                         // Horizontal basicMarquee scrollable text widget under
                                         Text(
                                             text = habit.name,
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = MaterialTheme.typography.bodyMedium.copy(
+                                                color = if (isPendingMedication) Color.Red else MaterialTheme.colorScheme.onSurface
+                                            ),
                                             fontWeight = if (isCompleted) FontWeight.Bold else FontWeight.Normal,
                                             maxLines = 1,
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .basicMarquee()
                                         )
-                                    }
-                                    
-                                    if (!isCompleted && habit.isMedication) {
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(Color.Red.copy(alpha = 0.1f))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                "TAKE NOW",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = Color.Red,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
                                     }
                                 }
                             }
