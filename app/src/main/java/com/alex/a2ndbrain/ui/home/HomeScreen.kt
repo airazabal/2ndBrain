@@ -33,6 +33,7 @@ import androidx.documentfile.provider.DocumentFile
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
+import com.alex.a2ndbrain.core.memory.HabitEntity
 import com.alex.a2ndbrain.ui.theme.*
 import com.alex.a2ndbrain.ui.usage.ConsolidatedUsage
 import com.alex.a2ndbrain.ui.usage.UsageBarChart
@@ -49,14 +50,15 @@ fun HomeScreen(
     healthPermissionGranted: Boolean = false,
     healthConnectAvailable: Boolean = false,
     onConnectHealth: () -> Unit = {},
-    medsAmTaken: Boolean = false,
-    walkCompleted: Boolean = false,
-    reflectionCompleted: Boolean = false,
+    
+    // Dynamic Habits (Phase 2)
+    activeHabits: List<HabitEntity> = emptyList(),
+    completedHabitIds: Set<String> = emptySet(),
+    onToggleHabit: (String) -> Unit = {},
+    pastWeekHabitCompletions: List<Pair<String, Float>> = emptyList(),
+
     senseOfDayScore: Int = 75,
     todayTimelineEvents: List<TimelineEvent> = emptyList(),
-    onToggleMedsAm: () -> Unit = {},
-    onToggleWalk: () -> Unit = {},
-    onToggleReflection: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val unreadCount = remember(memories) { memories.count { !it.isRead } }
@@ -167,89 +169,115 @@ fun HomeScreen(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Meds checklist
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onToggleMedsAm() }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = if (medsAmTaken) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                    contentDescription = null,
-                                    tint = if (medsAmTaken) PastelGreen else MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "AM Medication",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (medsAmTaken) FontWeight.Bold else FontWeight.Normal
-                                )
-                                if (!medsAmTaken) {
-                                    Spacer(modifier = Modifier.weight(1f))
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color.Red.copy(alpha = 0.1f))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                                    ) {
+                            activeHabits.filter { it.isActive }.forEach { habit ->
+                                val isCompleted = completedHabitIds.contains(habit.id)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { onToggleHabit(habit.id) }
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                        contentDescription = null,
+                                        tint = if (isCompleted) PastelGreen else MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            "TAKE NOW",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color.Red,
-                                            fontWeight = FontWeight.Bold
+                                            text = habit.name,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isCompleted) FontWeight.Bold else FontWeight.Normal,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
+                                        Text(
+                                            text = "Alarm: ${habit.timeString}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.outline
+                                        )
+                                    }
+                                    
+                                    if (!isCompleted && habit.isMedication) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(Color.Red.copy(alpha = 0.1f))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                        ) {
+                                            Text(
+                                                "TAKE NOW",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color.Red,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }
+                        }
+                    }
 
-                            // Walk checklist
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onToggleWalk() }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = if (walkCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                    contentDescription = null,
-                                    tint = if (walkCompleted) PastelGreen else MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Active Walk / Hydration",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (walkCompleted) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
+                    // Historical Wellness Streaks Dashboard (Phase 2, Step 3)
+                    if (pastWeekHabitCompletions.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.LightGray.copy(alpha = 0.2f)))
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                            // Reflection checklist
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable { onToggleReflection() }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = if (reflectionCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                    contentDescription = null,
-                                    tint = if (reflectionCompleted) PastelGreen else MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Evening Reflection completed",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = if (reflectionCompleted) FontWeight.Bold else FontWeight.Normal
-                                )
+                        Text(
+                            text = "Weekly Completion History",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            pastWeekHabitCompletions.forEach { (dayLabel, completionRate) ->
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier.size(36.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Canvas(modifier = Modifier.fillMaxSize()) {
+                                            drawCircle(
+                                                color = Color.LightGray.copy(alpha = 0.15f),
+                                                style = Stroke(width = 3.dp.toPx())
+                                            )
+                                            drawArc(
+                                                color = if (completionRate >= 1.0f) PastelGreen else if (completionRate > 0f) PastelBlue else Color.LightGray.copy(alpha = 0.4f),
+                                                startAngle = -90f,
+                                                sweepAngle = completionRate * 360f,
+                                                useCenter = false,
+                                                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                                            )
+                                        }
+                                        Text(
+                                            text = "${(completionRate * 100).toInt()}%",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                    Text(
+                                        text = dayLabel,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
                             }
                         }
                     }

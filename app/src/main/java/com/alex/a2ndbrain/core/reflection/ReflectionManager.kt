@@ -114,6 +114,26 @@ class ReflectionManager(private val context: Context) {
             // Safe fallback
         }
 
+        // Fetch daily routines progress (Recommendation A)
+        var habitsContextStr = ""
+        try {
+            val habitsList = database.habitsDao().getAllHabitsSync()
+            val completions = database.habitsDao().getCompletionsForDateSync(todayStr)
+            val completedIds = completions.map { it.habitId }.toSet()
+            if (habitsList.isNotEmpty()) {
+                val habitsProgress = habitsList.joinToString("\n") { 
+                    val status = if (completedIds.contains(it.id)) "✓ Done" else "✗ Missed"
+                    "- ${it.name} (${it.timeString}): $status"
+                }
+                habitsContextStr = """
+                    DAILY ROUTINES PROGRESS:
+                    $habitsProgress
+                """.trimIndent()
+            }
+        } catch (e: Exception) {
+            // Safe fallback
+        }
+
         val (summaryText, modelUsed) = when (selectedModel) {
             ModelPicker.ModelType.GEMINI_CLOUD -> {
                 val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -129,6 +149,8 @@ class ReflectionManager(private val context: Context) {
                     $usageReport
                     
                     $healthContextStr
+                    
+                    $habitsContextStr
                 """.trimIndent()
 
                 try {
@@ -155,6 +177,8 @@ class ReflectionManager(private val context: Context) {
                     $rawData
                     
                     $healthContextStr
+                    
+                    $habitsContextStr
                 """.trimIndent()
 
                 val startTime = System.currentTimeMillis()

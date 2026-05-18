@@ -61,6 +61,21 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Habit Alarms & Broadcast Receivers -->
+        <receiver
+            android:name=".core.health.HabitReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <receiver
+            android:name=".core.health.HabitActionReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.alex.a2ndbrain.action.MARK_HABIT_DONE" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

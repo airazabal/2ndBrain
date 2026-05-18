@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -22,6 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.memory.HabitEntity
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 
@@ -52,7 +56,11 @@ class AppCaptureSettingsActivity : ComponentActivity() {
 fun AppCaptureSettingsScreen(
     settingsManager: CaptureSettingsManager,
     onBack: () -> Unit,
-    onRestartService: () -> Unit
+    onRestartService: () -> Unit,
+    activeHabits: List<HabitEntity> = emptyList(),
+    onAddCustomHabit: (String, String, Boolean) -> Unit = { _, _, _ -> },
+    onDeleteHabit: (String) -> Unit = {},
+    onToggleHabitActive: (String) -> Unit = {}
 ) {
     var monitoredApps by remember { mutableStateOf(settingsManager.getMonitoredApps()) }
     val debugEvents by com.alex.a2ndbrain.core.capture.CaptureDebugStore.events.collectAsState()
@@ -224,6 +232,200 @@ fun AppCaptureSettingsScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     ) {
                         Text("OPEN APP INFO")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Daily Habits & Routines Card
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "💊 Daily Routines & Medications",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Configure daily checklists, medications, and custom alarms.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // List of existing habits
+                if (activeHabits.isEmpty()) {
+                    Text(
+                        text = "No routines configured.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    Box(modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 160.dp)
+                    ) {
+                        LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                            items(activeHabits) { habit ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = if (habit.isMedication) "💊" else "🏃",
+                                            modifier = Modifier.padding(end = 8.dp),
+                                            fontSize = 18.sp
+                                        )
+                                        Column {
+                                            Text(
+                                                text = habit.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "Alarm: ${habit.timeString}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline
+                                            )
+                                        }
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Switch(
+                                            checked = habit.isActive,
+                                            onCheckedChange = { onToggleHabitActive(habit.id) }
+                                        )
+                                        
+                                        // Allow deleting custom habits (anything that is not prepopulated)
+                                        if (habit.id != "default_meds" && habit.id != "default_walk" && habit.id != "default_reflection") {
+                                            IconButton(
+                                                onClick = { onDeleteHabit(habit.id) },
+                                                modifier = Modifier.size(32.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Delete Habit",
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Add Custom Habit Form
+                Text(
+                    text = "Add Custom Habit / Medication",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                var newHabitName by remember { mutableStateOf("") }
+                var newHabitTime by remember { mutableStateOf("") }
+                var newHabitIsMedication by remember { mutableStateOf(false) }
+                var validationError by remember { mutableStateOf<String?>(null) }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = newHabitName,
+                        onValueChange = { newHabitName = it },
+                        label = { Text("Name (e.g. Vitamin D)") },
+                        modifier = Modifier.weight(1.5f),
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+
+                    OutlinedTextField(
+                        value = newHabitTime,
+                        onValueChange = { newHabitTime = it },
+                        label = { Text("Time (e.g. 08:30)") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                        placeholder = { Text("HH:mm") },
+                        textStyle = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                if (validationError != null) {
+                    Text(
+                        text = validationError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = newHabitIsMedication,
+                            onCheckedChange = { newHabitIsMedication = it }
+                        )
+                        Text(
+                            text = "Is Medication",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (newHabitName.isBlank()) {
+                                validationError = "Name cannot be empty"
+                                return@Button
+                            }
+                            val parts = newHabitTime.split(":")
+                            if (parts.size != 2 || parts[0].toIntOrNull() == null || parts[1].toIntOrNull() == null || 
+                                parts[0].toInt() !in 0..23 || parts[1].toInt() !in 0..59) {
+                                validationError = "Use 24h format (e.g. 08:30 or 21:15)"
+                                return@Button
+                            }
+                            
+                            validationError = null
+                            onAddCustomHabit(newHabitName.trim(), newHabitTime.trim(), newHabitIsMedication)
+                            newHabitName = ""
+                            newHabitTime = ""
+                            newHabitIsMedication = false
+                        },
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Add Routine", fontSize = 12.sp)
                     }
                 }
             }

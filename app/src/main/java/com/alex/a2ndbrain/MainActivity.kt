@@ -175,9 +175,9 @@ class MainActivity : ComponentActivity() {
                                             val healthPermissionGranted by viewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
                                             val healthConnectManager = viewModel.healthConnectManager
 
-                                            val medsAmTaken by viewModel.medsAmTaken.collectAsStateWithLifecycle()
-                                            val walkCompleted by viewModel.walkCompleted.collectAsStateWithLifecycle()
-                                            val reflectionCompleted by viewModel.reflectionCompleted.collectAsStateWithLifecycle()
+                                            val activeHabits by viewModel.activeHabitsToday.collectAsStateWithLifecycle()
+                                            val completedHabitIds by viewModel.completedHabitIdsToday.collectAsStateWithLifecycle()
+                                            val pastWeekHabitCompletions by viewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
                                             val senseOfDayScore by viewModel.senseOfDayScore.collectAsStateWithLifecycle()
                                             val todayTimelineEvents by viewModel.todayTimelineEvents.collectAsStateWithLifecycle()
 
@@ -203,14 +203,12 @@ class MainActivity : ComponentActivity() {
                                                 onConnectHealth = {
                                                     requestPermissionLauncher.launch(healthConnectManager.permissions)
                                                 },
-                                                medsAmTaken = medsAmTaken,
-                                                walkCompleted = walkCompleted,
-                                                reflectionCompleted = reflectionCompleted,
+                                                activeHabits = activeHabits,
+                                                completedHabitIds = completedHabitIds,
+                                                onToggleHabit = { id -> viewModel.toggleHabitCompletion(id) },
+                                                pastWeekHabitCompletions = pastWeekHabitCompletions,
                                                 senseOfDayScore = senseOfDayScore,
-                                                todayTimelineEvents = todayTimelineEvents,
-                                                onToggleMedsAm = { viewModel.toggleMedsAm() },
-                                                onToggleWalk = { viewModel.toggleWalk() },
-                                                onToggleReflection = { viewModel.toggleReflection() }
+                                                todayTimelineEvents = todayTimelineEvents
                                             )
                                         }
 
@@ -238,15 +236,22 @@ class MainActivity : ComponentActivity() {
 
                                         3 -> NotesScreen(settingsManager = settingsManager)
                                         4 -> DigitalTimeScreen(digitalTimeManager = digitalTimeManager)
-                                        5 -> AppCaptureSettingsScreen(
-                                            settingsManager = settingsManager,
-                                            onBack = { viewModel.setTab(0) },
-                                            onRestartService = {
-                                                val componentName = android.content.ComponentName(this@MainActivity, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java)
-                                                packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
-                                                packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-                                            }
-                                        )
+                                        5 -> {
+                                            val activeHabits by viewModel.activeHabitsToday.collectAsStateWithLifecycle()
+                                            AppCaptureSettingsScreen(
+                                                settingsManager = settingsManager,
+                                                onBack = { viewModel.setTab(0) },
+                                                onRestartService = {
+                                                    val componentName = android.content.ComponentName(this@MainActivity, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java)
+                                                    packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+                                                    packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+                                                },
+                                                activeHabits = activeHabits,
+                                                onAddCustomHabit = { name, time, isMed -> viewModel.addCustomHabit(name, time, isMed) },
+                                                onDeleteHabit = { id -> viewModel.deleteHabit(id) },
+                                                onToggleHabitActive = { id -> viewModel.toggleHabitActive(id) }
+                                            )
+                                        }
                                         6 -> {
                                             val chatMessages by viewModel.chatMessages.collectAsState()
                                             val chatIsThinking by viewModel.chatIsThinking.collectAsState()

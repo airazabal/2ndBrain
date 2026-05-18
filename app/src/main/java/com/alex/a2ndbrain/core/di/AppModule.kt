@@ -19,6 +19,7 @@ val appModule = module {
     // Database and Dao
     single { AppDatabase.getDatabase(androidContext()) }
     single { get<AppDatabase>().memoryDao() }
+    single { get<AppDatabase>().habitsDao() }
 
     // Repositories
     single { MemoryRepository(get()) }
@@ -32,7 +33,7 @@ val appModule = module {
     single { HealthConnectManager(androidContext()) }
 
     // ViewModels
-    factory { MainViewModel(get(), get(), get(), get(), get(), androidContext()) }
+    factory { MainViewModel(get(), get(), get(), get(), get(), get(), androidContext()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }

@@ -15,10 +15,14 @@ import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
+import com.alex.a2ndbrain.core.memory.HabitEntity
+import com.alex.a2ndbrain.core.memory.HabitCompletionEntity
+import com.alex.a2ndbrain.core.memory.HabitsDao
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.health.HealthMetrics
+import com.alex.a2ndbrain.core.health.HabitAlarmScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -41,6 +45,7 @@ class MainViewModel(
     private val settingsManager: CaptureSettingsManager,
     private val reflectionManager: ReflectionManager,
     val healthConnectManager: HealthConnectManager,
+    private val habitsDao: HabitsDao,
     private val applicationContext: android.content.Context
 ) : ViewModel() {
 
@@ -128,19 +133,30 @@ class MainViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
-    // Habit Persistence & Cockpit Integration (Recommendation A)
-    private val sharedPrefs by lazy {
-        applicationContext.getSharedPreferences("second_brain_habits", android.content.Context.MODE_PRIVATE)
+    // Room Database Habits Engine
+    val activeHabitsToday: StateFlow<List<HabitEntity>> = habitsDao.getActiveHabits()
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private fun getTodayDateString(): String {
+        return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
     }
 
-    private val _medsAmTaken = MutableStateFlow(false)
-    val medsAmTaken = _medsAmTaken.asStateFlow()
+    val completedHabitIdsToday: StateFlow<Set<String>> = habitsDao.getCompletionsForDate(getTodayDateString())
+        .map { completions -> completions.map { it.habitId }.toSet() }
+        .stateIn(viewModelScope, SharingStarted.Lazily, emptySet())
 
-    private val _walkCompleted = MutableStateFlow(false)
-    val walkCompleted = _walkCompleted.asStateFlow()
+    // Backwards compatible individual flows for existing HomeScreen layouts
+    val medsAmTaken: StateFlow<Boolean> = completedHabitIdsToday
+        .map { it.contains("default_meds") }
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
-    private val _reflectionCompleted = MutableStateFlow(false)
-    val reflectionCompleted = _reflectionCompleted.asStateFlow()
+    val walkCompleted: StateFlow<Boolean> = completedHabitIdsToday
+        .map { it.contains("default_walk") }
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    val reflectionCompleted: StateFlow<Boolean> = completedHabitIdsToday
+        .map { it.contains("default_reflection") }
+        .stateIn(viewModelScope, SharingStarted.Lazily, false)
 
     private val _senseOfDayScore = MutableStateFlow(75)
     val senseOfDayScore = _senseOfDayScore.asStateFlow()
@@ -152,50 +168,101 @@ class MainViewModel(
     private val _healthPermissionsGranted = MutableStateFlow(false)
     val healthPermissionsGranted = _healthPermissionsGranted.asStateFlow()
 
-    private fun getHabitKey(habit: String): String {
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        return "${todayStr}_$habit"
+    // Past 7 Days Habit Completion Rates for historical rings
+    val pastWeekHabitCompletions: StateFlow<List<Pair<String, Float>>> = activeHabitsToday.combine(
+        flow {
+            val cal = Calendar.getInstance()
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val today = dateFormat.format(cal.time)
+            cal.add(Calendar.DAY_OF_YEAR, -6)
+            val startDate = dateFormat.format(cal.time)
+            emitAll(habitsDao.getCompletionsInRange(startDate, today))
+        }
+    ) { activeHabits, completions ->
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val dayLabelFormat = SimpleDateFormat("E", Locale.getDefault()) // "Mon", "Tue"
+        
+        val activeCount = activeHabits.size.coerceAtLeast(1)
+        val completionsByDate = completions.groupBy { it.date }
+        
+        val last7Days = mutableListOf<Pair<String, Float>>()
+        for (i in 6 downTo 0) {
+            val loopCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -i) }
+            val dateStr = dateFormat.format(loopCal.time)
+            val label = dayLabelFormat.format(loopCal.time).take(1).uppercase() // E.g., "M", "T"
+            
+            val completedForDate = completionsByDate[dateStr]?.size ?: 0
+            val pct = completedForDate.toFloat() / activeCount.toFloat()
+            last7Days.add(label to pct.coerceIn(0f, 1f))
+        }
+        last7Days
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // CRUD and Toggles
+    fun toggleHabitCompletion(habitId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val today = getTodayDateString()
+            val completions = habitsDao.getCompletionsForDateSync(today)
+            val existing = completions.find { it.habitId == habitId }
+            if (existing != null) {
+                habitsDao.deleteCompletion(existing)
+            } else {
+                habitsDao.insertCompletion(HabitCompletionEntity(habitId = habitId, date = today))
+            }
+        }
     }
 
-    private fun loadDailyHabits() {
-        _medsAmTaken.value = sharedPrefs.getBoolean(getHabitKey("meds_am"), false)
-        _walkCompleted.value = sharedPrefs.getBoolean(getHabitKey("walk"), false)
-        _reflectionCompleted.value = sharedPrefs.getBoolean(getHabitKey("reflection"), false)
-        updateSenseOfDayScore()
+    // Backwards compatible toggle methods for existing Home widgets
+    fun toggleMedsAm() = toggleHabitCompletion("default_meds")
+    fun toggleWalk() = toggleHabitCompletion("default_walk")
+    fun toggleReflection() = toggleHabitCompletion("default_reflection")
+
+    fun addCustomHabit(name: String, timeString: String, isMedication: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val id = UUID.randomUUID().toString()
+            val habit = HabitEntity(id = id, name = name, timeString = timeString, isMedication = isMedication, isActive = true)
+            habitsDao.insertHabit(habit)
+            
+            // Schedule Alarm Manager reminder
+            val scheduler = HabitAlarmScheduler(applicationContext)
+            scheduler.scheduleHabitAlarm(habit)
+        }
     }
 
-    fun toggleMedsAm() {
-        val key = getHabitKey("meds_am")
-        val next = !_medsAmTaken.value
-        sharedPrefs.edit().putBoolean(key, next).apply()
-        _medsAmTaken.value = next
-        updateSenseOfDayScore()
+    fun deleteHabit(habitId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val habit = habitsDao.getHabitById(habitId)
+            if (habit != null) {
+                val scheduler = HabitAlarmScheduler(applicationContext)
+                scheduler.cancelHabitAlarm(habit)
+                habitsDao.deleteHabit(habit)
+            }
+        }
     }
 
-    fun toggleWalk() {
-        val key = getHabitKey("walk")
-        val next = !_walkCompleted.value
-        sharedPrefs.edit().putBoolean(key, next).apply()
-        _walkCompleted.value = next
-        updateSenseOfDayScore()
-    }
-
-    fun toggleReflection() {
-        val key = getHabitKey("reflection")
-        val next = !_reflectionCompleted.value
-        sharedPrefs.edit().putBoolean(key, next).apply()
-        _reflectionCompleted.value = next
-        updateSenseOfDayScore()
+    fun toggleHabitActive(habitId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val habit = habitsDao.getHabitById(habitId)
+            if (habit != null) {
+                val updated = habit.copy(isActive = !habit.isActive)
+                habitsDao.insertHabit(updated)
+                
+                val scheduler = HabitAlarmScheduler(applicationContext)
+                if (updated.isActive) {
+                    scheduler.scheduleHabitAlarm(updated)
+                } else {
+                    scheduler.cancelHabitAlarm(updated)
+                }
+            }
+        }
     }
 
     private fun updateSenseOfDayScore() {
         viewModelScope.launch(Dispatchers.Default) {
             // 1. Habits (30%)
-            var completed = 0
-            if (_medsAmTaken.value) completed++
-            if (_walkCompleted.value) completed++
-            if (_reflectionCompleted.value) completed++
-            val habitsRatio = completed.toFloat() / 3f
+            val active = activeHabitsToday.value.size.coerceAtLeast(1)
+            val completed = completedHabitIdsToday.value.size
+            val habitsRatio = completed.toFloat() / active.toFloat()
             
             // 2. Physical (30%)
             val steps = _healthMetricsToday.value.steps
@@ -227,14 +294,34 @@ class MainViewModel(
     init {
         loadVaultNotes()
         observeWorkManagerErrors()
-        loadDailyHabits()
         checkHealthPermissionsAndSync()
-        
-        // Recalculate score whenever metrics or usages shift
-        viewModelScope.launch {
-            combine(_healthMetricsToday, usageStats) { _, _ -> }.collect {
-                updateSenseOfDayScore()
+
+        // Prepopulate core default habits if empty
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = habitsDao.getAllHabitsSync()
+            if (existing.isEmpty()) {
+                val defaultMeds = HabitEntity(id = "default_meds", name = "Take Morning Medication", timeString = "08:00", isMedication = true)
+                val defaultWalk = HabitEntity(id = "default_walk", name = "Active Walk / Hydration", timeString = "12:00", isMedication = false)
+                val defaultRefl = HabitEntity(id = "default_reflection", name = "Evening Reflection", timeString = "21:00", isMedication = false)
+                
+                habitsDao.insertHabit(defaultMeds)
+                habitsDao.insertHabit(defaultWalk)
+                habitsDao.insertHabit(defaultRefl)
+
+                // Schedule alarms
+                val scheduler = HabitAlarmScheduler(applicationContext)
+                scheduler.scheduleHabitAlarm(defaultMeds)
+                scheduler.scheduleHabitAlarm(defaultWalk)
+                scheduler.scheduleHabitAlarm(defaultRefl)
             }
+        }
+        
+        // Recalculate score whenever habits, metrics, or usages shift
+        viewModelScope.launch {
+            combine(completedHabitIdsToday, activeHabitsToday, _healthMetricsToday, usageStats) { _, _, _, _ -> }
+                .collect {
+                    updateSenseOfDayScore()
+                }
         }
     }
 

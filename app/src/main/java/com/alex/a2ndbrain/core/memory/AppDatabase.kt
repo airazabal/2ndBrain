@@ -5,9 +5,10 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class], version = 13, exportSchema = false)
+@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class, HabitEntity::class, HabitCompletionEntity::class], version = 14, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
+    abstract fun habitsDao(): HabitsDao
 
     companion object {
         @Volatile
