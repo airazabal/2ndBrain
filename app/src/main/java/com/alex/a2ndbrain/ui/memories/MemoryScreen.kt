@@ -469,11 +469,11 @@ private fun GroupedMemoryItem(
             }
 
             // Aggregated Heuristic Highlight
-            val groupHighlight = remember(sortedMemories) {
-                val textContent = sortedMemories.joinToString(" ").lowercase()
+            val groupHighlight = remember(memories) {
+                val textContent = memories.joinToString(" ").lowercase()
                 when {
                     textContent.contains("step") -> {
-                        val stepsList = sortedMemories.mapNotNull { 
+                        val stepsList = memories.mapNotNull { 
                             Regex("\\b\\d{1,3}(,\\d{3})*\\b").find(it.content)?.value?.replace(",", "")?.toIntOrNull()
                         }
                         if (stepsList.isNotEmpty()) {
@@ -485,16 +485,77 @@ private fun GroupedMemoryItem(
                     textContent.contains("heart") -> "⚡ Captured heart rate tracking records today."
                     textContent.contains("sleep") -> "⚡ Sleep cycles and rest logs successfully parsed."
                     textContent.contains("spent") || textContent.contains("transaction") || textContent.contains("amount") -> {
-                        val amounts = sortedMemories.mapNotNull {
-                            Regex("\\$\\d+(\\.\\d{2})?").find(it.content)?.value?.replace("$", "")?.toDoubleOrNull()
+                        class Transaction(val amount: Double, val merchant: String) {
+                            override fun equals(other: Any?): Boolean {
+                                if (this === other) return true
+                                if (other !is Transaction) return false
+                                return amount == other.amount && merchant == other.merchant
+                            }
+                            override fun hashCode(): Int {
+                                return 31 * amount.hashCode() + merchant.hashCode()
+                            }
                         }
-                        if (amounts.isNotEmpty()) {
-                            "⚡ Logged ${amounts.size} payments totaling $${String.format(Locale.getDefault(), "%.2f", amounts.sum())}."
+                        
+                        fun getCleanMerchant(title: String?, content: String): String {
+                            val t = (title ?: "").lowercase()
+                            val c = content.lowercase()
+                            
+                            val isGenericTitle = t.contains("chase") || t.contains("american express") || 
+                                                 t.contains("amex") || t.contains("bank") || 
+                                                 t.contains("messages") || t.contains("gmail")
+                                                 
+                            val merchant = if (!isGenericTitle && t.isNotEmpty()) {
+                                t
+                            } else {
+                                val withIdx = c.indexOf("with ")
+                                val atIdx = c.indexOf("at ")
+                                when {
+                                    withIdx != -1 -> content.substring(withIdx + 5).trim()
+                                    atIdx != -1 -> content.substring(atIdx + 3).trim()
+                                    else -> content
+                                }
+                            }
+                            
+                            return merchant.split(Regex("[\\s\\n\\t]+")).firstOrNull { it.isNotBlank() }
+                                ?.replace(Regex("[^a-zA-Z0-9]"), "")?.lowercase() ?: ""
+                        }
+
+                        val uniqueTransactions = mutableSetOf<Transaction>()
+                        for (item in memories) {
+                            val matches = Regex("\\$(\\d+(?:\\.\\d{2})?)").findAll(item.content)
+                            for (match in matches) {
+                                val amount = match.groupValues[1].toDoubleOrNull() ?: continue
+                                val line = item.content.lines().firstOrNull { it.contains(match.value) } ?: item.content
+                                val lowerLine = line.lowercase()
+                                
+                                val hasExclusion = lowerLine.contains("refund") || lowerLine.contains("credit") || 
+                                                   lowerLine.contains("returned") || lowerLine.contains("code") ||
+                                                   lowerLine.contains("statement") || lowerLine.contains("notice") ||
+                                                   lowerLine.contains("level you set") || lowerLine.contains("limit") ||
+                                                   lowerLine.contains("balance") || lowerLine.contains("above the")
+                                if (hasExclusion) continue
+                                
+                                val hasContext = lowerLine.contains("transaction") || lowerLine.contains("spent") || 
+                                                 lowerLine.contains("charge") || lowerLine.contains("paid") || 
+                                                 lowerLine.contains("payment") || lowerLine.contains("purchase") ||
+                                                 lowerLine.contains("with") || lowerLine.contains("at")
+                                if (hasContext) {
+                                    val merchant = getCleanMerchant(item.title, line)
+                                    if (merchant.isNotEmpty()) {
+                                        uniqueTransactions.add(Transaction(amount, merchant))
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (uniqueTransactions.isNotEmpty()) {
+                            val totalSum = uniqueTransactions.sumOf { it.amount }
+                            "⚡ Logged ${uniqueTransactions.size} payments totaling $${String.format(Locale.getDefault(), "%.2f", totalSum)}."
                         } else {
                             "⚡ Transaction card movements logged."
                         }
                     }
-                    sortedMemories.size > 2 -> "⚡ Summarized ${sortedMemories.size} logs starting with \"${sortedMemories.last().content.take(30)}...\""
+                    memories.size > 2 -> "⚡ Summarized ${memories.size} logs starting with \"${memories.last().content.take(30)}...\""
                     else -> null
                 }
             }
