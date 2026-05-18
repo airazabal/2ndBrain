@@ -38,6 +38,8 @@ import android.widget.Toast
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import java.io.File
 
 @Composable
@@ -315,7 +317,9 @@ private fun GroupedMemoryItem(
             val appInfo = pm.getApplicationInfo(key, 0)
             pm.getApplicationLabel(appInfo).toString()
         } catch (e: Exception) {
-            if (key == "clipboard") "Clipboard" else key
+            if (key == "clipboard") "Clipboard"
+            else if (key == "voice") "Voice Memos"
+            else key
         }
     }
     
@@ -339,7 +343,12 @@ private fun GroupedMemoryItem(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Group Header Row
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { if (memories.size > 1) expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Box(
                     modifier = Modifier
                         .size(24.dp)
@@ -391,6 +400,16 @@ private fun GroupedMemoryItem(
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
+
+                if (memories.size > 1) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                        contentDescription = if (expanded) "Collapse" else "Expand",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
             
             Spacer(modifier = Modifier.height(12.dp))
@@ -407,7 +426,7 @@ private fun GroupedMemoryItem(
                                     (item.packageName ?: "").contains("messenger") || 
                                     (item.packageName ?: "").contains("slack")
                     
-                    val existingIdx = mergedList.indexOfFirst { existing ->
+                    val existingIdx = if (item.source == "voice") -1 else mergedList.indexOfFirst { existing ->
                         val similarity = calculateSimilarity(existing.content, item.content)
                         val titleSimilarity = calculateSimilarity(existing.title ?: "", item.title ?: "")
                         
@@ -418,8 +437,8 @@ private fun GroupedMemoryItem(
                             isChatApp && (existing.content.contains(item.content) || item.content.contains(existing.content)) -> true
                             // Fuzzy content similarity > 0.8
                             similarity > 0.8 && (existing.title == item.title || titleSimilarity > 0.8) -> true
-                            // Prefix match
-                            existing.content.take(15) == item.content.take(15) -> true
+                            // Prefix match (only for non-voice)
+                            existing.source != "voice" && existing.content.take(15) == item.content.take(15) -> true
                             else -> false
                         }
                     }
