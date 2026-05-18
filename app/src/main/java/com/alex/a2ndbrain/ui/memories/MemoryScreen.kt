@@ -532,7 +532,8 @@ private fun GroupedMemoryItem(
                                                    lowerLine.contains("returned") || lowerLine.contains("code") ||
                                                    lowerLine.contains("statement") || lowerLine.contains("notice") ||
                                                    lowerLine.contains("level you set") || lowerLine.contains("limit") ||
-                                                   lowerLine.contains("balance") || lowerLine.contains("above the")
+                                                   lowerLine.contains("balance") || lowerLine.contains("above the") ||
+                                                   lowerLine.contains("harris teeter") || lowerLine.contains("harris")
                                 if (hasExclusion) continue
                                 
                                 val hasContext = lowerLine.contains("transaction") || lowerLine.contains("spent") || 
