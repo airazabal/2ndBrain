@@ -3,6 +3,8 @@ package com.alex.a2ndbrain.ui.home
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -447,71 +449,6 @@ fun HomeScreen(
                             )
                         }
 
-                        // Speaking soundwaves
-                        if (isSpeaking) {
-                            SpeakingSoundwave(
-                                isSpeaking = true,
-                                modifier = Modifier.padding(horizontal = 8.dp)
-                            )
-                        }
-
-                        // Refresh button
-                        IconButton(
-                            onClick = { onRefreshHealth() }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Refresh,
-                                contentDescription = "Refresh Timeline",
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                            )
-                        }
-
-                        // Voice Briefing button
-                        IconButton(
-                            onClick = {
-                                if (isSpeaking) {
-                                    ttsManager.stop()
-                                } else {
-                                    val briefText = buildString {
-                                        append("Here is your proactive schedule briefing. ")
-                                        if (todayTimelineEvents.isEmpty()) {
-                                            append("You have no events scheduled for today.")
-                                        } else {
-                                            append("You have ${todayTimelineEvents.size} events on your timeline today. ")
-                                            todayTimelineEvents.forEach { event ->
-                                                append("At ${event.time}, you have ${event.title} from ${event.appName}. ")
-                                            }
-                                        }
-                                        if (timelineConflicts.isNotEmpty()) {
-                                            append("However, I noticed ${timelineConflicts.size} proactive warnings. ")
-                                            timelineConflicts.forEach { conflict ->
-                                                append(conflict.description + " ")
-                                            }
-                                            append("Please address these when you have a moment.")
-                                        }
-                                    }
-                                    ttsManager.speak(briefText, "timeline_briefing")
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = if (isSpeaking) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
-                                contentDescription = "Voice Briefing",
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                            )
-                        }
-
-                        // Quick Add button
-                        IconButton(
-                            onClick = { showQuickAddDialog = true }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Add,
-                                contentDescription = "Add Agenda Event",
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
-                            )
-                        }
-
                         // Expand/Collapse Chevron
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowDown,
@@ -525,7 +462,90 @@ fun HomeScreen(
 
                     AnimatedVisibility(visible = isTimelineExpanded) {
                         Column {
-                            Spacer(modifier = Modifier.height(20.dp))
+                            Spacer(modifier = Modifier.height(16.dp))
+
+                            // Action Toolbar for Timeline
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Speaking soundwaves
+                                if (isSpeaking) {
+                                    SpeakingSoundwave(
+                                        isSpeaking = true,
+                                        modifier = Modifier.padding(horizontal = 8.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                }
+
+                                // Refresh button
+                                IconButton(
+                                    onClick = { onRefreshHealth() },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Refresh Timeline",
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                // Voice Briefing button
+                                IconButton(
+                                    onClick = {
+                                        if (isSpeaking) {
+                                            ttsManager.stop()
+                                        } else {
+                                            val briefText = buildString {
+                                                append("Here is your proactive schedule briefing. ")
+                                                if (todayTimelineEvents.isEmpty()) {
+                                                    append("You have no events scheduled for today.")
+                                                } else {
+                                                    append("You have ${todayTimelineEvents.size} events on your timeline today. ")
+                                                    todayTimelineEvents.forEach { event ->
+                                                        append("At ${event.time}, you have ${event.title} from ${event.appName}. ")
+                                                    }
+                                                }
+                                                if (timelineConflicts.isNotEmpty()) {
+                                                    append("However, I noticed ${timelineConflicts.size} proactive warnings. ")
+                                                    timelineConflicts.forEach { conflict ->
+                                                        append(conflict.description + " ")
+                                                    }
+                                                    append("Please address these when you have a moment.")
+                                                }
+                                            }
+                                            ttsManager.speak(briefText, "timeline_briefing")
+                                        }
+                                    },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSpeaking) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
+                                        contentDescription = "Voice Briefing",
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                // Quick Add button
+                                IconButton(
+                                    onClick = { showQuickAddDialog = true },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add Agenda Event",
+                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
 
                             if (todayTimelineEvents.isEmpty()) {
                                 Box(
@@ -547,7 +567,13 @@ fun HomeScreen(
                                     )
                                 }
                             } else {
-                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState())
+                                        .padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
                                     val infiniteTransition = rememberInfiniteTransition(label = "timePulse")
                                     val pulseScale by infiniteTransition.animateFloat(
                                         initialValue = 6f,
@@ -581,67 +607,71 @@ fun HomeScreen(
                                         
                                         val isExpanded = expandedTimelineEventId == event.id
 
-                                        Row(
+                                        Column(
                                             modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(IntrinsicSize.Min),
-                                            verticalAlignment = Alignment.CenterVertically
+                                                .width(280.dp)
+                                                .padding(vertical = 4.dp),
+                                            horizontalAlignment = Alignment.Start
                                         ) {
-                                            // 1. Time string left text
-                                            Text(
-                                                text = event.time,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.width(68.dp)
-                                            )
-
-                                            // 2. Vertical Canvas trace line
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxHeight()
-                                                    .width(32.dp),
-                                                contentAlignment = Alignment.Center
+                                            // Horizontal Connector Line & Node
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
                                             ) {
-                                                Canvas(modifier = Modifier.fillMaxSize()) {
-                                                    val isFirst = index == 0
-                                                    val isLast = index == todayTimelineEvents.size - 1
-                                                    
-                                                    // Draw connection line
-                                                    val startY = if (isFirst) size.height / 2 else 0f
-                                                    val endY = if (isLast) size.height / 2 else size.height
-                                                    drawLine(
-                                                        color = Color.LightGray.copy(alpha = 0.5f),
-                                                        start = androidx.compose.ui.geometry.Offset(size.width / 2, startY),
-                                                        end = androidx.compose.ui.geometry.Offset(size.width / 2, endY),
-                                                        strokeWidth = 3.dp.toPx()
-                                                    )
-                                                    
-                                                    // Draw category point
-                                                    drawCircle(
-                                                        color = dotColor,
-                                                        radius = 5.dp.toPx(),
-                                                        center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
-                                                    )
-                                                }
-
-                                                // Pulsing current active event node or time marker (simulate with HSL wellness breathing glow on first scheduled habit)
-                                                if ((event.sourcePackage == "habit" && !completedHabitIds.contains(event.id)) || isConflicting) {
+                                                Box(
+                                                    modifier = Modifier.size(24.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
                                                     Canvas(modifier = Modifier.fillMaxSize()) {
+                                                        val isFirst = index == 0
+                                                        val isLast = index == todayTimelineEvents.size - 1
+                                                        
+                                                        // Draw connection line
+                                                        val startX = if (isFirst) size.width / 2 else 0f
+                                                        val endX = if (isLast) size.width / 2 else size.width
+                                                        drawLine(
+                                                            color = Color.LightGray.copy(alpha = 0.5f),
+                                                            start = androidx.compose.ui.geometry.Offset(startX, size.height / 2),
+                                                            end = androidx.compose.ui.geometry.Offset(endX, size.height / 2),
+                                                            strokeWidth = 3.dp.toPx()
+                                                        )
+                                                        
+                                                        // Draw category point
                                                         drawCircle(
-                                                            color = dotColor.copy(alpha = 0.3f),
-                                                            radius = pulseScale.dp.toPx(),
+                                                            color = dotColor,
+                                                            radius = 5.dp.toPx(),
                                                             center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
                                                         )
                                                     }
+
+                                                    // Pulsing active node
+                                                    if ((event.sourcePackage == "habit" && !completedHabitIds.contains(event.id)) || isConflicting) {
+                                                        Canvas(modifier = Modifier.fillMaxSize()) {
+                                                            drawCircle(
+                                                                color = dotColor.copy(alpha = 0.3f),
+                                                                radius = pulseScale.dp.toPx(),
+                                                                center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
+                                                            )
+                                                        }
+                                                    }
                                                 }
+                                                
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                
+                                                Text(
+                                                    text = event.time,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
+                                                )
                                             }
 
-                                            // 3. Category HSL Card
+                                            Spacer(modifier = Modifier.height(8.dp))
+
+                                            // Category HSL Card
                                             Card(
                                                 modifier = Modifier
-                                                    .weight(1f)
-                                                    .padding(vertical = 4.dp)
+                                                    .fillMaxWidth()
                                                     .clickable { expandedTimelineEventId = if (isExpanded) null else event.id },
                                                 shape = RoundedCornerShape(16.dp),
                                                 elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded || isConflicting) 4.dp else 2.dp),
@@ -652,7 +682,7 @@ fun HomeScreen(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .background(
-                                                            Brush.horizontalGradient(listOf(startColor, endColor))
+                                                            Brush.verticalGradient(listOf(startColor, endColor))
                                                         )
                                                         .padding(14.dp)
                                                 ) {
@@ -666,7 +696,7 @@ fun HomeScreen(
                                                             )
                                                             Spacer(modifier = Modifier.height(2.dp))
                                                             Text(
-                                                                text = if (isExpanded) event.description else event.description.take(60) + if (event.description.length > 60) "..." else "",
+                                                                text = if (isExpanded) event.description else event.description.take(45) + if (event.description.length > 45) "..." else "",
                                                                 style = MaterialTheme.typography.bodySmall,
                                                                 color = Color.Black.copy(alpha = 0.6f)
                                                             )
@@ -754,11 +784,11 @@ fun HomeScreen(
                                                                     }
                                                                 }
                                                             }
-
+ 
                                                             // Inline AI response container
                                                             val inlineResponse = inlineCopilotResponses[event.id]
                                                             val isLoading = inlineCopilotLoading.contains(event.id)
-
+ 
                                                             if (isLoading) {
                                                                 Spacer(modifier = Modifier.height(12.dp))
                                                                 Box(
@@ -774,7 +804,7 @@ fun HomeScreen(
                                                                     )
                                                                 }
                                                             }
-
+ 
                                                             if (inlineResponse != null) {
                                                                 Spacer(modifier = Modifier.height(12.dp))
                                                                 Card(
