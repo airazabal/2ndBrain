@@ -97,6 +97,23 @@ class ReflectionManager(private val context: Context) {
         val apiKey = settingsManager.getGeminiApiKey()
         val preferredModel = settingsManager.getGeminiModel()
         
+        // Fetch smartwatch wellness logs (Recommendation 6)
+        val healthConnectManager = com.alex.a2ndbrain.core.health.HealthConnectManager(context)
+        var healthContextStr = ""
+        try {
+            if (healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()) {
+                val metrics = healthConnectManager.fetchHealthMetricsToday()
+                healthContextStr = """
+                    PHYSICAL WELLNESS (Smartwatch Logs):
+                    - Steps Taken Today: ${metrics.steps} steps
+                    - Sleep Duration Last Night: ${metrics.sleepMinutes / 60}h ${metrics.sleepMinutes % 60}m
+                    - Heart Rate Active Range: ${metrics.minHeartRate} - ${metrics.maxHeartRate} BPM (Avg: ${metrics.avgHeartRate} BPM)
+                """.trimIndent()
+            }
+        } catch (e: Exception) {
+            // Safe fallback
+        }
+
         val (summaryText, modelUsed) = when (selectedModel) {
             ModelPicker.ModelType.GEMINI_CLOUD -> {
                 val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
@@ -110,6 +127,8 @@ class ReflectionManager(private val context: Context) {
                     
                     DIGITAL USAGE (Today's Totals):
                     $usageReport
+                    
+                    $healthContextStr
                 """.trimIndent()
 
                 try {
@@ -132,8 +151,14 @@ class ReflectionManager(private val context: Context) {
                     "- [$time] ${it.content.take(200)}"
                 }
                 
+                val promptContext = """
+                    $rawData
+                    
+                    $healthContextStr
+                """.trimIndent()
+
                 val startTime = System.currentTimeMillis()
-                val rawResult = modelPicker.runLiteRTInference(rawData)
+                val rawResult = modelPicker.runLiteRTInference(promptContext)
                 val elapsedMs = System.currentTimeMillis() - startTime
                 val timeStr = String.format(Locale.getDefault(), "%.1fs", elapsedMs / 1000f)
                 
