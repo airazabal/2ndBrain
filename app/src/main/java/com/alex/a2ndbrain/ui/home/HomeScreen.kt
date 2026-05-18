@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.material.icons.filled.Favorite
@@ -198,30 +199,29 @@ fun HomeScreen(
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Row(
+                                    Column(
                                         modifier = Modifier.weight(1f),
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalArrangement = Arrangement.Center
                                     ) {
-                                        Surface(
-                                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                                            shape = RoundedCornerShape(6.dp),
-                                            modifier = Modifier.padding(end = 8.dp)
-                                        ) {
-                                            Text(
-                                                text = habit.timeString,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
+                                        // Time on top
+                                        Text(
+                                            text = habit.timeString,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        
+                                        // Horizontal basicMarquee scrollable text widget under
                                         Text(
                                             text = habit.name,
                                             style = MaterialTheme.typography.bodyMedium,
                                             fontWeight = if (isCompleted) FontWeight.Bold else FontWeight.Normal,
                                             maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .basicMarquee()
                                         )
                                     }
                                     
