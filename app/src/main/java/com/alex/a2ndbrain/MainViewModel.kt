@@ -145,6 +145,13 @@ class MainViewModel(
     private val _senseOfDayScore = MutableStateFlow(75)
     val senseOfDayScore = _senseOfDayScore.asStateFlow()
 
+    // Health Connect Synchronization (Recommendation 6)
+    private val _healthMetricsToday = MutableStateFlow(HealthMetrics())
+    val healthMetricsToday = _healthMetricsToday.asStateFlow()
+
+    private val _healthPermissionsGranted = MutableStateFlow(false)
+    val healthPermissionsGranted = _healthPermissionsGranted.asStateFlow()
+
     private fun getHabitKey(habit: String): String {
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         return "${todayStr}_$habit"
@@ -221,6 +228,7 @@ class MainViewModel(
         loadVaultNotes()
         observeWorkManagerErrors()
         loadDailyHabits()
+        checkHealthPermissionsAndSync()
         
         // Recalculate score whenever metrics or usages shift
         viewModelScope.launch {
@@ -312,13 +320,6 @@ class MainViewModel(
         }
     }
 
-    // Health Connect Synchronization (Recommendation 6)
-    private val _healthMetricsToday = MutableStateFlow(HealthMetrics())
-    val healthMetricsToday = _healthMetricsToday.asStateFlow()
-
-    private val _healthPermissionsGranted = MutableStateFlow(false)
-    val healthPermissionsGranted = _healthPermissionsGranted.asStateFlow()
-
     fun checkHealthPermissionsAndSync() {
         viewModelScope.launch(Dispatchers.IO) {
             val granted = healthConnectManager.hasPermissions()
@@ -328,10 +329,6 @@ class MainViewModel(
                 _healthMetricsToday.value = metrics
             }
         }
-    }
-
-    init {
-        checkHealthPermissionsAndSync()
     }
 
     // Interactive Q&A Co-Pilot State (Recommendation 1)
