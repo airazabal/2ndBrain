@@ -48,6 +48,9 @@ interface MemoryDao {
     @Query("UPDATE memories SET isRead = 1 WHERE id = :id")
     suspend fun markAsRead(id: Long)
 
+    @Query("DELETE FROM memories WHERE id = :id")
+    suspend fun deleteMemoryById(id: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUsageStat(stat: UsageStatEntity)
 

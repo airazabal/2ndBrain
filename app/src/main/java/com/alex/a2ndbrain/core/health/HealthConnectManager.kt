@@ -7,6 +7,7 @@ import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.Instant
 import java.time.LocalDate
@@ -66,12 +67,12 @@ class HealthConnectManager(private val context: Context) {
         // 1. Fetch Steps
         var totalSteps = 0L
         try {
-            val stepsRequest = ReadRecordsRequest(
-                recordType = StepsRecord::class,
+            val stepsAggregateRequest = AggregateRequest(
+                metrics = setOf(StepsRecord.COUNT_TOTAL),
                 timeRangeFilter = TimeRangeFilter.between(todayStart, todayEnd)
             )
-            val stepsResponse = client.readRecords(stepsRequest)
-            totalSteps = stepsResponse.records.sumOf { it.count }
+            val stepsResponse = client.aggregate(stepsAggregateRequest)
+            totalSteps = stepsResponse[StepsRecord.COUNT_TOTAL] ?: 0L
         } catch (e: Exception) {
             // Ignore individual query failures
         }
@@ -101,6 +102,66 @@ class HealthConnectManager(private val context: Context) {
             val hrRequest = ReadRecordsRequest(
                 recordType = HeartRateRecord::class,
                 timeRangeFilter = TimeRangeFilter.between(todayStart, todayEnd)
+            )
+            val hrResponse = client.readRecords(hrRequest)
+            val samples = hrResponse.records.flatMap { it.samples }
+            if (samples.isNotEmpty()) {
+                val bpms = samples.map { it.beatsPerMinute.toInt() }
+                minBpm = bpms.minOrNull() ?: 0
+                maxBpm = bpms.maxOrNull() ?: 0
+                avgBpm = bpms.average().toInt()
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+
+        return HealthMetrics(
+            steps = totalSteps,
+            sleepMinutes = totalSleepMins,
+            minHeartRate = minBpm,
+            maxHeartRate = maxBpm,
+            avgHeartRate = avgBpm
+        )
+    }
+
+    suspend fun fetchHealthMetricsForRange(startTime: Instant, endTime: Instant): HealthMetrics {
+        val client = healthConnectClient ?: return HealthMetrics()
+        if (!hasPermissions()) return HealthMetrics()
+
+        var totalSteps = 0L
+        try {
+            val stepsAggregateRequest = AggregateRequest(
+                metrics = setOf(StepsRecord.COUNT_TOTAL),
+                timeRangeFilter = TimeRangeFilter.between(startTime, endTime)
+            )
+            val stepsResponse = client.aggregate(stepsAggregateRequest)
+            totalSteps = stepsResponse[StepsRecord.COUNT_TOTAL] ?: 0L
+        } catch (e: Exception) {
+            // Ignore
+        }
+
+        var totalSleepMins = 0
+        try {
+            val sleepRequest = ReadRecordsRequest(
+                recordType = SleepSessionRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(startTime, endTime)
+            )
+            val sleepResponse = client.readRecords(sleepRequest)
+            val totalSleepDuration = sleepResponse.records.sumOf { record ->
+                ChronoUnit.MINUTES.between(record.startTime, record.endTime)
+            }
+            totalSleepMins = totalSleepDuration.toInt()
+        } catch (e: Exception) {
+            // Ignore
+        }
+
+        var minBpm = 0
+        var maxBpm = 0
+        var avgBpm = 0
+        try {
+            val hrRequest = ReadRecordsRequest(
+                recordType = HeartRateRecord::class,
+                timeRangeFilter = TimeRangeFilter.between(startTime, endTime)
             )
             val hrResponse = client.readRecords(hrRequest)
             val samples = hrResponse.records.flatMap { it.samples }

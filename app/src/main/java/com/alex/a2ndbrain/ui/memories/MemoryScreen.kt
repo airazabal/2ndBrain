@@ -29,6 +29,7 @@ import com.alex.a2ndbrain.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.compose.animation.AnimatedVisibility
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +39,7 @@ import android.widget.Toast
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import java.io.File
@@ -53,6 +55,7 @@ fun MemoryScreen(
     monitoredApps: Set<String> = emptySet(),
     vaultUri: String = "",
     onSaveVoiceNote: ((String, String) -> Unit)? = null,
+    onDeepDiveCoPilot: (MemoryEntity) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -244,7 +247,8 @@ fun MemoryScreen(
                     source = key.first,
                     packageName = key.second,
                     memories = list,
-                    onMarkAsRead = onMarkAsRead
+                    onMarkAsRead = onMarkAsRead,
+                    onDeepDiveCoPilot = onDeepDiveCoPilot
                 )
             }
             
@@ -305,7 +309,8 @@ private fun GroupedMemoryItem(
     source: String,
     packageName: String?,
     memories: List<MemoryEntity>,
-    onMarkAsRead: (Long) -> Unit
+    onMarkAsRead: (Long) -> Unit,
+    onDeepDiveCoPilot: (MemoryEntity) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -346,7 +351,7 @@ private fun GroupedMemoryItem(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { if (memories.size > 1) expanded = !expanded },
+                    .clickable { expanded = !expanded },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -401,18 +406,14 @@ private fun GroupedMemoryItem(
                     )
                 }
 
-                if (memories.size > 1) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                        contentDescription = if (expanded) "Collapse" else "Expand",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
-            
-            Spacer(modifier = Modifier.height(12.dp))
             
             // List of items inside this group (newest first), dynamically deduplicated for display
             val sortedMemories = remember(memories) {
@@ -430,6 +431,17 @@ private fun GroupedMemoryItem(
                         val similarity = calculateSimilarity(existing.content, item.content)
                         val titleSimilarity = calculateSimilarity(existing.title ?: "", item.title ?: "")
                         
+                        val existingLines = existing.content.split("\n").filter { it.isNotBlank() }
+                        val itemLines = item.content.split("\n").filter { it.isNotBlank() }
+                        val hasLineOverlap = if (existingLines.isNotEmpty() && itemLines.isNotEmpty()) {
+                            val intersection = existingLines.intersect(itemLines.toSet())
+                            (intersection.size.toFloat() / itemLines.size.toFloat()) > 0.5f
+                        } else false
+                        
+                        val isGmailSummary = (existing.packageName ?: "").contains("gm") && 
+                                             (existing.title ?: "").contains("messages") && 
+                                             (item.title ?: "").contains("messages")
+                        
                         when {
                             // Exact content match
                             existing.content == item.content -> true
@@ -439,13 +451,13 @@ private fun GroupedMemoryItem(
                             similarity > 0.8 && (existing.title == item.title || titleSimilarity > 0.8) -> true
                             // Prefix match (only for non-voice)
                             existing.source != "voice" && existing.content.take(15) == item.content.take(15) -> true
+                            // Line overlap for group summaries/conversations
+                            hasLineOverlap || isGmailSummary -> true
                             else -> false
                         }
                     }
                     if (existingIdx != -1) {
                         val existing = mergedList[existingIdx]
-                        // Keep the newer one (mergedList holds the newer one since list is sorted newest first)
-                        // Sum up duplicate counts
                         mergedList[existingIdx] = existing.copy(
                             duplicateCount = existing.duplicateCount + item.duplicateCount
                         )
@@ -456,7 +468,7 @@ private fun GroupedMemoryItem(
                 mergedList
             }
 
-            // Aggregated Heuristic Highlight (Recommendation 4)
+            // Aggregated Heuristic Highlight
             val groupHighlight = remember(sortedMemories) {
                 val textContent = sortedMemories.joinToString(" ").lowercase()
                 when {
@@ -487,58 +499,59 @@ private fun GroupedMemoryItem(
                 }
             }
 
-            if (expanded && groupHighlight != null) {
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp)
-                ) {
-                    Text(
-                        text = groupHighlight,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                    )
-                }
-            }
+            AnimatedVisibility(visible = expanded) {
+                Column {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    if (groupHighlight != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp)
+                        ) {
+                            Text(
+                                text = groupHighlight,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
 
-            // By default, we show only the most recent entry if not expanded.
-            val visibleMemories = if (expanded) sortedMemories else sortedMemories.take(1)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        sortedMemories.forEachIndexed { idx, memory ->
+                            if (idx > 0) {
+                                HorizontalDivider(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f),
+                                    thickness = 0.5.dp,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
+                            SingleMemoryRow(
+                                memory = memory,
+                                onMarkAsRead = onMarkAsRead,
+                                onDeepDiveCoPilot = onDeepDiveCoPilot,
+                                context = context
+                            )
+                        }
+                    }
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                visibleMemories.forEachIndexed { idx, memory ->
-                    if (idx > 0) {
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f),
-                            thickness = 0.5.dp,
-                            modifier = Modifier.padding(vertical = 4.dp)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    TextButton(
+                        onClick = { expanded = false },
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Text(
+                            text = "Show less",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
-                    SingleMemoryRow(
-                        memory = memory,
-                        onMarkAsRead = onMarkAsRead,
-                        context = context
-                    )
-                }
-            }
-
-            // Expand/Collapse Button if there is more than 1 entry
-            if (sortedMemories.size > 1) {
-                Spacer(modifier = Modifier.height(8.dp))
-                TextButton(
-                    onClick = { expanded = !expanded },
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text(
-                        text = if (expanded) "Show less" else "Show all (${sortedMemories.size})",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
                 }
             }
         }
@@ -549,38 +562,19 @@ private fun GroupedMemoryItem(
 private fun SingleMemoryRow(
     memory: MemoryEntity,
     onMarkAsRead: (Long) -> Unit,
+    onDeepDiveCoPilot: (MemoryEntity) -> Unit,
     context: android.content.Context
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val isLong = memory.content.length > 200 || memory.content.count { it == '\n' } > 5
+    val lines = remember(memory.content) { memory.content.split("\n").filter { it.isNotBlank() } }
+    val isLong = memory.content.length > 200 || lines.size > 3
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable {
                 onMarkAsRead(memory.id)
-                if (memory.source != "voice" && !memory.deepLink.isNullOrEmpty()) {
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(memory.deepLink))
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        context.startActivity(intent)
-                    } catch (_: Exception) {
-                        if (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) {
-                            val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName!!)
-                            if (launchIntent != null) {
-                                context.startActivity(launchIntent)
-                            }
-                        }
-                    }
-                } else if (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) {
-                    try {
-                        val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName!!)
-                        if (launchIntent != null) {
-                            context.startActivity(launchIntent)
-                        }
-                    } catch (_: Exception) {
-                    }
-                }
+                onDeepDiveCoPilot(memory)
             }
             .padding(vertical = 4.dp)
     ) {
@@ -597,7 +591,40 @@ private fun SingleMemoryRow(
                 
                 Spacer(modifier = Modifier.height(2.dp))
                 
-                SelectionContainer {
+                if (lines.size > 1) {
+                    val displayedLines = if (expanded) lines else lines.take(3)
+                    Column(
+                        modifier = Modifier.padding(top = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        displayedLines.forEach { line ->
+                            Row(verticalAlignment = Alignment.Top) {
+                                Text(
+                                    text = "•",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(end = 6.dp)
+                                )
+                                Text(
+                                    text = line,
+                                    fontSize = 14.sp,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (memory.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        if (!expanded && lines.size > 3) {
+                            Text(
+                                text = "... and ${lines.size - 3} more",
+                                fontSize = 12.sp,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.padding(start = 12.dp, top = 2.dp)
+                            )
+                        }
+                    }
+                } else {
                     Text(
                         text = memory.content,
                         fontSize = 14.sp,
@@ -641,18 +668,64 @@ private fun SingleMemoryRow(
             }
         }
         
-        if (isLong) {
-            TextButton(
-                onClick = { expanded = !expanded },
-                contentPadding = PaddingValues(0.dp),
-                modifier = Modifier.height(24.dp)
-            ) {
-                Text(
-                    text = if (expanded) "Show less" else "Read more",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (isLong) {
+                TextButton(
+                    onClick = { expanded = !expanded },
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.height(24.dp)
+                ) {
+                    Text(
+                        text = if (expanded) "Show less" else "Read more",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.width(1.dp))
+            }
+            
+            val canLaunch = (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) || !memory.deepLink.isNullOrEmpty()
+            if (canLaunch) {
+                TextButton(
+                    onClick = {
+                        if (memory.source != "voice" && !memory.deepLink.isNullOrEmpty()) {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(memory.deepLink))
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            } catch (_: Exception) {
+                                if (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) {
+                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName!!)
+                                    if (launchIntent != null) {
+                                        context.startActivity(launchIntent)
+                                    }
+                                }
+                            }
+                        } else if (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) {
+                            try {
+                                val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName!!)
+                                if (launchIntent != null) {
+                                    context.startActivity(launchIntent)
+                                }
+                            } catch (_: Exception) {}
+                        }
+                    },
+                    contentPadding = PaddingValues(horizontal = 8.dp),
+                    modifier = Modifier.height(28.dp)
+                ) {
+                    Text(
+                        text = "Open App",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    )
+                }
             }
         }
 

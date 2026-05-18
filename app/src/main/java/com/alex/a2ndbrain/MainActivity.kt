@@ -181,6 +181,9 @@ class MainActivity : ComponentActivity() {
                                             val senseOfDayScore by viewModel.senseOfDayScore.collectAsStateWithLifecycle()
                                             val senseOfDayContext by viewModel.senseOfDayContext.collectAsStateWithLifecycle()
                                             val todayTimelineEvents by viewModel.todayTimelineEvents.collectAsStateWithLifecycle()
+                                            val timelineConflicts by viewModel.timelineConflicts.collectAsStateWithLifecycle()
+                                            val inlineCopilotResponses by viewModel.inlineCopilotResponses.collectAsStateWithLifecycle()
+                                            val inlineCopilotLoading by viewModel.inlineCopilotLoading.collectAsStateWithLifecycle()
 
                                             val requestPermissionLauncher = rememberLauncherForActivityResult(
                                                 contract = PermissionController.createRequestPermissionResultContract()
@@ -210,7 +213,26 @@ class MainActivity : ComponentActivity() {
                                                 pastWeekHabitCompletions = pastWeekHabitCompletions,
                                                 senseOfDayScore = senseOfDayScore,
                                                 senseOfDayContext = senseOfDayContext,
-                                                todayTimelineEvents = todayTimelineEvents
+                                                todayTimelineEvents = todayTimelineEvents,
+                                                timelineConflicts = timelineConflicts,
+                                                inlineCopilotResponses = inlineCopilotResponses,
+                                                inlineCopilotLoading = inlineCopilotLoading,
+                                                onDismissConflict = { id -> viewModel.dismissConflict(id) },
+                                                onDeepDiveCoPilotPrompt = { prompt -> viewModel.setPresetChatQueryAndNavigate(prompt) },
+                                                onResolveInline = { id, prompt -> viewModel.resolveInlineCopilot(id, prompt) },
+                                                onAddManualEvent = { title, time ->
+                                                    viewModel.addManualAgendaEvent(title, time)
+                                                },
+                                                onRefreshHealth = { viewModel.checkHealthPermissionsAndSync() },
+                                                onDeepDiveCoPilot = { event ->
+                                                    val query = """
+                                                        Analyze my memories, notes, and habits for today's event: "${event.title}" scheduled at ${event.time} (${event.appName}). Please provide a cohesive context correlation summary to help me prepare.
+                                                    """.trimIndent()
+                                                    viewModel.setPresetChatQueryAndNavigate(query)
+                                                },
+                                                onDeleteManualEvent = { id ->
+                                                    viewModel.deleteManualAgendaEvent(id)
+                                                }
                                             )
                                         }
 
@@ -227,18 +249,46 @@ class MainActivity : ComponentActivity() {
                                             vaultUri = settingsManager.getObsidianVaultUri(),
                                             onSaveVoiceNote = { text, audioPath ->
                                                 viewModel.saveVoiceNote(text, audioPath, settingsManager.getObsidianVaultUri())
+                                            },
+                                            onDeepDiveCoPilot = { memory ->
+                                                val key = memory.packageName ?: memory.source
+                                                val appName = try {
+                                                    val pm = packageManager
+                                                    val appInfo = pm.getApplicationInfo(key, 0)
+                                                    pm.getApplicationLabel(appInfo).toString()
+                                                } catch (e: Exception) {
+                                                    if (key == "clipboard") "Clipboard"
+                                                     else if (key == "voice") "Voice Memos"
+                                                     else key
+                                                }
+                                                val query = """
+                                                    Analyze my memories, notes, and habits for this captured log from "$appName": "${memory.title ?: "Untitled"}" - "${memory.content}". Please provide a cohesive context correlation summary to help me understand how this fits into my daily agenda and physical/cognitive trends.
+                                                """.trimIndent()
+                                                viewModel.setPresetChatQueryAndNavigate(query)
                                             }
                                         )
 
-                                        2 -> ReflectionScreen(
-                                            summaries = summaries,
-                                            settingsManager = settingsManager,
-                                            isGenerating = isGeneratingReflection,
-                                            onGenerateReflection = { viewModel.generateReflection() },
-                                            onCancelReflection = { viewModel.cancelReflection() },
-                                            onClearAll = { viewModel.clearAllSummaries() },
-                                            onDeleteSummary = { id -> viewModel.deleteSummary(id) }
-                                        )
+                                        2 -> {
+                                            val weeklyUsageStats by viewModel.weeklyUsageStats.collectAsStateWithLifecycle()
+                                            val weeklyHealthTrends by viewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
+                                            val pastWeekHabitCompletions by viewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
+                                            val isGeneratingWeeklyInsight by viewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
+
+                                            ReflectionScreen(
+                                                summaries = summaries,
+                                                settingsManager = settingsManager,
+                                                isGenerating = isGeneratingReflection,
+                                                onGenerateReflection = { viewModel.generateReflection() },
+                                                onCancelReflection = { viewModel.cancelReflection() },
+                                                onClearAll = { viewModel.clearAllSummaries() },
+                                                onDeleteSummary = { id -> viewModel.deleteSummary(id) },
+                                                weeklyUsageStats = weeklyUsageStats,
+                                                weeklyHealthTrends = weeklyHealthTrends,
+                                                pastWeekHabitCompletions = pastWeekHabitCompletions,
+                                                isGeneratingWeeklyInsight = isGeneratingWeeklyInsight,
+                                                onGenerateWeeklyInsight = { viewModel.generateWeeklyInsight() }
+                                            )
+                                        }
 
                                         3 -> NotesScreen(settingsManager = settingsManager)
                                         4 -> DigitalTimeScreen(digitalTimeManager = digitalTimeManager)
@@ -246,7 +296,10 @@ class MainActivity : ComponentActivity() {
                                             val activeHabits by viewModel.activeHabitsToday.collectAsStateWithLifecycle()
                                             AppCaptureSettingsScreen(
                                                 settingsManager = settingsManager,
-                                                onBack = { viewModel.setTab(0) },
+                                                onBack = { 
+                                                    viewModel.setTab(0)
+                                                    viewModel.refreshMonitoredApps()
+                                                },
                                                 onRestartService = {
                                                     val componentName = android.content.ComponentName(this@MainActivity, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java)
                                                     packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)

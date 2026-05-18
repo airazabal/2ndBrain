@@ -33,6 +33,8 @@ class MemoryRepository(private val memoryDao: MemoryDao) {
     
     suspend fun markAsRead(id: Long) = memoryDao.markAsRead(id)
     
+    suspend fun deleteMemoryById(id: Long) = memoryDao.deleteMemoryById(id)
+    
     suspend fun clearAllSummaries() = memoryDao.deleteAllSummaries()
     
     suspend fun deleteSummary(id: Long) = memoryDao.deleteSummary(id)

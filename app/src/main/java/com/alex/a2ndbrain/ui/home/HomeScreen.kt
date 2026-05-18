@@ -44,6 +44,27 @@ import com.alex.a2ndbrain.ui.theme.*
 import com.alex.a2ndbrain.ui.usage.ConsolidatedUsage
 import com.alex.a2ndbrain.ui.usage.UsageBarChart
 import com.alex.a2ndbrain.TimelineEvent
+import com.alex.a2ndbrain.core.reflection.TtsManager
+import com.alex.a2ndbrain.TimelineConflict
+import com.alex.a2ndbrain.ConflictType
+import com.alex.a2ndbrain.ConflictSeverity
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.VolumeMute
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material.icons.filled.Refresh
+
 
 @Composable
 fun HomeScreen(
@@ -66,8 +87,36 @@ fun HomeScreen(
     senseOfDayScore: Int = 75,
     senseOfDayContext: String = "🎯 Calibrating your day...",
     todayTimelineEvents: List<TimelineEvent> = emptyList(),
+    timelineConflicts: List<TimelineConflict> = emptyList(),
+    inlineCopilotResponses: Map<String, String> = emptyMap(),
+    inlineCopilotLoading: Set<String> = emptySet(),
+    onDismissConflict: (String) -> Unit = {},
+    onDeepDiveCoPilotPrompt: (String) -> Unit = {},
+    onResolveInline: (String, String) -> Unit = { _, _ -> },
+    onAddManualEvent: (String, String) -> Unit = { _, _ -> },
+    onDeepDiveCoPilot: (TimelineEvent) -> Unit = {},
+    onDeleteManualEvent: (String) -> Unit = {},
+    onRefreshHealth: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val ttsManager = remember { TtsManager(context) }
+    val isSpeaking by ttsManager.isSpeaking.collectAsState()
+    
+    var showQuickAddDialog by remember { mutableStateOf(false) }
+    var isTimelineExpanded by remember { mutableStateOf(true) }
+    var expandedTimelineEventId by remember { mutableStateOf<String?>(null) }
+    
+    LaunchedEffect(Unit) {
+        onRefreshHealth()
+    }
+    
+    DisposableEffect(Unit) {
+        onDispose {
+            ttsManager.stop()
+        }
+    }
+
     val unreadCount = remember(memories) { memories.count { !it.isRead } }
     val appCount = remember(memories) {
         memories.filter { it.source == "notification" }
@@ -282,6 +331,7 @@ fun HomeScreen(
                         }
                     }
 
+
                     // Historical Wellness Streaks Dashboard (Phase 2, Step 3)
                     if (pastWeekHabitCompletions.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(16.dp))
@@ -348,6 +398,12 @@ fun HomeScreen(
 
         // Today's Calendar & Schedule Timeline (Recommendation B)
         item {
+            val chevronRotation by animateFloatAsState(
+                targetValue = if (isTimelineExpanded) 180f else 0f,
+                animationSpec = tween(durationMillis = 300),
+                label = "timelineChevron"
+            )
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -355,80 +411,407 @@ fun HomeScreen(
                 colors = CardDefaults.cardColors(containerColor = Color.White)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
+                    // Clickable Header to Expand/Collapse
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { isTimelineExpanded = !isTimelineExpanded }
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
                                 .background(PastelYellow),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.AccessTime,
                                 contentDescription = null,
-                                modifier = Modifier.size(18.dp),
+                                modifier = Modifier.size(20.dp),
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                             )
                         }
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Today's Schedule & Timeline",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Today's Schedule & Timeline",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (todayTimelineEvents.isEmpty()) "No events scheduled" else "${todayTimelineEvents.size} events on timeline",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+
+                        // Speaking soundwaves
+                        if (isSpeaking) {
+                            SpeakingSoundwave(
+                                isSpeaking = true,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
+                        }
+
+                        // Refresh button
+                        IconButton(
+                            onClick = { onRefreshHealth() }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Refresh Timeline",
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
+                        }
+
+                        // Voice Briefing button
+                        IconButton(
+                            onClick = {
+                                if (isSpeaking) {
+                                    ttsManager.stop()
+                                } else {
+                                    val briefText = buildString {
+                                        append("Here is your proactive schedule briefing. ")
+                                        if (todayTimelineEvents.isEmpty()) {
+                                            append("You have no events scheduled for today.")
+                                        } else {
+                                            append("You have ${todayTimelineEvents.size} events on your timeline today. ")
+                                            todayTimelineEvents.forEach { event ->
+                                                append("At ${event.time}, you have ${event.title} from ${event.appName}. ")
+                                            }
+                                        }
+                                        if (timelineConflicts.isNotEmpty()) {
+                                            append("However, I noticed ${timelineConflicts.size} proactive warnings. ")
+                                            timelineConflicts.forEach { conflict ->
+                                                append(conflict.description + " ")
+                                            }
+                                            append("Please address these when you have a moment.")
+                                        }
+                                    }
+                                    ttsManager.speak(briefText, "timeline_briefing")
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isSpeaking) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
+                                contentDescription = "Voice Briefing",
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
+                        }
+
+                        // Quick Add button
+                        IconButton(
+                            onClick = { showQuickAddDialog = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add Agenda Event",
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                            )
+                        }
+
+                        // Expand/Collapse Chevron
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Expand or Collapse",
+                            modifier = Modifier
+                                .rotate(chevronRotation)
+                                .size(24.dp),
+                            tint = MaterialTheme.colorScheme.outline
                         )
                     }
-                    Spacer(modifier = Modifier.height(16.dp))
 
-                    if (todayTimelineEvents.isEmpty()) {
-                        Text(
-                            text = "No upcoming appointments captured yet today. Calendar events and time-based notification logs will automatically appear here.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            todayTimelineEvents.forEach { event ->
-                                Row(
+                    AnimatedVisibility(visible = isTimelineExpanded) {
+                        Column {
+                            Spacer(modifier = Modifier.height(20.dp))
+
+                            if (todayTimelineEvents.isEmpty()) {
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), shape = RoundedCornerShape(12.dp))
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .background(
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
+                                            shape = RoundedCornerShape(16.dp)
+                                        )
+                                        .padding(24.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = event.time,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                        Text(
-                                            text = event.title,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = event.description.take(120),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(
-                                            text = event.appName,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
+                                    Text(
+                                        text = "No upcoming appointments captured yet today. Calendar events, routine habits, and parsed Obsidian logs will automatically synchronize here.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    val infiniteTransition = rememberInfiniteTransition(label = "timePulse")
+                                    val pulseScale by infiniteTransition.animateFloat(
+                                        initialValue = 6f,
+                                        targetValue = 12f,
+                                        animationSpec = infiniteRepeatable(
+                                            animation = tween(1000, easing = FastOutSlowInEasing),
+                                            repeatMode = RepeatMode.Reverse
+                                        ),
+                                        label = "pulse"
+                                    )
+
+                                    todayTimelineEvents.forEachIndexed { index, event ->
+                                        val conflict = timelineConflicts.find { it.relatedEventIds.contains(event.id) }
+                                        val isConflicting = conflict != null
+                                        
+                                        // Colors mapping based on event category
+                                        val (startColor, endColor, dotColor) = when {
+                                            isConflicting ->
+                                                Triple(Color(0xFFFFCDD2), Color(0xFFEF9A9A), Color(0xFFD32F2F))
+                                            event.appName.contains("Calendar", ignoreCase = true) || event.sourcePackage == "calendar" -> 
+                                                Triple(Color(0xFFE3F2FD), Color(0xFFBBDEFB), Color(0xFF1E88E5))
+                                            event.appName.contains("Obsidian", ignoreCase = true) || event.sourcePackage == "obsidian" -> 
+                                                Triple(Color(0xFFE0F2F1), Color(0xFFB2DFDB), Color(0xFF00897B))
+                                            event.appName.contains("Routines", ignoreCase = true) || event.sourcePackage == "habit" -> 
+                                                Triple(Color(0xFFFFF3E0), Color(0xFFFFE0B2), Color(0xFFF4511E))
+                                            event.sourcePackage == "manual" -> 
+                                                Triple(Color(0xFFF3E5F5), Color(0xFFE1BEE7), Color(0xFF8E24AA))
+                                            else -> // Notification / Gmail / Messages / Slack etc.
+                                                Triple(Color(0xFFF5F5F5), Color(0xFFE0E0E0), Color(0xFF9E9E9E))
+                                        }
+                                        
+                                        val isExpanded = expandedTimelineEventId == event.id
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(IntrinsicSize.Min),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            // 1. Time string left text
+                                            Text(
+                                                text = event.time,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.width(68.dp)
+                                            )
+
+                                            // 2. Vertical Canvas trace line
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxHeight()
+                                                    .width(32.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Canvas(modifier = Modifier.fillMaxSize()) {
+                                                    val isFirst = index == 0
+                                                    val isLast = index == todayTimelineEvents.size - 1
+                                                    
+                                                    // Draw connection line
+                                                    val startY = if (isFirst) size.height / 2 else 0f
+                                                    val endY = if (isLast) size.height / 2 else size.height
+                                                    drawLine(
+                                                        color = Color.LightGray.copy(alpha = 0.5f),
+                                                        start = androidx.compose.ui.geometry.Offset(size.width / 2, startY),
+                                                        end = androidx.compose.ui.geometry.Offset(size.width / 2, endY),
+                                                        strokeWidth = 3.dp.toPx()
+                                                    )
+                                                    
+                                                    // Draw category point
+                                                    drawCircle(
+                                                        color = dotColor,
+                                                        radius = 5.dp.toPx(),
+                                                        center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
+                                                    )
+                                                }
+
+                                                // Pulsing current active event node or time marker (simulate with HSL wellness breathing glow on first scheduled habit)
+                                                if ((event.sourcePackage == "habit" && !completedHabitIds.contains(event.id)) || isConflicting) {
+                                                    Canvas(modifier = Modifier.fillMaxSize()) {
+                                                        drawCircle(
+                                                            color = dotColor.copy(alpha = 0.3f),
+                                                            radius = pulseScale.dp.toPx(),
+                                                            center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            // 3. Category HSL Card
+                                            Card(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .padding(vertical = 4.dp)
+                                                    .clickable { expandedTimelineEventId = if (isExpanded) null else event.id },
+                                                shape = RoundedCornerShape(16.dp),
+                                                elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded || isConflicting) 4.dp else 2.dp),
+                                                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                                border = if (isConflicting) BorderStroke(1.5.dp, Color(0xFFD32F2F).copy(alpha = 0.6f)) else null
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(
+                                                            Brush.horizontalGradient(listOf(startColor, endColor))
+                                                        )
+                                                        .padding(14.dp)
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = event.title,
+                                                                style = MaterialTheme.typography.bodyMedium,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.Black.copy(alpha = 0.8f)
+                                                            )
+                                                            Spacer(modifier = Modifier.height(2.dp))
+                                                            Text(
+                                                                text = if (isExpanded) event.description else event.description.take(60) + if (event.description.length > 60) "..." else "",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = Color.Black.copy(alpha = 0.6f)
+                                                            )
+                                                        }
+                                                        
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        
+                                                        // If manual insert, support deleting
+                                                        if (event.sourcePackage == "manual") {
+                                                            IconButton(
+                                                                onClick = { onDeleteManualEvent(event.id) }
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.Delete,
+                                                                    contentDescription = "Delete Event",
+                                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                                                    modifier = Modifier.size(20.dp)
+                                                                )
+                                                            }
+                                                        } else {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .clip(RoundedCornerShape(6.dp))
+                                                                    .background(Color.White.copy(alpha = 0.4f))
+                                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                            ) {
+                                                                Text(
+                                                                    text = event.appName,
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color.Black.copy(alpha = 0.8f)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                    
+                                                    AnimatedVisibility(visible = isExpanded) {
+                                                        Column {
+                                                            Spacer(modifier = Modifier.height(12.dp))
+                                                            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Black.copy(alpha = 0.1f)))
+                                                            Spacer(modifier = Modifier.height(8.dp))
+                                                            
+                                                            if (isConflicting && conflict != null) {
+                                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                    Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = Color(0xFFD32F2F), modifier = Modifier.size(16.dp))
+                                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                                    Text(text = conflict.title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F))
+                                                                }
+                                                                Spacer(modifier = Modifier.height(4.dp))
+                                                                Text(text = conflict.description, style = MaterialTheme.typography.bodySmall, color = Color.Black.copy(alpha = 0.7f))
+                                                                Spacer(modifier = Modifier.height(8.dp))
+                                                                
+                                                                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                                                    Button(
+                                                                        onClick = { onResolveInline(event.id, conflict.deepDivePrompt) },
+                                                                        enabled = !inlineCopilotLoading.contains(event.id),
+                                                                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.5f), contentColor = Color(0xFFD32F2F)),
+                                                                        shape = RoundedCornerShape(8.dp),
+                                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                                                        modifier = Modifier.height(32.dp)
+                                                                    ) {
+                                                                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                                        Text("RESOLVE CONFLICT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                // No conflict, just standard action
+                                                                val askPrompt = """
+                                                                    Analyze my memories, notes, and habits for today's event: "${event.title}" scheduled at ${event.time} (${event.appName}). Please provide a cohesive context correlation summary to help me prepare.
+                                                                """.trimIndent()
+                                                                
+                                                                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                                                                    Button(
+                                                                        onClick = { onResolveInline(event.id, askPrompt) },
+                                                                        enabled = !inlineCopilotLoading.contains(event.id),
+                                                                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.5f), contentColor = Color.Black.copy(alpha = 0.7f)),
+                                                                        shape = RoundedCornerShape(8.dp),
+                                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                                                        modifier = Modifier.height(32.dp)
+                                                                    ) {
+                                                                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                                        Text("ASK CO-PILOT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // Inline AI response container
+                                                            val inlineResponse = inlineCopilotResponses[event.id]
+                                                            val isLoading = inlineCopilotLoading.contains(event.id)
+
+                                                            if (isLoading) {
+                                                                Spacer(modifier = Modifier.height(12.dp))
+                                                                Box(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .padding(8.dp),
+                                                                    contentAlignment = Alignment.Center
+                                                                ) {
+                                                                    CircularProgressIndicator(
+                                                                        modifier = Modifier.size(24.dp),
+                                                                        color = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary,
+                                                                        strokeWidth = 2.5.dp
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            if (inlineResponse != null) {
+                                                                Spacer(modifier = Modifier.height(12.dp))
+                                                                Card(
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.6f)),
+                                                                    shape = RoundedCornerShape(12.dp)
+                                                                ) {
+                                                                    Column(modifier = Modifier.padding(12.dp)) {
+                                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                            Icon(
+                                                                                imageVector = Icons.Default.AutoAwesome,
+                                                                                contentDescription = null,
+                                                                                tint = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary,
+                                                                                modifier = Modifier.size(16.dp)
+                                                                            )
+                                                                            Spacer(modifier = Modifier.width(6.dp))
+                                                                            Text(
+                                                                                text = "Co-Pilot Strategy",
+                                                                                style = MaterialTheme.typography.labelMedium,
+                                                                                fontWeight = FontWeight.Bold,
+                                                                                color = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
+                                                                            )
+                                                                        }
+                                                                        Spacer(modifier = Modifier.height(6.dp))
+                                                                        Text(
+                                                                            text = inlineResponse,
+                                                                            style = MaterialTheme.typography.bodySmall,
+                                                                            color = Color.Black.copy(alpha = 0.8f)
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -437,6 +820,7 @@ fun HomeScreen(
                 }
             }
         }
+
 
         item {
             SummaryGrid(
@@ -627,6 +1011,57 @@ fun HomeScreen(
             }
         }
     }
+
+    if (showQuickAddDialog) {
+        var eventTitle by remember { mutableStateOf("") }
+        var eventTime by remember { mutableStateOf("") }
+        
+        AlertDialog(
+            onDismissRequest = { showQuickAddDialog = false },
+            title = { Text(text = "➕ Quick-Add Agenda Event", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    OutlinedTextField(
+                        value = eventTitle,
+                        onValueChange = { eventTitle = it },
+                        label = { Text("Event Title") },
+                        placeholder = { Text("e.g. Gym workout") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = eventTime,
+                        onValueChange = { eventTime = it },
+                        label = { Text("Scheduled Time") },
+                        placeholder = { Text("e.g. 7:00 PM") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (eventTitle.isNotBlank() && eventTime.isNotBlank()) {
+                            onAddManualEvent(eventTitle.trim(), eventTime.trim())
+                            showQuickAddDialog = false
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Add to Timeline")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQuickAddDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -730,5 +1165,66 @@ fun HomeSectionCard(
             Spacer(modifier = Modifier.height(16.dp))
             content()
         }
+    }
+}
+
+@Composable
+fun SpeakingSoundwave(
+    isSpeaking: Boolean,
+    modifier: Modifier = Modifier,
+    color: Color = PastelPurple
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "soundwave")
+    val scale1 by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 400, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale1"
+    )
+    val scale2 by infiniteTransition.animateFloat(
+        initialValue = 0.2f,
+        targetValue = 0.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 500, delayMillis = 100, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale2"
+    )
+    val scale3 by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 350, delayMillis = 50, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale3"
+    )
+    val scale4 by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 450, delayMillis = 150, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "scale4"
+    )
+
+    Row(
+        modifier = modifier.height(20.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val s1 = if (isSpeaking) scale1 else 0.2f
+        val s2 = if (isSpeaking) scale2 else 0.3f
+        val s3 = if (isSpeaking) scale3 else 0.2f
+        val s4 = if (isSpeaking) scale4 else 0.3f
+
+        Box(modifier = Modifier.size(width = 3.dp, height = (20.dp * s1)).clip(RoundedCornerShape(2.dp)).background(color))
+        Box(modifier = Modifier.size(width = 3.dp, height = (20.dp * s2)).clip(RoundedCornerShape(2.dp)).background(color))
+        Box(modifier = Modifier.size(width = 3.dp, height = (20.dp * s3)).clip(RoundedCornerShape(2.dp)).background(color))
+        Box(modifier = Modifier.size(width = 3.dp, height = (20.dp * s4)).clip(RoundedCornerShape(2.dp)).background(color))
     }
 }

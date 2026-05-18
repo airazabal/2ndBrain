@@ -17,4 +17,6 @@ class UsageRepository(private val memoryDao: MemoryDao) {
     suspend fun insertUsageStat(stat: UsageStatEntity) = memoryDao.insertUsageStat(stat)
 
     suspend fun getUsageStatsSince(startDate: String): List<UsageStatEntity> = memoryDao.getUsageStatsSince(startDate)
+
+    fun getUsageStatsSinceFlow(startDate: String): Flow<List<UsageStatEntity>> = memoryDao.getUsageStatsSinceFlow(startDate)
 }

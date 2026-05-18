@@ -31,12 +31,32 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
+
+
+enum class ConflictType { OVERLAP, OVERDUE_HABIT, DISTRACTION_GAP }
+enum class ConflictSeverity { WARNING, ALERT }
+data class TimelineConflict(
+    val id: String,
+    val type: ConflictType,
+    val severity: ConflictSeverity,
+    val title: String,
+    val description: String,
+    val deepDivePrompt: String,
+    val relatedEventIds: List<String> = emptyList()
+)
 
 data class TimelineEvent(
+    val id: String = java.util.UUID.randomUUID().toString(),
     val time: String,
     val title: String,
     val description: String,
-    val appName: String
+    val appName: String,
+    val sourcePackage: String,
+    val minutesFromMidnight: Int
 )
 
 class MainViewModel(
@@ -75,50 +95,19 @@ class MainViewModel(
     val usageStats: StateFlow<List<UsageStatEntity>> = usageRepository.getUsageStatsForToday()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    val weeklyUsageStats: StateFlow<List<UsageStatEntity>> = flow<List<UsageStatEntity>> {
+        val cal = Calendar.getInstance()
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        cal.add(Calendar.DAY_OF_YEAR, -6)
+        val startDate = dateFormat.format(cal.time)
+        emitAll(usageRepository.getUsageStatsSinceFlow(startDate))
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private val _weeklyHealthTrends = MutableStateFlow<List<Pair<String, HealthMetrics>>>(emptyList())
+    val weeklyHealthTrends = _weeklyHealthTrends.asStateFlow()
+
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    // Proactive Timeline & Schedule Extractor (Recommendation B)
-    val todayTimelineEvents: StateFlow<List<TimelineEvent>> = allMemoriesForHome
-        .map { memories ->
-            val startOfToday = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
-            
-            memories.filter { mem ->
-                mem.timestamp >= startOfToday && (
-                    mem.packageName?.contains("calendar") == true ||
-                    mem.packageName?.contains("outlook") == true ||
-                    mem.content.lowercase().contains("meeting") ||
-                    mem.content.lowercase().contains("appointment") ||
-                    mem.content.lowercase().contains("schedule") ||
-                    mem.content.lowercase().contains("scheduled") ||
-                    mem.content.lowercase().contains("meet") ||
-                    mem.content.lowercase().contains("reminder")
-                )
-            }.map { mem ->
-                val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-                val timeStr = timeFormat.format(Date(mem.timestamp))
-                
-                val cleanTitle = mem.title ?: if (mem.content.length > 35) mem.content.take(35) + "..." else mem.content
-                
-                val appName = when {
-                    mem.packageName?.contains("calendar") == true -> "Calendar"
-                    mem.packageName?.contains("outlook") == true -> "Outlook"
-                    else -> "System"
-                }
-
-                TimelineEvent(
-                    time = timeStr,
-                    title = cleanTitle,
-                    description = mem.content,
-                    appName = appName
-                )
-            }
-        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val _vaultNotes = MutableStateFlow<List<DocumentFile>>(emptyList())
     val vaultNotes = _vaultNotes.asStateFlow()
@@ -164,6 +153,12 @@ class MainViewModel(
     private val _senseOfDayContext = MutableStateFlow("🎯 Calibrating your day. Complete a daily routine or log a few steps to update your Sense of Day index.")
     val senseOfDayContext = _senseOfDayContext.asStateFlow()
 
+    private val _inlineCopilotResponses = MutableStateFlow<Map<String, String>>(emptyMap())
+    val inlineCopilotResponses = _inlineCopilotResponses.asStateFlow()
+
+    private val _inlineCopilotLoading = MutableStateFlow<Set<String>>(emptySet())
+    val inlineCopilotLoading = _inlineCopilotLoading.asStateFlow()
+
     // Health Connect Synchronization (Recommendation 6)
     private val _healthMetricsToday = MutableStateFlow(HealthMetrics())
     val healthMetricsToday = _healthMetricsToday.asStateFlow()
@@ -200,6 +195,349 @@ class MainViewModel(
         }
         last7Days
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private val _monitoredAppsState = MutableStateFlow(settingsManager.getMonitoredApps())
+    val monitoredAppsState = _monitoredAppsState.asStateFlow()
+
+    fun refreshMonitoredApps() {
+        _monitoredAppsState.value = settingsManager.getMonitoredApps()
+    }
+
+    // Proactive Timeline & Schedule Extractor (Recommendation B)
+    val todayTimelineEvents: StateFlow<List<TimelineEvent>> = combine(
+        allMemoriesForHome,
+        vaultNotes,
+        activeHabitsToday,
+        completedHabitIdsToday,
+        monitoredAppsState
+    ) { memories, notes, habits, completedIds, monitoredApps ->
+        val startOfToday = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        
+        val timelineList = mutableListOf<TimelineEvent>()
+        
+        // 1. Process Database Notification & Manual Memories
+        val databaseEvents = memories.filter { mem ->
+            val isMonitored = if (mem.source == "notification" && mem.packageName != null) {
+                monitoredApps.isEmpty() || monitoredApps.contains(mem.packageName)
+            } else {
+                true
+            }
+            
+            isMonitored && mem.timestamp >= startOfToday && (
+                mem.packageName?.contains("calendar") == true ||
+                mem.packageName?.contains("outlook") == true ||
+                mem.packageName?.contains("agenda") == true ||
+                mem.content.lowercase().contains("meeting") ||
+                mem.content.lowercase().contains("appointment") ||
+                mem.content.lowercase().contains("schedule") ||
+                mem.content.lowercase().contains("scheduled") ||
+                mem.content.lowercase().contains("meet") ||
+                mem.content.lowercase().contains("reminder")
+            )
+        }.mapNotNull { mem ->
+            val timeMatch = findTimePattern(mem.content) ?: findTimePattern(mem.title ?: "")
+            val (timeStr, minutes) = if (timeMatch != null) {
+                timeMatch
+            } else {
+                val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
+                val timeStr = timeFormat.format(Date(mem.timestamp))
+                val cal = Calendar.getInstance().apply { timeInMillis = mem.timestamp }
+                val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+                Pair(timeStr, minutes)
+            }
+            
+            val cleanTitle = mem.title ?: if (mem.content.length > 35) mem.content.take(35) + "..." else mem.content
+            val appName = when {
+                mem.packageName?.contains("calendar") == true -> "Calendar"
+                mem.packageName?.contains("outlook") == true -> "Outlook"
+                mem.packageName?.contains("agenda") == true -> "Cockpit"
+                else -> "System"
+            }
+            val sourcePackage = when {
+                mem.packageName?.contains("calendar") == true -> "calendar"
+                mem.packageName?.contains("outlook") == true -> "calendar"
+                mem.packageName?.contains("agenda") == true -> "manual"
+                else -> "system"
+            }
+            
+            TimelineEvent(
+                id = mem.id.toString(),
+                time = timeStr,
+                title = cleanTitle,
+                description = mem.content,
+                appName = appName,
+                sourcePackage = sourcePackage,
+                minutesFromMidnight = minutes
+            )
+        }
+        timelineList.addAll(databaseEvents)
+        
+        // 2. Process Obsidian Vault Notes
+        val recentNotes = notes.take(5)
+        recentNotes.forEach { note ->
+            try {
+                applicationContext.contentResolver.openInputStream(note.uri)?.use { inputStream ->
+                    val reader = java.io.BufferedReader(java.io.InputStreamReader(inputStream))
+                    var line = reader.readLine()
+                    while (line != null) {
+                        val timeMatch = findTimePattern(line)
+                        if (timeMatch != null) {
+                            val cleanTitle = cleanAgendaLine(line, timeMatch.first)
+                            val deterministicId = "obsidian_${note.name.hashCode()}_${timeMatch.first.hashCode()}_${cleanTitle.hashCode()}"
+                            timelineList.add(
+                                TimelineEvent(
+                                    id = deterministicId,
+                                    time = timeMatch.first,
+                                    title = cleanTitle,
+                                    description = "Captured from Obsidian Note: ${note.name ?: "Unnamed"}\nLine Content: $line",
+                                    appName = "Obsidian",
+                                    sourcePackage = "obsidian",
+                                    minutesFromMidnight = timeMatch.second
+                                )
+                            )
+                        }
+                        line = reader.readLine()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("2ndBrain", "Failed to parse Obsidian note in timeline: ${note.name}", e)
+            }
+        }
+        
+        // 3. Process Scheduled Habits today
+        val habitEvents = habits.map { habit ->
+            val timeParts = habit.timeString.split(":")
+            val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: 8
+            val min = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
+            val totalMinutes = hour * 60 + min
+            
+            val displayHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+            val displayAmpm = if (hour >= 12) "PM" else "AM"
+            val timeStr = "$displayHour:${min.toString().padStart(2, '0')} $displayAmpm"
+            
+            val isCompleted = completedIds.contains(habit.id)
+            val statusText = if (isCompleted) "✓ Completed" else "⏰ Scheduled"
+            
+            TimelineEvent(
+                id = habit.id,
+                time = timeStr,
+                title = habit.name,
+                description = "Daily Routine Habit (${if (habit.isMedication) "Medication" else "Habit"})\nStatus: $statusText",
+                appName = "Routines",
+                sourcePackage = "habit",
+                minutesFromMidnight = totalMinutes
+            )
+        }
+        timelineList.addAll(habitEvents)
+        
+        timelineList.sortedBy { it.minutesFromMidnight }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private val _dismissedConflictIds = MutableStateFlow<Set<String>>(emptySet())
+    val dismissedConflictIds = _dismissedConflictIds.asStateFlow()
+
+    val timelineConflicts: StateFlow<List<TimelineConflict>> = combine(
+        todayTimelineEvents,
+        activeHabitsToday,
+        completedHabitIdsToday,
+        usageStats,
+        dismissedConflictIds
+    ) { events, habits, completedIds, usage, dismissedIds ->
+        val conflicts = mutableListOf<TimelineConflict>()
+        
+        // 1. Overlap Detection (only explicit calendar and manual events within 45 mins)
+        val sortedEvents = events.filter { it.sourcePackage == "calendar" || it.sourcePackage == "manual" }.sortedBy { it.minutesFromMidnight }
+        for (i in 0 until sortedEvents.size - 1) {
+            val ev1 = sortedEvents[i]
+            val ev2 = sortedEvents[i+1]
+            val diff = ev2.minutesFromMidnight - ev1.minutesFromMidnight
+            if (diff in 0..45) { // overlapping or very tight back-to-back
+                val id = "overlap_${ev1.id}_${ev2.id}"
+                if (!dismissedIds.contains(id)) {
+                    conflicts.add(
+                        TimelineConflict(
+                            id = id,
+                            type = ConflictType.OVERLAP,
+                            severity = if (diff < 15) ConflictSeverity.ALERT else ConflictSeverity.WARNING,
+                            title = "Schedule Crunch",
+                            description = "You have '${ev1.title}' and '${ev2.title}' scheduled within ${diff} minutes.",
+                            deepDivePrompt = "I have a schedule overlap today between '${ev1.title}' at ${ev1.time} and '${ev2.title}' at ${ev2.time}. Please suggest a strategy to manage this crunch and prioritize my time.",
+                            relatedEventIds = listOf(ev1.id, ev2.id)
+                        )
+                    )
+                }
+            }
+        }
+        
+        // 2. Overdue Habit/Meds
+        val cal = Calendar.getInstance()
+        val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        habits.forEach { habit ->
+            if (habit.isMedication && !completedIds.contains(habit.id)) {
+                val timeParts = habit.timeString.split(":")
+                val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: 8
+                val min = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
+                val habitMinutes = hour * 60 + min
+                
+                // If it's overdue by at least 30 minutes
+                if (currentMinutes > habitMinutes + 30) {
+                    val id = "overdue_${habit.id}"
+                    if (!dismissedIds.contains(id)) {
+                        conflicts.add(
+                            TimelineConflict(
+                                id = id,
+                                type = ConflictType.OVERDUE_HABIT,
+                                severity = ConflictSeverity.ALERT,
+                                title = "Medication Overdue",
+                                description = "Your medication '${habit.name}' was scheduled for ${habit.timeString} and is pending.",
+                                deepDivePrompt = "I missed my scheduled medication '${habit.name}' which was due at ${habit.timeString}. Can you help me quickly review my schedule so I can take it now and log it?",
+                                relatedEventIds = listOf(habit.id)
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        
+        // 3. Distraction Gap Detection
+        // If there's a work event today and social media usage > 15 mins
+        val hasWorkEvent = events.any { it.title.lowercase().contains("meeting") || it.title.lowercase().contains("work") || it.title.lowercase().contains("review") || it.title.lowercase().contains("sync") || it.title.lowercase().contains("call") }
+        if (hasWorkEvent) {
+            var totalSocialTimeMs = 0L
+            usage.forEach { stat ->
+                val pkg = stat.packageName.lowercase()
+                if (pkg.contains("instagram") || pkg.contains("facebook") || pkg.contains("tiktok") || pkg.contains("youtube") || pkg.contains("twitter") || pkg.contains("x.android")) {
+                    totalSocialTimeMs += stat.totalTimeVisibleMs
+                }
+            }
+            val socialMinutes = totalSocialTimeMs / (1000 * 60)
+            if (socialMinutes > 15) {
+                val id = "distraction_gap_today"
+                if (!dismissedIds.contains(id)) {
+                    conflicts.add(
+                        TimelineConflict(
+                            id = id,
+                            type = ConflictType.DISTRACTION_GAP,
+                            severity = ConflictSeverity.WARNING,
+                            title = "Focus Strain",
+                            description = "You've spent ${socialMinutes}m on social media on a deep-work day.",
+                            deepDivePrompt = "I have deep work and meetings scheduled today, but I've already spent ${socialMinutes} minutes on social media apps. Suggest a 3-step action plan to reset my focus and get back on track."
+                        )
+                    )
+                }
+            }
+        }
+        
+        conflicts
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    fun dismissConflict(id: String) {
+        _dismissedConflictIds.value = _dismissedConflictIds.value + id
+    }
+
+    private fun findTimePattern(line: String): Pair<String, Int>? {
+        // Pattern 1: Match "14:30" or "2:30 PM" or "@ 2:30"
+        val regex1 = Regex("(?:\\b|@|at\\s+)(\\d{1,2}):(\\d{2})\\s*(AM|PM|am|pm)?\\b")
+        val match1 = regex1.find(line)
+        if (match1 != null) {
+            val hourStr = match1.groupValues[1]
+            val minStr = match1.groupValues[2]
+            val ampm = match1.groupValues[3]
+            
+            var hour = hourStr.toIntOrNull() ?: return null
+            val min = minStr.toIntOrNull() ?: return null
+            
+            var parsedTimeStr = "$hour:${min.toString().padStart(2, '0')}"
+            
+            if (ampm.isNotBlank()) {
+                val suffix = ampm.uppercase()
+                parsedTimeStr += " $suffix"
+                if (suffix == "PM" && hour < 12) hour += 12
+                if (suffix == "AM" && hour == 12) hour = 0
+            } else {
+                if (hour >= 24) return null
+            }
+            val totalMinutes = hour * 60 + min
+            val displayHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+            val displayAmpm = if (hour >= 12) "PM" else "AM"
+            val cleanDisplayStr = "$displayHour:${min.toString().padStart(2, '0')} $displayAmpm"
+            return Pair(cleanDisplayStr, totalMinutes)
+        }
+        
+        // Pattern 2: Match "@ 3 PM" or "9am"
+        val regex2 = Regex("(?:\\b|@|at\\s+)(\\d{1,2})\\s*(AM|PM|am|pm)\\b")
+        val match2 = regex2.find(line)
+        if (match2 != null) {
+            val hourStr = match2.groupValues[1]
+            val ampm = match2.groupValues[2]
+            
+            var hour = hourStr.toIntOrNull() ?: return null
+            if (hour > 12) return null
+            
+            val suffix = ampm.uppercase()
+            val totalMinutes = when {
+                suffix == "PM" && hour < 12 -> (hour + 12) * 60
+                suffix == "AM" && hour == 12 -> 0
+                else -> hour * 60
+            }
+            val cleanDisplayStr = "$hour:00 $suffix"
+            return Pair(cleanDisplayStr, totalMinutes)
+        }
+        
+        return null
+    }
+
+    private fun cleanAgendaLine(line: String, timeStr: String): String {
+        var cleaned = line
+            .replace(Regex("^\\s*[-*+]\\s*(\\[[ xX]])?\\s*"), "")
+            .replace(Regex("(?:@|at\\s+)?\\b\\d{1,2}:\\d{2}\\s*(?:AM|PM|am|pm)?\\b"), "")
+            .replace(Regex("(?:@|at\\s+)?\\b\\d{1,2}\\s*(?:AM|PM|am|pm)\\b"), "")
+            .replace(Regex("\\b(?:at|@)\\b"), "")
+            .trim()
+        if (cleaned.isBlank()) {
+            val rawSnippet = line.replace(Regex("^\\s*[-*+]\\s*(\\[[ xX]])?\\s*"), "").trim()
+            cleaned = if (rawSnippet.isNotEmpty() && rawSnippet != timeStr) {
+                rawSnippet.take(25) + if (rawSnippet.length > 25) "..." else ""
+            } else {
+                "Scheduled Time Block"
+            }
+        }
+        return cleaned
+    }
+
+    fun addManualAgendaEvent(title: String, timeString: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val content = "$title @ $timeString"
+            val memory = MemoryEntity.create(
+                source = "agenda",
+                packageName = "com.alex.a2ndbrain.agenda",
+                title = title,
+                content = content
+            )
+            memoryRepository.insertMemory(memory)
+        }
+    }
+
+    fun deleteManualAgendaEvent(idString: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val id = idString.toLongOrNull()
+            if (id != null) {
+                memoryRepository.deleteMemoryById(id)
+            }
+        }
+    }
+
+    fun setPresetChatQueryAndNavigate(query: String) {
+        viewModelScope.launch {
+            _currentTab.value = 6
+            sendChatMessage(query)
+        }
+    }
 
     // CRUD and Toggles
     fun toggleHabitCompletion(habitId: String) {
@@ -412,6 +750,22 @@ class MainViewModel(
         )
     }
 
+    private val _isGeneratingWeeklyInsight = MutableStateFlow(false)
+    val isGeneratingWeeklyInsight = _isGeneratingWeeklyInsight.asStateFlow()
+
+    fun generateWeeklyInsight() {
+        _isGeneratingWeeklyInsight.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                reflectionManager.generateWeeklyCorrelation()
+            } catch (e: Exception) {
+                // Safe error fallback
+            } finally {
+                _isGeneratingWeeklyInsight.value = false
+            }
+        }
+    }
+
     fun cancelReflection() {
         WorkManager.getInstance(applicationContext).cancelUniqueWork("manual_reflection")
     }
@@ -433,12 +787,28 @@ class MainViewModel(
     }
 
     fun checkHealthPermissionsAndSync() {
+        refreshMonitoredApps()
         viewModelScope.launch(Dispatchers.IO) {
             val granted = healthConnectManager.hasPermissions()
             _healthPermissionsGranted.value = granted
             if (granted) {
                 val metrics = healthConnectManager.fetchHealthMetricsToday()
                 _healthMetricsToday.value = metrics
+
+                // Fetch past 7 days physical trends
+                val zoneId = ZoneId.systemDefault()
+                val localToday = LocalDate.now()
+                val tempTrends = mutableListOf<Pair<String, HealthMetrics>>()
+                for (i in 6 downTo 0) {
+                    val date = localToday.minusDays(i.toLong())
+                    val startInstant = date.atStartOfDay(zoneId).toInstant()
+                    val endInstant = if (i == 0) Instant.now() else date.plusDays(1).atStartOfDay(zoneId).toInstant()
+                    val dailyMetrics = healthConnectManager.fetchHealthMetricsForRange(startInstant, endInstant)
+                    
+                    // Format key as simplified day string (e.g. "2026-05-18")
+                    tempTrends.add(date.toString() to dailyMetrics)
+                }
+                _weeklyHealthTrends.value = tempTrends
             }
         }
     }
@@ -624,6 +994,15 @@ class MainViewModel(
                 deepLink = finalAudioLink
             )
             memoryRepository.insertMemory(entity)
+        }
+    }
+
+    fun resolveInlineCopilot(eventId: String, prompt: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _inlineCopilotLoading.update { it + eventId }
+            val (responseText, _) = reflectionManager.runChatInference(prompt)
+            _inlineCopilotResponses.update { it + (eventId to responseText) }
+            _inlineCopilotLoading.update { it - eventId }
         }
     }
 }
