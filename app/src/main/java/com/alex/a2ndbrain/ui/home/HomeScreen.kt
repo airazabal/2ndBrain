@@ -2,6 +2,7 @@ package com.alex.a2ndbrain.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import com.alex.a2ndbrain.AppTab
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -43,7 +44,7 @@ import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.memory.HabitEntity
 import com.alex.a2ndbrain.ui.theme.*
-import com.alex.a2ndbrain.ui.usage.ConsolidatedUsage
+import com.alex.a2ndbrain.ConsolidatedUsage
 import com.alex.a2ndbrain.ui.usage.UsageBarChart
 import com.alex.a2ndbrain.TimelineEvent
 import com.alex.a2ndbrain.core.reflection.TtsManager
@@ -66,6 +67,13 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Spa
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.Date
+
 
 
 @Composable
@@ -73,12 +81,14 @@ fun HomeScreen(
     memories: List<MemoryEntity>,
     latestReflection: DailySummaryEntity?,
     notes: List<DocumentFile>,
-    usageStats: List<UsageStatEntity>,
-    onNavigateToTab: (Int) -> Unit,
+    consolidatedUsage: List<ConsolidatedUsage>,
+    onNavigateToTab: (AppTab) -> Unit,
     healthMetrics: com.alex.a2ndbrain.core.health.HealthMetrics = com.alex.a2ndbrain.core.health.HealthMetrics(),
     healthPermissionGranted: Boolean = false,
     healthConnectAvailable: Boolean = false,
     onConnectHealth: () -> Unit = {},
+    meditationSessions: List<com.alex.a2ndbrain.core.meditation.MeditationSession> = emptyList(),
+    meditationStreaks: com.alex.a2ndbrain.core.meditation.StreakResult = com.alex.a2ndbrain.core.meditation.StreakResult(0, 0, 0),
     
     // Dynamic Habits (Phase 2)
     activeHabits: List<HabitEntity> = emptyList(),
@@ -126,18 +136,7 @@ fun HomeScreen(
             .distinct().size
     }
 
-    val consolidatedUsage = remember(usageStats) {
-        usageStats.groupBy { it.packageName }
-            .map { (packageName, stats) ->
-                val totalTime = stats.sumOf { it.totalTimeVisibleMs }
-                ConsolidatedUsage(
-                    packageName = packageName,
-                    totalTimeMs = totalTime,
-                    deviceBreakdown = emptyMap(), // Not needed for home chart
-                    lastTimestamp = stats.maxOf { it.lastTimestamp }
-                )
-            }.sortedByDescending { it.totalTimeMs }
-    }
+
 
     LazyColumn(
         modifier = modifier
@@ -151,14 +150,14 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { onNavigateToTab(5) }
+                            .clickable { onNavigateToTab(AppTab.SETTINGS) }
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -398,6 +397,19 @@ fun HomeScreen(
             }
         }
 
+        if (timelineConflicts.isNotEmpty()) {
+            item {
+                ActiveConflictsSection(
+                    conflicts = timelineConflicts,
+                    inlineCopilotResponses = inlineCopilotResponses,
+                    inlineCopilotLoading = inlineCopilotLoading,
+                    onDismissConflict = onDismissConflict,
+                    onDeepDive = onDeepDiveCoPilotPrompt,
+                    onResolveInline = onResolveInline
+                )
+            }
+        }
+
         // Today's Calendar & Schedule Timeline (Recommendation B)
         item {
             val chevronRotation by animateFloatAsState(
@@ -410,7 +422,7 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
                 shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(20.dp)) {
                     // Clickable Header to Expand/Collapse
@@ -857,7 +869,7 @@ fun HomeScreen(
                 totalFeed = memories.size,
                 unreadFeed = unreadCount,
                 appsCount = appCount,
-                onCardClick = { onNavigateToTab(1) } // Feed is now index 1
+                onCardClick = { onNavigateToTab(AppTab.FEED) }
             )
         }
 
@@ -967,13 +979,116 @@ fun HomeScreen(
             }
         }
 
+        // Zen Meditation Card
+        item {
+            HomeSectionCard(
+                title = "Zen Meditation (Zendence)",
+                icon = Icons.Default.Spa,
+                iconColor = MaterialTheme.colorScheme.primary,
+                onClick = { onNavigateToTab(AppTab.MEDITATION) }
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    // Streaks Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("This Week", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${meditationStreaks.currentWeekStreak} days",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+
+                        Card(
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text("Overall Streak", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "${meditationStreaks.maxOverallStreak} days",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+
+                    // Latest Session Details
+                    val latestSession = meditationSessions.firstOrNull()
+                    if (latestSession != null) {
+                        Column {
+                            Text(
+                                text = "Last Session Details",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(latestSession.timestamp)),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "${latestSession.durationMinutes} mins",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    if (latestSession.insight.isNotBlank()) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = "\"${latestSession.insight}\"",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "No meditation sessions completed this week. Start a session in Zendence to log your first entry!",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
         if (latestReflection != null) {
             item {
                 HomeSectionCard(
                     title = "Latest Intelligence",
                     icon = Icons.Default.AutoAwesome,
                     iconColor = PastelBlue,
-                    onClick = { onNavigateToTab(2) } // Reflection is now index 2
+                    onClick = { onNavigateToTab(AppTab.BRAIN) }
                 ) {
                     Text(
                         text = latestReflection.summary,
@@ -992,7 +1107,7 @@ fun HomeScreen(
                 title = "Recent Notes",
                 icon = Icons.Default.Description,
                 iconColor = PastelGreen,
-                onClick = { onNavigateToTab(3) } // Notes is now index 3
+                onClick = { onNavigateToTab(AppTab.NOTES) }
             ) {
                 if (notes.isEmpty()) {
                     Text("No notes found.", style = MaterialTheme.typography.bodySmall)
@@ -1034,7 +1149,7 @@ fun HomeScreen(
                     title = "Screen Time",
                     icon = Icons.Default.Schedule,
                     iconColor = PastelPurple,
-                    onClick = { onNavigateToTab(4) } // Digital Time is now index 4
+                    onClick = { onNavigateToTab(AppTab.TIME) }
                 ) {
                     UsageBarChart(consolidatedUsage.take(3))
                 }
@@ -1102,13 +1217,11 @@ fun SummaryGrid(
     onCardClick: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .background(Color.White)
-            .clickable { onCardClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        onClick = onCardClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -1164,7 +1277,7 @@ fun HomeSectionCard(
             .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(
@@ -1258,3 +1371,323 @@ fun SpeakingSoundwave(
         Box(modifier = Modifier.size(width = 3.dp, height = (20.dp * s4)).clip(RoundedCornerShape(2.dp)).background(color))
     }
 }
+
+@Composable
+fun ActiveConflictsSection(
+    conflicts: List<TimelineConflict>,
+    inlineCopilotResponses: Map<String, String>,
+    inlineCopilotLoading: Set<String>,
+    onDismissConflict: (String) -> Unit,
+    onDeepDive: (String) -> Unit,
+    onResolveInline: (String, String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.NotificationsActive,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+            Text(
+                text = "Active Conflicts & Constraints",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        
+        conflicts.forEach { conflict ->
+            key(conflict.id) {
+                GlassmorphicConflictCard(
+                    conflict = conflict,
+                    inlineResponse = inlineCopilotResponses[conflict.id],
+                    isLoading = inlineCopilotLoading.contains(conflict.id),
+                    onDismiss = { onDismissConflict(conflict.id) },
+                    onDeepDive = { onDeepDive(conflict.deepDivePrompt) },
+                    onResolveInline = { onResolveInline(conflict.id, conflict.deepDivePrompt) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun GlassmorphicConflictCard(
+    conflict: TimelineConflict,
+    inlineResponse: String?,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onDeepDive: () -> Unit,
+    onResolveInline: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    // Always use deep, premium dark hues for high-contrast visibility with white text
+    val baseColor = when (conflict.type) {
+        ConflictType.OVERLAP -> Color(0xFF421010) // Deep red
+        ConflictType.OVERDUE_HABIT -> Color(0xFF3D2305) // Deep amber
+        ConflictType.DISTRACTION_GAP -> Color(0xFF23103D) // Deep purple
+    }
+    
+    val accentColor = when (conflict.type) {
+        ConflictType.OVERLAP -> Color(0xFFE53935)
+        ConflictType.OVERDUE_HABIT -> Color(0xFFFB8C00)
+        ConflictType.DISTRACTION_GAP -> Color(0xFF8E24AA)
+    }
+    
+    val glassGradient = Brush.verticalGradient(
+        colors = listOf(
+            baseColor.copy(alpha = 0.85f),
+            Color(0xFF0F0F14).copy(alpha = 0.95f)
+        )
+    )
+    
+    val borderBrush = Brush.linearGradient(
+        colors = listOf(
+            Color.White.copy(alpha = 0.25f),
+            Color.White.copy(alpha = 0.08f)
+        )
+    )
+    
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .border(1.dp, borderBrush, RoundedCornerShape(24.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .background(glassGradient)
+                .padding(20.dp)
+        ) {
+            // Header Row: Badge & Dismiss
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Category badge
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val badgeIcon = when (conflict.type) {
+                        ConflictType.OVERLAP -> Icons.Default.Schedule
+                        ConflictType.OVERDUE_HABIT -> Icons.Default.Warning
+                        ConflictType.DISTRACTION_GAP -> Icons.Default.Lock
+                    }
+                    val badgeLabel = when (conflict.type) {
+                        ConflictType.OVERLAP -> "Schedule Crunch"
+                        ConflictType.OVERDUE_HABIT -> "Overdue Habit"
+                        ConflictType.DISTRACTION_GAP -> "Focus Strain"
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(accentColor.copy(alpha = 0.2f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = badgeIcon,
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = badgeLabel.uppercase(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = accentColor
+                            )
+                        }
+                    }
+                    
+                    // Severity Badge
+                    val severityLabel = conflict.severity.name
+                    val severityBgColor = if (conflict.severity == ConflictSeverity.ALERT) {
+                        Color.Red.copy(alpha = 0.15f)
+                    } else {
+                        Color.Gray.copy(alpha = 0.2f)
+                    }
+                    val severityTextColor = if (conflict.severity == ConflictSeverity.ALERT) {
+                        Color(0xFFFF8A80)
+                    } else {
+                        Color.LightGray
+                    }
+                    
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(severityBgColor)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = severityLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = severityTextColor
+                        )
+                    }
+                }
+                
+                // Dismiss Button
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Dismiss Alert",
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Title & Description
+            Text(
+                text = conflict.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+            
+            Spacer(modifier = Modifier.height(6.dp))
+            
+            Text(
+                text = conflict.description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.85f)
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Inline Strategy Button
+                Button(
+                    onClick = onResolveInline,
+                    enabled = !isLoading,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = accentColor.copy(alpha = 0.2f),
+                        contentColor = accentColor
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier.height(38.dp).weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Inline Strategy",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                // Deep Dive Button (switches to Co-Pilot screen)
+                Button(
+                    onClick = onDeepDive,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier.height(38.dp).weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Deep Dive",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            // Collapsible strategy response drawer
+            if (isLoading) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = accentColor,
+                        strokeWidth = 2.dp
+                    )
+                }
+            }
+            
+            if (inlineResponse != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.Black.copy(alpha = 0.35f)
+                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f))
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Co-Pilot Strategy",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = accentColor
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = inlineResponse,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+

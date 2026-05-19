@@ -10,6 +10,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import com.alex.a2ndbrain.AppCaptureSettingsActivity
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -123,35 +127,79 @@ fun MemoryScreen(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (configuration.screenWidthDp < 400) {
-                        IconButton(onClick = onCaptureClipboard) {
-                            Text("📋", fontSize = 16.sp)
-                        }
-                    } else {
-                        TextButton(onClick = onCaptureClipboard) {
-                            Text("CAPTURE", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
                     TextButton(
                         onClick = {
-                            isScanning = true
-                            val scanIntent = Intent(context, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java).apply {
-                                action = "CHECK_ACTIVE"
-                            }
-                            context.startService(scanIntent)
-                            // Reset state quickly for UI
-                            isScanning = false
-                        },
-                        enabled = !isScanning,
-                        contentPadding = PaddingValues(horizontal = if (configuration.screenWidthDp < 360) 2.dp else 4.dp)
+                            context.startActivity(Intent(context, AppCaptureSettingsActivity::class.java))
+                        }
                     ) {
-                        if (isScanning) {
-                            CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
-                        } else {
-                            Text("SCAN", fontSize = 10.sp)
+                        Text("SETUP", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    }
+
+                    var showMenu by remember { mutableStateOf(false) }
+
+                    Box {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "More actions",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Capture Clipboard") },
+                                leadingIcon = { Text("📋", fontSize = 16.sp) },
+                                onClick = {
+                                    showMenu = false
+                                    onCaptureClipboard()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text(if (isScanning) "Scanning..." else "Scan Active") },
+                                leadingIcon = {
+                                    if (isScanning) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    } else {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    }
+                                },
+                                enabled = !isScanning,
+                                onClick = {
+                                    showMenu = false
+                                    isScanning = true
+                                    val scanIntent = Intent(context, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java).apply {
+                                        action = "CHECK_ACTIVE"
+                                    }
+                                    context.startService(scanIntent)
+                                    isScanning = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { 
+                                    Text(
+                                        text = "Clear Feed",
+                                        color = MaterialTheme.colorScheme.error
+                                    ) 
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                onClick = {
+                                    showMenu = false
+                                    onClearAll()
+                                }
+                            )
                         }
                     }
                 }
@@ -216,7 +264,11 @@ fun MemoryScreen(
                             text = tag,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (isSelected) {
+                                if (tag == "All") MaterialTheme.colorScheme.onPrimary else Color.White
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
@@ -283,7 +335,7 @@ fun MemoryScreen(
                 .size(64.dp),
             shape = RoundedCornerShape(20.dp),
             containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = Color.White
+            contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
             Icon(
                 imageVector = Icons.Filled.Mic,

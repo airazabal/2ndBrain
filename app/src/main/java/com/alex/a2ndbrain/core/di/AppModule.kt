@@ -4,7 +4,7 @@ import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.reflection.ModelDownloader
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
-import com.alex.a2ndbrain.MainViewModel
+import com.alex.a2ndbrain.core.reflection.GeminiAgent
 import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
@@ -13,7 +13,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import org.koin.android.ext.koin.androidContext
+import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
+
+import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 
 val appModule = module {
     // Database and Dao
@@ -27,13 +30,21 @@ val appModule = module {
 
     // Managers
     single { CaptureSettingsManager(androidContext()) }
+    single { ClipboardCaptureManager(androidContext(), get()) }
     single { DigitalTimeManager(androidContext(), get(), get()) }
-    single { ReflectionManager(androidContext()) }
+    single { GeminiAgent(get()) }
+    single { ReflectionManager(androidContext(), get(), get(), get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
 
     // ViewModels
-    factory { MainViewModel(get(), get(), get(), get(), get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.NavigationViewModel() }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }

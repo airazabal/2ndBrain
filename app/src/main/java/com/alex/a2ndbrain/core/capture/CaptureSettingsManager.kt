@@ -2,10 +2,33 @@ package com.alex.a2ndbrain.core.capture
 
 import android.content.Context
 import android.content.SharedPreferences
-import com.alex.a2ndbrain.BuildConfig
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 
-class CaptureSettingsManager(context: Context) {
+class CaptureSettingsManager(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("capture_settings", Context.MODE_PRIVATE)
+
+    private val securePrefs: SharedPreferences by lazy {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        val sp = EncryptedSharedPreferences.create(
+            context,
+            "secure_capture_settings",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+        // Migrate key if exists in old unencrypted prefs
+        if (prefs.contains("gemini_api_key")) {
+            val oldKey = prefs.getString("gemini_api_key", "")?.trim() ?: ""
+            if (oldKey.isNotBlank()) {
+                sp.edit().putString("gemini_api_key", oldKey).apply()
+            }
+            prefs.edit().remove("gemini_api_key").apply()
+        }
+        sp
+    }
 
     fun isPackageAllowed(packageName: String): Boolean {
         // Default to true for now, or false if you want opt-in
@@ -41,13 +64,11 @@ class CaptureSettingsManager(context: Context) {
     }
 
     fun getGeminiApiKey(): String {
-        val savedKey = prefs.getString("gemini_api_key", "")?.trim() ?: ""
-        if (savedKey.isNotBlank()) return savedKey
-        return BuildConfig.GEMINI_API_KEY
+        return securePrefs.getString("gemini_api_key", "")?.trim() ?: ""
     }
 
     fun saveGeminiApiKey(key: String) {
-        prefs.edit().putString("gemini_api_key", key.trim()).apply()
+        securePrefs.edit().putString("gemini_api_key", key.trim()).apply()
     }
 
     fun getGeminiModel(): String {

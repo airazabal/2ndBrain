@@ -5,15 +5,18 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.memory.HabitCompletionEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import java.text.SimpleDateFormat
 import java.util.*
 
-class HabitActionReceiver : BroadcastReceiver() {
+class HabitActionReceiver : BroadcastReceiver(), KoinComponent {
+
+    private val habitsDao: com.alex.a2ndbrain.core.memory.HabitsDao by inject()
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action == "com.alex.a2ndbrain.action.MARK_HABIT_DONE") {
@@ -25,11 +28,10 @@ class HabitActionReceiver : BroadcastReceiver() {
             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             val todayStr = dateFormat.format(Date())
 
-            val db = AppDatabase.getDatabase(context)
             CoroutineScope(Dispatchers.IO).launch {
                 try {
                     // Mark completed in database
-                    db.habitsDao().insertCompletion(
+                    habitsDao.insertCompletion(
                         HabitCompletionEntity(habitId = habitId, date = todayStr)
                     )
 

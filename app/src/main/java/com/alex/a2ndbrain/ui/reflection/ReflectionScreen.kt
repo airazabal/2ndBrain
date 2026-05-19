@@ -673,7 +673,7 @@ fun ReflectionScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(28.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Row(
@@ -772,7 +772,7 @@ fun ReflectionScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text("Weekly Physical Steps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -825,7 +825,7 @@ fun ReflectionScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text("Weekly Sleep Patterns", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -888,7 +888,7 @@ fun ReflectionScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text("Habits Checklist Compliance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -959,7 +959,7 @@ fun ReflectionScreen(
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         Text("Weekly Focus vs. Social Split", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1055,7 +1055,7 @@ private fun SummaryCard(summary: DailySummaryEntity, onDelete: () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(

@@ -59,6 +59,9 @@ class ModelPicker(private val context: Context) {
                 maxNumTokens = 1024
             )
 
+            // Truncate the input to a safe character limit to avoid exceeding maximum token restrictions
+            val safePrompt = if (prompt.length > 1000) prompt.take(1000) + "... [truncated]" else prompt
+
             // Chat template wrapping based on model architecture
             val isGemma = selectedModel.contains("Gemma", ignoreCase = true)
             val formattedPrompt = if (isGemma) {
@@ -73,7 +76,7 @@ class ModelPicker(private val context: Context) {
                 "- Start directly with the reflection.\n" +
                 "<end_of_turn>\n" +
                 "<start_of_turn>user\n" +
-                "Memories:\n$prompt<end_of_turn>\n" +
+                "Memories:\n$safePrompt<end_of_turn>\n" +
                 "<start_of_turn>model\n"
             } else {
                 "<|im_start|>system\n" +
@@ -87,7 +90,7 @@ class ModelPicker(private val context: Context) {
                 "- Start directly with the reflection.\n" +
                 "<|im_end|>\n" +
                 "<|im_start|>user\n" +
-                "Memories:\n$prompt<|im_end|>\n" +
+                "Memories:\n$safePrompt<|im_end|>\n" +
                 "<|im_start|>assistant\n"
             }
 

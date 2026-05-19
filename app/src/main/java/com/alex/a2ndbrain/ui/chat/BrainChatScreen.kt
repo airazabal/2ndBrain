@@ -201,7 +201,7 @@ fun BrainChatScreen(
                     }
                 },
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Color.White,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(50),
                 modifier = Modifier.size(48.dp)
             ) {
@@ -247,7 +247,7 @@ private fun ChatBubble(
                 Text(
                     text = message.text,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (message.isUser) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (message.isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 20.sp
                 )
                 

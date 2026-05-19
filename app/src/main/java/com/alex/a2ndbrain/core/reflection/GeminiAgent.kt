@@ -6,15 +6,23 @@ import kotlinx.coroutines.withContext
 import com.google.ai.client.generativeai.type.RequestOptions
 import android.util.Log
 
-class GeminiAgent(private val apiKey: String) {
+import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+
+class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
 
     companion object {
         private var cachedModel: Pair<String, String>? = null
+
+        var fallbackModels = listOf(
+            "gemini-2.0-flash" to "v1beta",
+            "gemini-1.5-flash" to "v1beta",
+            "gemini-1.5-pro" to "v1beta"
+        )
     }
 
     private fun createModel(name: String, version: String) = GenerativeModel(
         modelName = name.trim(),
-        apiKey = apiKey.trim(),
+        apiKey = settingsManager.getGeminiApiKey().trim(),
         requestOptions = RequestOptions(apiVersion = version)
     )
 
@@ -25,6 +33,13 @@ class GeminiAgent(private val apiKey: String) {
         onSuccessModel: ((String) -> Unit)? = null,
         isMorningBriefing: Boolean = false
     ): SummaryResult = withContext(Dispatchers.IO) {
+        val apiKey = settingsManager.getGeminiApiKey()
+        if (apiKey.isBlank()) {
+            return@withContext SummaryResult(
+                "❌ Gemini API Key is missing.\n\nPlease go to Settings (gear icon in navigation rail) and enter your Gemini API Key.",
+                "N/A"
+            )
+        }
         if (memoriesText.isBlank()) return@withContext SummaryResult("No significant memories to process yet.", "N/A")
         
         val modeTask = if (isMorningBriefing) {
@@ -63,28 +78,18 @@ class GeminiAgent(private val apiKey: String) {
             $memoriesText
         """.trimIndent()
 
-        // Updated for Gemini 3.1 and 2.5 (Gemini 1.5 is retired in many regions/SDKs)
-        val baseAttempts = listOf(
-            "gemini-3.1-flash-lite-preview" to "v1beta",
-            "gemini-3.1-pro-preview" to "v1beta",
-            "gemini-3-flash-preview" to "v1beta",
-            "gemini-2.5-flash" to "v1beta",
-            "gemini-2.5-pro" to "v1beta",
-            "gemini-2.0-flash" to "v1beta"
-        )
-        
         // Prioritize preferred model, then persistent lastSuccessfulModel, then in-memory cachedModel
         val attempts = mutableListOf<Pair<String, String>>()
         if (preferredModel != null && preferredModel.isNotBlank()) {
             val pref = preferredModel.trim()
-            val version = if (pref.contains("2.0")) "v1beta" else "v1beta" // v1beta is safest for most
+            val version = "v1beta" // v1beta is safest for most
             attempts.add(pref to version)
         } else if (lastSuccessfulModel != null && lastSuccessfulModel.isNotBlank()) {
             attempts.add(lastSuccessfulModel.trim() to "v1beta")
         } else if (cachedModel != null) {
             attempts.add(cachedModel!!)
         }
-        attempts.addAll(baseAttempts.filter { it.first != preferredModel && it.first != lastSuccessfulModel && it.first != cachedModel?.first })
+        attempts.addAll(fallbackModels.filter { it.first != preferredModel && it.first != lastSuccessfulModel && it.first != cachedModel?.first })
         
         val keySnippet = if (apiKey.length > 6) "${apiKey.take(4)}...${apiKey.takeLast(2)}" else "Invalid/Short"
         val errorLog = mutableListOf<String>()
@@ -154,16 +159,14 @@ class GeminiAgent(private val apiKey: String) {
         lastSuccessfulModel: String? = null,
         onSuccessModel: ((String) -> Unit)? = null
     ): SummaryResult = withContext(Dispatchers.IO) {
+        val apiKey = settingsManager.getGeminiApiKey()
+        if (apiKey.isBlank()) {
+            return@withContext SummaryResult(
+                "❌ Gemini API Key is missing.\n\nPlease go to Settings (gear icon in navigation rail) and enter your Gemini API Key.",
+                "N/A"
+            )
+        }
         if (prompt.isBlank()) return@withContext SummaryResult("Prompt cannot be empty.", "N/A")
-        
-        val baseAttempts = listOf(
-            "gemini-3.1-flash-lite-preview" to "v1beta",
-            "gemini-3.1-pro-preview" to "v1beta",
-            "gemini-3-flash-preview" to "v1beta",
-            "gemini-2.5-flash" to "v1beta",
-            "gemini-2.5-pro" to "v1beta",
-            "gemini-2.0-flash" to "v1beta"
-        )
         
         val attempts = mutableListOf<Pair<String, String>>()
         if (preferredModel != null && preferredModel.isNotBlank()) {
@@ -174,7 +177,7 @@ class GeminiAgent(private val apiKey: String) {
         } else if (cachedModel != null) {
             attempts.add(cachedModel!!)
         }
-        attempts.addAll(baseAttempts.filter { it.first != preferredModel && it.first != lastSuccessfulModel && it.first != cachedModel?.first })
+        attempts.addAll(fallbackModels.filter { it.first != preferredModel && it.first != lastSuccessfulModel && it.first != cachedModel?.first })
         
         for ((name, version) in attempts) {
             try {

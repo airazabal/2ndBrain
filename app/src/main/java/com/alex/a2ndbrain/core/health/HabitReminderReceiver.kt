@@ -10,12 +10,15 @@ import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.alex.a2ndbrain.MainActivity
-import com.alex.a2ndbrain.core.memory.AppDatabase
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class HabitReminderReceiver : BroadcastReceiver() {
+class HabitReminderReceiver : BroadcastReceiver(), KoinComponent {
+
+    private val habitsDao: com.alex.a2ndbrain.core.memory.HabitsDao by inject()
 
     override fun onReceive(context: Context, intent: Intent) {
         val habitId = intent.getStringExtra("HABIT_ID") ?: return
@@ -28,10 +31,9 @@ class HabitReminderReceiver : BroadcastReceiver() {
         showNotification(context, habitId, habitName, isMedication)
 
         // 2. Reschedule alarm for tomorrow to maintain self-perpetuating loop
-        val db = AppDatabase.getDatabase(context)
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val habit = db.habitsDao().getHabitById(habitId)
+                val habit = habitsDao.getHabitById(habitId)
                 if (habit != null && habit.isActive) {
                     val scheduler = HabitAlarmScheduler(context)
                     scheduler.scheduleHabitAlarm(habit)

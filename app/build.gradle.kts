@@ -31,6 +31,7 @@ dependencies {
     implementation(libs.litert)
     implementation(libs.litertlm)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.security.crypto)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -91,9 +92,6 @@ android {
         
         val geminiModel = project.findProperty("gemini.model")?.toString() ?: "gemini-1.5-flash"
         buildConfigField("String", "GEMINI_MODEL", "\"$geminiModel\"")
-        
-        val geminiKey = project.findProperty("gemini.api.key")?.toString() ?: ""
-        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
     buildTypes {

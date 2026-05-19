@@ -26,16 +26,22 @@ import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.health.connect.client.PermissionController
 import com.alex.a2ndbrain.ui.home.HomeScreen
+import com.alex.a2ndbrain.ui.home.HomeViewModel
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
+import com.alex.a2ndbrain.ui.memories.MemoryViewModel
 import com.alex.a2ndbrain.ui.notes.NotesScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
+import com.alex.a2ndbrain.ui.reflection.ReflectionViewModel
 import com.alex.a2ndbrain.ui.theme.BrainTheme
 import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
+import com.alex.a2ndbrain.ui.chat.CopilotViewModel
+import com.alex.a2ndbrain.ui.settings.SettingsViewModel
+import com.alex.a2ndbrain.ui.meditation.MeditationScreen
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
 
 class MainActivity : ComponentActivity() {
-    private val clipboardCaptureManager: ClipboardCaptureManager by lazy { ClipboardCaptureManager(this) }
+    private val clipboardCaptureManager: ClipboardCaptureManager by inject()
     private val settingsManager: CaptureSettingsManager by inject()
     private val reflectionPicker: ReflectionManager by inject()
     private val digitalTimeManager: DigitalTimeManager by inject()
@@ -55,71 +61,126 @@ class MainActivity : ComponentActivity() {
         setContent {
             BrainTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    val viewModel: MainViewModel = koinViewModel()
+                    val navViewModel: NavigationViewModel = koinViewModel()
+                    val homeViewModel: HomeViewModel = koinViewModel()
+                    val memoryViewModel: MemoryViewModel = koinViewModel()
+                    val reflectionViewModel: ReflectionViewModel = koinViewModel()
+                    val copilotViewModel: CopilotViewModel = koinViewModel()
+                    val settingsViewModel: SettingsViewModel = koinViewModel()
                     
-                    val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
-                    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
-                    
-                    val pagedMemories = viewModel.pagedMemories.collectAsLazyPagingItems()
-                    val allMemoriesForHome by viewModel.allMemoriesForHome.collectAsStateWithLifecycle()
-                    
-                    val summaries by viewModel.summaries.collectAsStateWithLifecycle()
-                    val usageStats by viewModel.usageStats.collectAsStateWithLifecycle()
-                    val vaultNotes by viewModel.vaultNotes.collectAsStateWithLifecycle()
-                    val error by viewModel.errorFlow.collectAsStateWithLifecycle()
-                    val isGeneratingReflection by viewModel.isGeneratingReflection.collectAsStateWithLifecycle()
+                    val currentTab by navViewModel.currentTab.collectAsStateWithLifecycle()
+                    val error by navViewModel.errorFlow.collectAsStateWithLifecycle()
+
+                    // Automatically forward preset Copilot queries to the Copilot ViewModel
+                    LaunchedEffect(Unit) {
+                        navViewModel.presetCopilotQuery.collect { query ->
+                            copilotViewModel.sendChatMessage(query)
+                        }
+                    }
 
                     LaunchedEffect(error) {
                         error?.let {
                             Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show()
-                            viewModel.clearError()
+                            navViewModel.clearError()
                         }
                     }
 
-                    Scaffold { innerPadding ->
+                    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+                    val useRail = configuration.screenWidthDp >= 600
+
+                    Scaffold(
+                        bottomBar = {
+                            if (!useRail) {
+                                NavigationBar(
+                                    containerColor = MaterialTheme.colorScheme.surface
+                                ) {
+                                    val tabs = listOf(
+                                        Triple("Home", Icons.Default.Home, AppTab.HOME),
+                                        Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
+                                        Triple("Brain", Icons.Default.AutoAwesome, AppTab.BRAIN),
+                                        Triple("Notes", Icons.Default.Description, AppTab.NOTES),
+                                        Triple("Time", Icons.Default.Schedule, AppTab.TIME),
+                                        Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
+                                        Triple("Co-pilot", Icons.Default.QuestionAnswer, AppTab.COPILOT),
+                                        Triple("Settings", Icons.Default.Settings, AppTab.SETTINGS)
+                                    )
+                                    tabs.forEach { (label, icon, tab) ->
+                                        NavigationBarItem(
+                                            icon = { Icon(icon, contentDescription = label) },
+                                            label = { Text(label) },
+                                            selected = currentTab == tab,
+                                            onClick = { navViewModel.setTab(tab) },
+                                            colors = NavigationBarItemDefaults.colors(
+                                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                            )
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    ) { innerPadding ->
                         Row(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(innerPadding)
                         ) {
-                            NavigationRail(
-                                modifier = Modifier.fillMaxHeight(),
-                                containerColor = MaterialTheme.colorScheme.surface,
-                                header = {
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        modifier = Modifier.padding(vertical = 16.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.AutoAwesome,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(32.dp),
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                        Text(
-                                            text = "v${BuildConfig.VERSION_NAME}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.outline,
-                                            modifier = Modifier.padding(top = 4.dp)
+                            if (useRail) {
+                                NavigationRail(
+                                    modifier = Modifier.fillMaxHeight(),
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    header = {
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            modifier = Modifier.padding(vertical = 16.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.AutoAwesome,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(32.dp),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = "v${BuildConfig.VERSION_NAME}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.outline,
+                                                modifier = Modifier.padding(top = 4.dp)
+                                            )
+                                        }
+                                    }
+                                ) {
+                                    val tabs = listOf(
+                                        Triple("Home", Icons.Default.Home, AppTab.HOME),
+                                        Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
+                                        Triple("Brain", Icons.Default.AutoAwesome, AppTab.BRAIN),
+                                        Triple("Notes", Icons.Default.Description, AppTab.NOTES),
+                                        Triple("Time", Icons.Default.Schedule, AppTab.TIME),
+                                        Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
+                                        Triple("Co-pilot", Icons.Default.QuestionAnswer, AppTab.COPILOT)
+                                    )
+                                    
+                                    tabs.forEach { (label, icon, tab) ->
+                                        NavigationRailItem(
+                                            icon = { Icon(icon, contentDescription = label) },
+                                            label = { Text(label) },
+                                            selected = currentTab == tab,
+                                            onClick = { navViewModel.setTab(tab) },
+                                            colors = NavigationRailItemDefaults.colors(
+                                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                            )
                                         )
                                     }
-                                }
-                            ) {
-                                val tabs = listOf(
-                                    Triple("Home", Icons.Default.Home, 0),
-                                    Triple("Feed", Icons.Default.Notifications, 1),
-                                    Triple("Brain", Icons.Default.AutoAwesome, 2),
-                                    Triple("Notes", Icons.Default.Description, 3),
-                                    Triple("Time", Icons.Default.Schedule, 4),
-                                    Triple("Co-pilot", Icons.Default.QuestionAnswer, 6)
-                                )
-                                
-                                tabs.forEach { (label, icon, index) ->
+
+                                    Spacer(modifier = Modifier.weight(1f))
+
                                     NavigationRailItem(
-                                        icon = { Icon(icon, contentDescription = label) },
-                                        label = { Text(label) },
-                                        selected = currentTab == index,
-                                        onClick = { viewModel.setTab(index) },
+                                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                                        label = { Text("Settings") },
+                                        selected = currentTab == AppTab.SETTINGS,
+                                        onClick = { navViewModel.setTab(AppTab.SETTINGS) },
                                         colors = NavigationRailItemDefaults.colors(
                                             selectedIconColor = MaterialTheme.colorScheme.primary,
                                             unselectedIconColor = MaterialTheme.colorScheme.secondary,
@@ -127,20 +188,6 @@ class MainActivity : ComponentActivity() {
                                         )
                                     )
                                 }
-
-                                Spacer(modifier = Modifier.weight(1f))
-
-                                NavigationRailItem(
-                                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                                    label = { Text("Settings") },
-                                    selected = currentTab == 5,
-                                    onClick = { viewModel.setTab(5) },
-                                    colors = NavigationRailItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                    )
-                                )
                             }
 
                             Column(modifier = Modifier.weight(1f)) {
@@ -151,65 +198,66 @@ class MainActivity : ComponentActivity() {
                                         .padding(horizontal = 32.dp, vertical = 24.dp)
                                 ) {
                                     Text(
-                                        text = when(currentTab) {
-                                            0 -> "Welcome to your 2ndBrain"
-                                            1 -> "Your daily stream of captures"
-                                            2 -> "Reflections & daily insights"
-                                            3 -> "Your space for ideas & thoughts"
-                                            4 -> "Understanding your routine"
-                                            5 -> "Configure capture and permissions"
-                                            6 -> "Ask your 2ndBrain Co-Pilot"
-                                            else -> "2ndBrain"
-                                        },
-                                        style = MaterialTheme.typography.headlineLarge,
+                                        text = currentTab.title,
+                                        style = MaterialTheme.typography.headlineMedium,
                                         fontWeight = FontWeight.Black,
-                                        lineHeight = 44.sp,
+                                        lineHeight = 36.sp,
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
 
                                 Box(modifier = Modifier.weight(1f)) {
                                     when (currentTab) {
-                                        0 -> {
-                                            val healthMetrics by viewModel.healthMetricsToday.collectAsStateWithLifecycle()
-                                            val healthPermissionGranted by viewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
-                                            val healthConnectManager = viewModel.healthConnectManager
+                                        AppTab.HOME -> {
+                                            val healthMetrics by homeViewModel.healthMetricsToday.collectAsStateWithLifecycle()
+                                            val healthPermissionGranted by homeViewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
+                                            val healthConnectAvailable = homeViewModel.healthConnectManager.isAvailable()
 
-                                            val activeHabits by viewModel.activeHabitsToday.collectAsStateWithLifecycle()
-                                            val completedHabitIds by viewModel.completedHabitIdsToday.collectAsStateWithLifecycle()
-                                            val pastWeekHabitCompletions by viewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
-                                            val senseOfDayScore by viewModel.senseOfDayScore.collectAsStateWithLifecycle()
-                                            val senseOfDayContext by viewModel.senseOfDayContext.collectAsStateWithLifecycle()
-                                            val todayTimelineEvents by viewModel.todayTimelineEvents.collectAsStateWithLifecycle()
-                                            val timelineConflicts by viewModel.timelineConflicts.collectAsStateWithLifecycle()
-                                            val inlineCopilotResponses by viewModel.inlineCopilotResponses.collectAsStateWithLifecycle()
-                                            val inlineCopilotLoading by viewModel.inlineCopilotLoading.collectAsStateWithLifecycle()
+                                            val activeHabits by homeViewModel.activeHabitsToday.collectAsStateWithLifecycle()
+                                            val completedHabitIds by homeViewModel.completedHabitIdsToday.collectAsStateWithLifecycle()
+                                            val pastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
+                                            val senseOfDayScore by homeViewModel.senseOfDayScore.collectAsStateWithLifecycle()
+                                            val senseOfDayContext by homeViewModel.senseOfDayContext.collectAsStateWithLifecycle()
+                                            val todayTimelineEvents by homeViewModel.todayTimelineEvents.collectAsStateWithLifecycle()
+                                            val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
+                                            val inlineCopilotResponses by homeViewModel.inlineCopilotResponses.collectAsStateWithLifecycle()
+                                            val inlineCopilotLoading by homeViewModel.inlineCopilotLoading.collectAsStateWithLifecycle()
+                                            
+                                            val allMemoriesForHome by homeViewModel.allMemoriesForHome.collectAsStateWithLifecycle()
+                                            val meditationSessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
+                                            val meditationStreaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
+                                            val vaultNotes by homeViewModel.vaultNotes.collectAsStateWithLifecycle()
+                                            val consolidatedUsage by homeViewModel.consolidatedUsage.collectAsStateWithLifecycle()
+                                            val summaries by homeViewModel.summaries.collectAsStateWithLifecycle()
 
                                             val requestPermissionLauncher = rememberLauncherForActivityResult(
                                                 contract = PermissionController.createRequestPermissionResultContract()
                                             ) { grantedPermissions ->
-                                                viewModel.checkHealthPermissionsAndSync()
+                                                homeViewModel.checkHealthPermissionsAndSync()
                                             }
 
                                             LaunchedEffect(Unit) {
-                                                viewModel.checkHealthPermissionsAndSync()
+                                                homeViewModel.checkHealthPermissionsAndSync()
+                                                homeViewModel.loadVaultNotes()
                                             }
 
                                             HomeScreen(
                                                 memories = allMemoriesForHome,
+                                                meditationSessions = meditationSessions,
+                                                meditationStreaks = meditationStreaks,
                                                 latestReflection = summaries.firstOrNull(),
                                                 notes = vaultNotes,
-                                                usageStats = usageStats,
-                                                onNavigateToTab = { viewModel.setTab(it) },
+                                                consolidatedUsage = consolidatedUsage,
+                                                onNavigateToTab = { navViewModel.setTab(it) },
                                                 healthMetrics = healthMetrics,
                                                 healthPermissionGranted = healthPermissionGranted,
-                                                healthConnectAvailable = healthConnectManager.isAvailable(),
+                                                healthConnectAvailable = healthConnectAvailable,
                                                 onConnectHealth = {
-                                                    requestPermissionLauncher.launch(healthConnectManager.permissions)
+                                                    requestPermissionLauncher.launch(homeViewModel.healthConnectManager.permissions)
                                                 },
                                                 activeHabits = activeHabits,
                                                 completedHabitIds = completedHabitIds,
-                                                onToggleHabit = { id -> viewModel.toggleHabitCompletion(id) },
+                                                onToggleHabit = { id -> homeViewModel.toggleHabitCompletion(id) },
                                                 pastWeekHabitCompletions = pastWeekHabitCompletions,
                                                 senseOfDayScore = senseOfDayScore,
                                                 senseOfDayContext = senseOfDayContext,
@@ -217,88 +265,109 @@ class MainActivity : ComponentActivity() {
                                                 timelineConflicts = timelineConflicts,
                                                 inlineCopilotResponses = inlineCopilotResponses,
                                                 inlineCopilotLoading = inlineCopilotLoading,
-                                                onDismissConflict = { id -> viewModel.dismissConflict(id) },
-                                                onDeepDiveCoPilotPrompt = { prompt -> viewModel.setPresetChatQueryAndNavigate(prompt) },
-                                                onResolveInline = { id, prompt -> viewModel.resolveInlineCopilot(id, prompt) },
+                                                onDismissConflict = { id -> homeViewModel.dismissConflict(id) },
+                                                onDeepDiveCoPilotPrompt = { prompt -> navViewModel.triggerCopilotQuery(prompt) },
+                                                onResolveInline = { id, prompt -> homeViewModel.resolveInlineCopilot(id, prompt) },
                                                 onAddManualEvent = { title, time ->
-                                                    viewModel.addManualAgendaEvent(title, time)
+                                                    homeViewModel.addManualAgendaEvent(title, time)
                                                 },
-                                                onRefreshHealth = { viewModel.checkHealthPermissionsAndSync() },
+                                                onRefreshHealth = { homeViewModel.checkHealthPermissionsAndSync() },
                                                 onDeepDiveCoPilot = { event ->
                                                     val query = """
                                                         Analyze my memories, notes, and habits for today's event: "${event.title}" scheduled at ${event.time} (${event.appName}). Please provide a cohesive context correlation summary to help me prepare.
                                                     """.trimIndent()
-                                                    viewModel.setPresetChatQueryAndNavigate(query)
+                                                    navViewModel.triggerCopilotQuery(query)
                                                 },
                                                 onDeleteManualEvent = { id ->
-                                                    viewModel.deleteManualAgendaEvent(id)
+                                                    homeViewModel.deleteManualAgendaEvent(id)
                                                 }
                                             )
                                         }
 
-                                        1 -> MemoryScreen(
-                                            pagedMemories = pagedMemories,
-                                            searchQuery = searchQuery,
-                                            onSearchQueryChange = { viewModel.setSearchQuery(it) },
-                                            onCaptureClipboard = {
-                                                clipboardCaptureManager.captureCurrentClipboard()
-                                            },
-                                            onMarkAsRead = { id -> viewModel.markAsRead(id) },
-                                            onClearAll = { viewModel.clearAllMemories() },
-                                            monitoredApps = settingsManager.getMonitoredApps(),
-                                            vaultUri = settingsManager.getObsidianVaultUri(),
-                                            onSaveVoiceNote = { text, audioPath ->
-                                                viewModel.saveVoiceNote(text, audioPath, settingsManager.getObsidianVaultUri())
-                                            },
-                                            onDeepDiveCoPilot = { memory ->
-                                                val key = memory.packageName ?: memory.source
-                                                val appName = try {
-                                                    val pm = packageManager
-                                                    val appInfo = pm.getApplicationInfo(key, 0)
-                                                    pm.getApplicationLabel(appInfo).toString()
-                                                } catch (e: Exception) {
-                                                    if (key == "clipboard") "Clipboard"
-                                                     else if (key == "voice") "Voice Memos"
-                                                     else key
-                                                }
-                                                val query = """
-                                                    Analyze my memories, notes, and habits for this captured log from "$appName": "${memory.title ?: "Untitled"}" - "${memory.content}". Please provide a cohesive context correlation summary to help me understand how this fits into my daily agenda and physical/cognitive trends.
-                                                """.trimIndent()
-                                                viewModel.setPresetChatQueryAndNavigate(query)
-                                            }
-                                        )
+                                        AppTab.FEED -> {
+                                            val pagedMemories = memoryViewModel.pagedMemories.collectAsLazyPagingItems()
+                                            val searchQuery by memoryViewModel.searchQuery.collectAsStateWithLifecycle()
 
-                                        2 -> {
-                                            val weeklyUsageStats by viewModel.weeklyUsageStats.collectAsStateWithLifecycle()
-                                            val weeklyHealthTrends by viewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
-                                            val pastWeekHabitCompletions by viewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
-                                            val isGeneratingWeeklyInsight by viewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
+                                            MemoryScreen(
+                                                pagedMemories = pagedMemories,
+                                                searchQuery = searchQuery,
+                                                onSearchQueryChange = { memoryViewModel.setSearchQuery(it) },
+                                                onCaptureClipboard = {
+                                                    clipboardCaptureManager.captureCurrentClipboard()
+                                                },
+                                                onMarkAsRead = { id -> memoryViewModel.markAsRead(id) },
+                                                onClearAll = { memoryViewModel.clearAllMemories() },
+                                                monitoredApps = settingsManager.getMonitoredApps(),
+                                                vaultUri = settingsManager.getObsidianVaultUri(),
+                                                onSaveVoiceNote = { text, audioPath ->
+                                                    memoryViewModel.saveVoiceNote(text, audioPath, settingsManager.getObsidianVaultUri())
+                                                },
+                                                onDeepDiveCoPilot = { memory ->
+                                                    val key = memory.packageName ?: memory.source
+                                                    val appName = try {
+                                                        val pm = packageManager
+                                                        val appInfo = pm.getApplicationInfo(key, 0)
+                                                        pm.getApplicationLabel(appInfo).toString()
+                                                    } catch (e: Exception) {
+                                                        if (key == "clipboard") "Clipboard"
+                                                         else if (key == "voice") "Voice Memos"
+                                                         else key
+                                                    }
+                                                    val query = """
+                                                        Analyze my memories, notes, and habits for this captured log from "$appName": "${memory.title ?: "Untitled"}" - "${memory.content}". Please provide a cohesive context correlation summary to help me understand how this fits into my daily agenda and physical/cognitive trends.
+                                                    """.trimIndent()
+                                                    navViewModel.triggerCopilotQuery(query)
+                                                }
+                                            )
+                                        }
+
+                                        AppTab.BRAIN -> {
+                                            val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
+                                            val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
+                                            val weeklyHealthTrends by reflectionViewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
+                                            val isGeneratingReflection by reflectionViewModel.isGeneratingReflection.collectAsStateWithLifecycle()
+                                            val isGeneratingWeeklyInsight by reflectionViewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
+
+                                            val homeActiveHabits by homeViewModel.activeHabitsToday.collectAsStateWithLifecycle()
+                                            val homePastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
+
+                                            LaunchedEffect(Unit) {
+                                                reflectionViewModel.loadWeeklyHealthTrends()
+                                            }
 
                                             ReflectionScreen(
                                                 summaries = summaries,
                                                 settingsManager = settingsManager,
                                                 isGenerating = isGeneratingReflection,
-                                                onGenerateReflection = { viewModel.generateReflection() },
-                                                onCancelReflection = { viewModel.cancelReflection() },
-                                                onClearAll = { viewModel.clearAllSummaries() },
-                                                onDeleteSummary = { id -> viewModel.deleteSummary(id) },
+                                                onGenerateReflection = { reflectionViewModel.generateReflection() },
+                                                onCancelReflection = { reflectionViewModel.cancelReflection() },
+                                                onClearAll = { reflectionViewModel.clearAllSummaries() },
+                                                onDeleteSummary = { id -> reflectionViewModel.deleteSummary(id) },
                                                 weeklyUsageStats = weeklyUsageStats,
                                                 weeklyHealthTrends = weeklyHealthTrends,
-                                                pastWeekHabitCompletions = pastWeekHabitCompletions,
+                                                pastWeekHabitCompletions = homePastWeekHabitCompletions,
                                                 isGeneratingWeeklyInsight = isGeneratingWeeklyInsight,
-                                                onGenerateWeeklyInsight = { viewModel.generateWeeklyInsight() }
+                                                onGenerateWeeklyInsight = { reflectionViewModel.generateWeeklyInsight() }
                                             )
                                         }
 
-                                        3 -> NotesScreen(settingsManager = settingsManager)
-                                        4 -> DigitalTimeScreen(digitalTimeManager = digitalTimeManager)
-                                        5 -> {
-                                            val activeHabits by viewModel.activeHabitsToday.collectAsStateWithLifecycle()
+                                        AppTab.NOTES -> NotesScreen(settingsManager = settingsManager)
+                                        AppTab.MEDITATION -> {
+                                            val sessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
+                                            val streaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
+                                            MeditationScreen(
+                                                sessions = sessions,
+                                                streaks = streaks
+                                            )
+                                        }
+                                        AppTab.TIME -> DigitalTimeScreen()
+                                        AppTab.SETTINGS -> {
+                                            val activeHabits by settingsViewModel.activeHabits.collectAsStateWithLifecycle()
                                             AppCaptureSettingsScreen(
                                                 settingsManager = settingsManager,
                                                 onBack = { 
-                                                    viewModel.setTab(0)
-                                                    viewModel.refreshMonitoredApps()
+                                                    navViewModel.setTab(AppTab.HOME)
+                                                    homeViewModel.refreshMonitoredApps()
                                                 },
                                                 onRestartService = {
                                                     val componentName = android.content.ComponentName(this@MainActivity, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java)
@@ -306,18 +375,18 @@ class MainActivity : ComponentActivity() {
                                                     packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
                                                 },
                                                 activeHabits = activeHabits,
-                                                onAddCustomHabit = { name, time, isMed -> viewModel.addCustomHabit(name, time, isMed) },
-                                                onDeleteHabit = { id -> viewModel.deleteHabit(id) },
-                                                onToggleHabitActive = { id -> viewModel.toggleHabitActive(id) }
+                                                onAddCustomHabit = { name, time, isMed -> settingsViewModel.addCustomHabit(name, time, isMed) },
+                                                onDeleteHabit = { id -> settingsViewModel.deleteHabit(id) },
+                                                onToggleHabitActive = { id -> settingsViewModel.toggleHabitActive(id) }
                                             )
                                         }
-                                        6 -> {
-                                            val chatMessages by viewModel.chatMessages.collectAsState()
-                                            val chatIsThinking by viewModel.chatIsThinking.collectAsState()
+                                        AppTab.COPILOT -> {
+                                            val chatMessages by copilotViewModel.chatMessages.collectAsStateWithLifecycle()
+                                            val chatIsThinking by copilotViewModel.chatIsThinking.collectAsStateWithLifecycle()
                                             com.alex.a2ndbrain.ui.chat.BrainChatScreen(
                                                 messages = chatMessages,
                                                 isThinking = chatIsThinking,
-                                                onSendMessage = { viewModel.sendChatMessage(it) }
+                                                onSendMessage = { copilotViewModel.sendChatMessage(it) }
                                             )
                                         }
                                     }

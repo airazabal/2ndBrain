@@ -30,12 +30,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 
 
+import com.alex.a2ndbrain.ui.theme.BrainTheme
+
 class AppCaptureSettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val settingsManager = CaptureSettingsManager(this)
         setContent {
-            MaterialTheme {
+            BrainTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     AppCaptureSettingsScreen(
                         settingsManager = settingsManager,

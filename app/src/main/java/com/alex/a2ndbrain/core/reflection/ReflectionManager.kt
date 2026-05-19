@@ -13,9 +13,14 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
-class ReflectionManager(private val context: Context) {
-    private val database = AppDatabase.getDatabase(context)
-    private val settingsManager = CaptureSettingsManager(context)
+class ReflectionManager(
+    private val context: Context,
+    private val memoryDao: com.alex.a2ndbrain.core.memory.MemoryDao,
+    private val habitsDao: com.alex.a2ndbrain.core.memory.HabitsDao,
+    private val digitalTimeManager: DigitalTimeManager,
+    private val settingsManager: CaptureSettingsManager,
+    private val geminiAgent: GeminiAgent
+) {
 
     fun schedulePeriodicReflection() {
         val constraints = Constraints.Builder()
@@ -71,16 +76,14 @@ class ReflectionManager(private val context: Context) {
         val searchStartTime = if (isMorning) startOfToday - (12 * 60 * 60 * 1000) else startOfToday
 
         // Sync latest digital time before reflection
-        val usageRepository = com.alex.a2ndbrain.core.usage.UsageRepository(database.memoryDao())
-        val digitalTimeManager = DigitalTimeManager(context, usageRepository, settingsManager)
         digitalTimeManager.syncUsageStats()
 
-        val memories = database.memoryDao().getMemoriesSince(searchStartTime)
+        val memories = memoryDao.getMemoriesSince(searchStartTime)
         if (memories.isEmpty()) {
             return "No sufficient data found to generate a reflection yet."
         }
 
-        val usageStats = database.memoryDao().getUsageStatsSince(todayStr)
+        val usageStats = memoryDao.getUsageStatsSince(todayStr)
         val usageByDevice = usageStats.groupBy { it.deviceName }
         
         val usageReport = usageByDevice.entries.joinToString("\n\n") { (device, stats) ->
@@ -117,8 +120,8 @@ class ReflectionManager(private val context: Context) {
         // Fetch daily routines progress (Recommendation A)
         var habitsContextStr = ""
         try {
-            val habitsList = database.habitsDao().getAllHabitsSync()
-            val completions = database.habitsDao().getCompletionsForDateSync(todayStr)
+            val habitsList = habitsDao.getAllHabitsSync()
+            val completions = habitsDao.getCompletionsForDateSync(todayStr)
             val completedIds = completions.map { it.habitId }.toSet()
             if (habitsList.isNotEmpty()) {
                 val habitsProgress = habitsList.joinToString("\n") { 
@@ -128,6 +131,24 @@ class ReflectionManager(private val context: Context) {
                 habitsContextStr = """
                     DAILY ROUTINES PROGRESS:
                     $habitsProgress
+                """.trimIndent()
+            }
+        } catch (e: Exception) {
+            // Safe fallback
+        }
+
+        // Fetch meditation logs from Zendence (packageName == "com.alex.zendence")
+        var meditationContextStr = ""
+        try {
+            val zendenceMemories = memories.filter { it.packageName == "com.alex.zendence" }
+            val parsedSessions = zendenceMemories.mapNotNull { com.alex.a2ndbrain.core.meditation.MeditationManager.parseMeditationSession(it) }
+            if (parsedSessions.isNotEmpty()) {
+                val totalMins = parsedSessions.sumOf { it.durationMinutes }
+                val insights = parsedSessions.mapNotNull { it.insight }.joinToString("; ") { "\"$it\"" }
+                meditationContextStr = """
+                    MEDITATION SESSIONS (Zendence):
+                    - Meditated: $totalMins minutes today across ${parsedSessions.size} session(s)
+                    - Insights: $insights
                 """.trimIndent()
             }
         } catch (e: Exception) {
@@ -151,6 +172,8 @@ class ReflectionManager(private val context: Context) {
                     $healthContextStr
                     
                     $habitsContextStr
+                    
+                    $meditationContextStr
                 """.trimIndent()
 
                 try {
@@ -158,7 +181,7 @@ class ReflectionManager(private val context: Context) {
                     withTimeout(30000L) {
                         val startTime = System.currentTimeMillis()
                         val lastSuccessful = settingsManager.getLastSuccessfulModel()
-                        val result = GeminiAgent(apiKey).summarizeMemories(
+                        val result = geminiAgent.summarizeMemories(
                             memoriesText = promptContext, 
                             preferredModel = preferredModel, 
                             lastSuccessfulModel = lastSuccessful,
@@ -186,6 +209,8 @@ class ReflectionManager(private val context: Context) {
                     $healthContextStr
                     
                     $habitsContextStr
+                    
+                    $meditationContextStr
                 """.trimIndent()
 
                 val startTime = System.currentTimeMillis()
@@ -214,7 +239,7 @@ class ReflectionManager(private val context: Context) {
             modelName = modelUsed
         )
 
-        database.memoryDao().insertSummary(summaryEntity)
+        memoryDao.insertSummary(summaryEntity)
         return null // Success
     }
 
@@ -247,12 +272,12 @@ class ReflectionManager(private val context: Context) {
         // 2. Habits compliance checklist (past 7 days)
         var weeklyHabitsStr = ""
         try {
-            val habitsList = database.habitsDao().getAllHabitsSync()
+            val habitsList = habitsDao.getAllHabitsSync()
             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             val cal = Calendar.getInstance()
             cal.add(Calendar.DAY_OF_YEAR, -6)
             val startDateStr = dateFormat.format(cal.time)
-            val completions = database.habitsDao().getCompletionsInRangeSync(startDateStr, todayStr)
+            val completions = habitsDao.getCompletionsInRangeSync(startDateStr, todayStr)
             val completionsByDate = completions.groupBy { it.date }
             if (habitsList.isNotEmpty()) {
                 val builder = StringBuilder()
@@ -276,7 +301,7 @@ class ReflectionManager(private val context: Context) {
             val cal = Calendar.getInstance()
             cal.add(Calendar.DAY_OF_YEAR, -6)
             val startDateStr = dateFormat.format(cal.time)
-            val stats = database.memoryDao().getUsageStatsSince(startDateStr)
+            val stats = memoryDao.getUsageStatsSince(startDateStr)
             val statsByDate = stats.groupBy { it.date }
             val builder = StringBuilder()
             builder.append("PAST 7 DAYS DIGITAL SCREEN TIME LOGS:\n")
@@ -294,6 +319,34 @@ class ReflectionManager(private val context: Context) {
             // Ignore
         }
 
+        // 4. Meditation logs (past 7 days)
+        var weeklyMeditationStr = ""
+        try {
+            val startCal = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, -6)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val weeklyMemories = memoryDao.getMemoriesSince(startCal.timeInMillis)
+            val zendenceMemories = weeklyMemories.filter { it.packageName == "com.alex.zendence" }
+            val parsedSessions = zendenceMemories.mapNotNull { com.alex.a2ndbrain.core.meditation.MeditationManager.parseMeditationSession(it) }
+            val streaks = com.alex.a2ndbrain.core.meditation.MeditationManager.calculateStreaks(parsedSessions)
+            
+            if (parsedSessions.isNotEmpty()) {
+                weeklyMeditationStr = """
+                    PAST 7 DAYS MEDITATION LOGS (Zendence):
+                    - Total completed sessions: ${parsedSessions.size}
+                    - Contiguous days this week: ${streaks.currentWeekStreak} days
+                    - Max overall streak: ${streaks.maxOverallStreak} days
+                    - Total duration: ${parsedSessions.sumOf { it.durationMinutes }} mins
+                """.trimIndent()
+            }
+        } catch (e: Exception) {
+            // Ignore
+        }
+
         val promptContext = """
             You are the user's private cognitive correlation co-pilot.
             Below is their multi-dimensional physical, digital, and routine compliance history for the last 7 days.
@@ -306,6 +359,8 @@ class ReflectionManager(private val context: Context) {
             $weeklyHabitsStr
             
             $weeklyUsageStr
+            
+            $weeklyMeditationStr
         """.trimIndent()
 
         val modelPicker = ModelPicker(context)
@@ -319,7 +374,7 @@ class ReflectionManager(private val context: Context) {
                     withTimeout(30000L) {
                         val startTime = System.currentTimeMillis()
                         val lastSuccessful = settingsManager.getLastSuccessfulModel()
-                        val result = GeminiAgent(apiKey).chatInference(
+                        val result = geminiAgent.chatInference(
                             prompt = promptContext,
                             preferredModel = preferredModel,
                             lastSuccessfulModel = lastSuccessful,
@@ -351,7 +406,7 @@ class ReflectionManager(private val context: Context) {
             modelName = modelUsed
         )
 
-        database.memoryDao().insertSummary(summaryEntity)
+        memoryDao.insertSummary(summaryEntity)
         return null // Success
     }
 
@@ -438,7 +493,7 @@ class ReflectionManager(private val context: Context) {
                     withTimeout(30000L) {
                         val startTime = System.currentTimeMillis()
                         val lastSuccessful = settingsManager.getLastSuccessfulModel()
-                        val result = GeminiAgent(apiKey).chatInference(
+                        val result = geminiAgent.chatInference(
                             prompt = promptContext, 
                             preferredModel = preferredModel,
                             lastSuccessfulModel = lastSuccessful,

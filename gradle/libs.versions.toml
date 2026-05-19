@@ -23,8 +23,10 @@ litertlm = "0.11.0"
 koin = "3.5.6"
 paging = "3.3.0"
 healthConnect = "1.1.0-alpha10"
+securityCrypto = "1.1.0-alpha06"
 
 [libraries]
+androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 androidx-health-connect = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }

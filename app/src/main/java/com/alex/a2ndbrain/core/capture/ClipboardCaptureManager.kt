@@ -3,16 +3,18 @@ package com.alex.a2ndbrain.core.capture
 import android.content.ClipboardManager
 import android.content.Context
 import android.util.Log
-import com.alex.a2ndbrain.core.memory.AppDatabase
+
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class ClipboardCaptureManager(private val context: Context) {
+class ClipboardCaptureManager(
+    private val context: Context,
+    private val memoryDao: com.alex.a2ndbrain.core.memory.MemoryDao
+) {
 
     private val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    private val database = AppDatabase.getDatabase(context)
     private val scope = CoroutineScope(Dispatchers.IO)
 
     fun captureCurrentClipboard() {
@@ -27,7 +29,7 @@ class ClipboardCaptureManager(private val context: Context) {
 
     private fun saveToMemory(text: String) {
         scope.launch {
-            val existing = database.memoryDao().findExisting("clipboard", null, "Copied Text", text)
+            val existing = memoryDao.findExisting("clipboard", null, "Copied Text", text)
             if (existing != null) {
                 // If it's identical, just update the timestamp and count
                 val updated = existing.copy(
@@ -35,7 +37,7 @@ class ClipboardCaptureManager(private val context: Context) {
                     duplicateCount = existing.duplicateCount + 1,
                     isRead = false // Mark as unread if re-copied
                 )
-                database.memoryDao().insert(updated)
+                memoryDao.insert(updated)
                 Log.d("ClipboardCapture", "Updated duplicate: count=${updated.duplicateCount}")
             } else {
                 val entity = MemoryEntity.create(
@@ -44,7 +46,7 @@ class ClipboardCaptureManager(private val context: Context) {
                     title = "Copied Text",
                     content = text
                 )
-                database.memoryDao().insert(entity)
+                memoryDao.insert(entity)
                 Log.d("ClipboardCapture", "Captured: ${text.take(20)}...")
             }
         }

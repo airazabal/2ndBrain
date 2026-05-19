@@ -192,4 +192,8 @@ class DigitalTimeManager(
         return stats.groupBy { it.packageName }
             .mapValues { entry -> entry.value.sumOf { it.totalTimeVisibleMs } }
     }
+
+    fun getUsageStatsSinceFlow(startDate: String): kotlinx.coroutines.flow.Flow<List<UsageStatEntity>> {
+        return usageRepository.getUsageStatsSinceFlow(startDate)
+    }
 }

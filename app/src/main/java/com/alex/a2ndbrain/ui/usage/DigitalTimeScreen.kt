@@ -20,14 +20,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.BuildConfig
-import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
-import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.ui.theme.PastelBlue
 import com.alex.a2ndbrain.ui.theme.PastelPurple
-import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
+import com.alex.a2ndbrain.ConsolidatedUsage
+import org.koin.androidx.compose.koinViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 enum class TimePeriod {
     TODAY, WEEK, MONTH
@@ -35,50 +33,19 @@ enum class TimePeriod {
 
 @Composable
 fun DigitalTimeScreen(
-    digitalTimeManager: DigitalTimeManager,
+    viewModel: DigitalTimeViewModel = koinViewModel(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val database = remember { AppDatabase.getDatabase(context) }
     
-    var selectedPeriod by remember { mutableStateOf(TimePeriod.TODAY) }
-    var isPermissionGranted by remember { mutableStateOf(digitalTimeManager.isPermissionGranted()) }
-    var isSyncing by remember { mutableStateOf(false) }
-
-    val startDate = remember(selectedPeriod) {
-        val cal = Calendar.getInstance()
-        when (selectedPeriod) {
-            TimePeriod.TODAY -> {} // Already today
-            TimePeriod.WEEK -> cal.add(Calendar.DAY_OF_YEAR, -7)
-            TimePeriod.MONTH -> cal.add(Calendar.MONTH, -1)
-        }
-        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
-    }
-
-    val usageStats by database.memoryDao().getUsageStatsSinceFlow(startDate).collectAsState(initial = emptyList())
-    
-    val consolidatedStats = remember(usageStats) {
-        usageStats.groupBy { it.packageName }
-            .map { (packageName, stats) ->
-                val totalTime = stats.sumOf { it.totalTimeVisibleMs }
-                val deviceBreakdown = stats.groupBy { it.deviceName }
-                    .mapValues { entry -> entry.value.sumOf { it.totalTimeVisibleMs } }
-                ConsolidatedUsage(
-                    packageName = packageName,
-                    totalTimeMs = totalTime,
-                    deviceBreakdown = deviceBreakdown,
-                    lastTimestamp = stats.maxOf { it.lastTimestamp }
-                )
-            }.sortedByDescending { it.totalTimeMs }
-    }
+    val selectedPeriod by viewModel.selectedPeriod.collectAsStateWithLifecycle()
+    val isPermissionGranted by viewModel.isPermissionGranted.collectAsStateWithLifecycle()
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val consolidatedStats by viewModel.consolidatedUsage.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
-        if (isPermissionGranted) {
-            isSyncing = true
-            digitalTimeManager.syncUsageStats()
-            isSyncing = false
-        }
+        viewModel.updatePermissionStatus()
+        viewModel.syncUsageStats()
     }
 
     LazyColumn(
@@ -95,13 +62,7 @@ fun DigitalTimeScreen(
             ) {
                 if (isPermissionGranted) {
                     IconButton(
-                        onClick = {
-                            scope.launch {
-                                isSyncing = true
-                                digitalTimeManager.syncUsageStats()
-                                isSyncing = false
-                            }
-                        },
+                        onClick = { viewModel.syncUsageStats() },
                         enabled = !isSyncing
                     ) {
                         if (isSyncing) {
@@ -120,7 +81,7 @@ fun DigitalTimeScreen(
                 TimePeriod.entries.forEachIndexed { index, period ->
                     SegmentedButton(
                         selected = selectedPeriod == period,
-                        onClick = { selectedPeriod = period },
+                        onClick = { viewModel.setPeriod(period) },
                         shape = SegmentedButtonDefaults.itemShape(index = index, count = TimePeriod.entries.size)
                     ) {
                         Text(period.name.lowercase().replaceFirstChar { it.uppercase() })
@@ -231,13 +192,6 @@ fun DigitalTimeScreen(
     }
 }
 
-data class ConsolidatedUsage(
-    val packageName: String,
-    val totalTimeMs: Long,
-    val deviceBreakdown: Map<String, Long>,
-    val lastTimestamp: Long
-)
-
 @Composable
 fun UsageBarChart(topApps: List<ConsolidatedUsage>) {
     val maxTime = topApps.firstOrNull()?.totalTimeMs ?: 1L
@@ -246,7 +200,7 @@ fun UsageBarChart(topApps: List<ConsolidatedUsage>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color.White, RoundedCornerShape(24.dp))
+            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(24.dp))
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -299,7 +253,7 @@ fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
