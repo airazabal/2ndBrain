@@ -9,6 +9,7 @@ import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
+import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,10 +37,11 @@ val appModule = module {
     single { ReflectionManager(androidContext(), get(), get(), get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
+    single { ZendenceMeditationRepository(androidContext()) }
 
     // ViewModels
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), get(), androidContext(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get(), get(), get(), get(), get()) }

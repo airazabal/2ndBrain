@@ -28,9 +28,7 @@ import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.reflection.ModelDownloader
 import com.alex.a2ndbrain.core.reflection.ModelPicker
-import com.alex.a2ndbrain.ui.theme.PastelBlue
-import com.alex.a2ndbrain.ui.theme.PastelGreen
-import com.alex.a2ndbrain.ui.theme.PastelGreenText
+import com.alex.a2ndbrain.ui.theme.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -1064,20 +1062,20 @@ private fun SummaryCard(summary: DailySummaryEntity, onDelete: () -> Unit) {
                 verticalAlignment = Alignment.Top
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (summary.type == "briefing") PastelGreen else PastelBlue),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = if (summary.type == "briefing") PastelGreenText else MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (summary.type == "briefing") PastelGreen else PastelBlue),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = if (summary.type == "briefing") PastelGreenText else PastelBlueText,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(

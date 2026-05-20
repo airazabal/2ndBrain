@@ -110,4 +110,12 @@ class CaptureSettingsManager(private val context: Context) {
     fun saveLastSuccessfulModel(modelName: String) {
         prefs.edit().putString("last_successful_model", modelName).apply()
     }
+
+    fun getThemePreference(): String {
+        return prefs.getString("theme_preference", "SYSTEM") ?: "SYSTEM"
+    }
+
+    fun saveThemePreference(theme: String) {
+        prefs.edit().putString("theme_preference", theme).apply()
+    }
 }

@@ -1229,15 +1229,15 @@ fun SummaryGrid(
                 .fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            SummaryItem(label = "Total", value = totalFeed.toString(), color = PastelBlue)
-            SummaryItem(label = "Unread", value = unreadFeed.toString(), color = PastelRed)
-            SummaryItem(label = "Apps", value = appsCount.toString(), color = PastelGreen)
+            SummaryItem(label = "Total", value = totalFeed.toString(), color = PastelBlue, textColor = PastelBlueText)
+            SummaryItem(label = "Unread", value = unreadFeed.toString(), color = PastelRed, textColor = PastelRedText)
+            SummaryItem(label = "Apps", value = appsCount.toString(), color = PastelGreen, textColor = PastelGreenText)
         }
     }
 }
 
 @Composable
-fun SummaryItem(label: String, value: String, color: Color) {
+fun SummaryItem(label: String, value: String, color: Color, textColor: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
@@ -1250,7 +1250,7 @@ fun SummaryItem(label: String, value: String, color: Color) {
                 text = value,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+                color = textColor
             )
         }
         Spacer(modifier = Modifier.height(8.dp))
@@ -1271,6 +1271,20 @@ fun HomeSectionCard(
     onClick: () -> Unit,
     content: @Composable () -> Unit
 ) {
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val onPrimaryColor = MaterialTheme.colorScheme.onPrimary
+    val tintColor = remember(iconColor, primaryColor, onPrimaryColor) {
+        when (iconColor) {
+            PastelBlue -> PastelBlueText
+            PastelGreen -> PastelGreenText
+            PastelRed -> PastelRedText
+            PastelYellow -> PastelYellowText
+            PastelPurple -> PastelPurpleText
+            primaryColor -> onPrimaryColor
+            else -> onPrimaryColor
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1295,7 +1309,7 @@ fun HomeSectionCard(
                         imageVector = icon,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                        tint = tintColor
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))

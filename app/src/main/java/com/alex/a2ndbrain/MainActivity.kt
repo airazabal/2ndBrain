@@ -59,14 +59,20 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            BrainTheme {
+            val settingsViewModel: SettingsViewModel = koinViewModel()
+            val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
+            val isDark = when (themePreference) {
+                "LIGHT" -> false
+                "DARK" -> true
+                else -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+            BrainTheme(darkTheme = isDark) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     val navViewModel: NavigationViewModel = koinViewModel()
                     val homeViewModel: HomeViewModel = koinViewModel()
                     val memoryViewModel: MemoryViewModel = koinViewModel()
                     val reflectionViewModel: ReflectionViewModel = koinViewModel()
                     val copilotViewModel: CopilotViewModel = koinViewModel()
-                    val settingsViewModel: SettingsViewModel = koinViewModel()
                     
                     val currentTab by navViewModel.currentTab.collectAsStateWithLifecycle()
                     val error by navViewModel.errorFlow.collectAsStateWithLifecycle()
@@ -363,8 +369,11 @@ class MainActivity : ComponentActivity() {
                                         AppTab.TIME -> DigitalTimeScreen()
                                         AppTab.SETTINGS -> {
                                             val activeHabits by settingsViewModel.activeHabits.collectAsStateWithLifecycle()
+                                            val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
                                             AppCaptureSettingsScreen(
                                                 settingsManager = settingsManager,
+                                                themePreference = themePreference,
+                                                onThemeChange = { settingsViewModel.saveThemePreference(it) },
                                                 onBack = { 
                                                     navViewModel.setTab(AppTab.HOME)
                                                     homeViewModel.refreshMonitoredApps()

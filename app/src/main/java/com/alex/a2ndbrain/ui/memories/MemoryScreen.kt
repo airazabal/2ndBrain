@@ -406,6 +406,15 @@ private fun GroupedMemoryItem(
                     .clickable { expanded = !expanded },
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                val cardTextColor = remember(cardColor) {
+                    when (cardColor) {
+                        PastelBlue -> PastelBlueText
+                        PastelGreen -> PastelGreenText
+                        PastelRed -> PastelRedText
+                        PastelYellow -> PastelYellowText
+                        else -> PastelPurpleText
+                    }
+                }
                 Box(
                     modifier = Modifier
                         .size(24.dp)
@@ -417,7 +426,7 @@ private fun GroupedMemoryItem(
                         text = displayName.take(1).uppercase(),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                        color = cardTextColor
                     )
                 }
                 Spacer(modifier = Modifier.width(8.dp))

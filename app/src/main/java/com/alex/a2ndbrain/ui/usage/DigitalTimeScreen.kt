@@ -21,8 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.BuildConfig
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
-import com.alex.a2ndbrain.ui.theme.PastelBlue
-import com.alex.a2ndbrain.ui.theme.PastelPurple
+import com.alex.a2ndbrain.ui.theme.*
 import com.alex.a2ndbrain.ConsolidatedUsage
 import org.koin.androidx.compose.koinViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -237,6 +236,17 @@ fun UsageBarChart(topApps: List<ConsolidatedUsage>) {
     }
 }
 
+private fun getAppColors(appName: String): Pair<Color, Color> {
+    val hash = appName.hashCode()
+    return when (kotlin.math.abs(hash) % 5) {
+        0 -> PastelBlue to PastelBlueText
+        1 -> PastelRed to PastelRedText
+        2 -> PastelGreen to PastelGreenText
+        3 -> PastelYellow to PastelYellowText
+        else -> PastelPurple to PastelPurpleText
+    }
+}
+
 @Composable
 fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
     val context = LocalContext.current
@@ -248,6 +258,8 @@ fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
             stat.packageName.substringAfterLast(".")
         }
     }
+    
+    val colors = remember(appName) { getAppColors(appName) }
     
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -266,14 +278,14 @@ fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
                         modifier = Modifier
                             .size(32.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .background(PastelPurple),
+                            .background(colors.first),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = appName.take(1).uppercase(),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                            color = colors.second
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
@@ -331,13 +343,13 @@ fun UsageSummaryCard(totalTimeMs: Long, period: TimePeriod) {
             Text(
                 text = "Total Usage (${period.name.lowercase().replaceFirstChar { it.uppercase() }})", 
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                color = PastelBlueText.copy(alpha = 0.8f)
             )
             Text(
                 text = formatDuration(totalTimeMs),
                 style = MaterialTheme.typography.displayMedium,
                 fontWeight = FontWeight.Black,
-                color = MaterialTheme.colorScheme.primary
+                color = PastelBlueText
             )
         }
     }

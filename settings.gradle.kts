@@ -24,8 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "2ndBrain"
 include(":app")
-buildCache {
-	local {
-	  targetSizeInMB = 4096
-	}
-} 
+

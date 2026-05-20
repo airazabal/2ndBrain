@@ -7,8 +7,10 @@ import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.HabitEntity
 import com.alex.a2ndbrain.core.memory.HabitsDao
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -18,6 +20,14 @@ class SettingsViewModel(
     private val settingsManager: CaptureSettingsManager,
     private val applicationContext: Context
 ) : ViewModel() {
+
+    private val _themePreference = MutableStateFlow(settingsManager.getThemePreference())
+    val themePreference = _themePreference.asStateFlow()
+
+    fun saveThemePreference(theme: String) {
+        settingsManager.saveThemePreference(theme)
+        _themePreference.value = theme
+    }
 
     val activeHabits: StateFlow<List<HabitEntity>> = habitsDao.getActiveHabits()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())

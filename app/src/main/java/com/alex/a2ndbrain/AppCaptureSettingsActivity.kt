@@ -37,10 +37,21 @@ class AppCaptureSettingsActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val settingsManager = CaptureSettingsManager(this)
         setContent {
-            BrainTheme {
+            var themePreference by remember { mutableStateOf(settingsManager.getThemePreference()) }
+            val isDark = when (themePreference) {
+                "LIGHT" -> false
+                "DARK" -> true
+                else -> androidx.compose.foundation.isSystemInDarkTheme()
+            }
+            BrainTheme(darkTheme = isDark) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     AppCaptureSettingsScreen(
                         settingsManager = settingsManager,
+                        themePreference = themePreference,
+                        onThemeChange = { newTheme ->
+                            settingsManager.saveThemePreference(newTheme)
+                            themePreference = newTheme
+                        },
                         onBack = { finish() },
                         onRestartService = {
                             val componentName = android.content.ComponentName(this, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java)
@@ -57,6 +68,8 @@ class AppCaptureSettingsActivity : ComponentActivity() {
 @Composable
 fun AppCaptureSettingsScreen(
     settingsManager: CaptureSettingsManager,
+    themePreference: String,
+    onThemeChange: (String) -> Unit,
     onBack: () -> Unit,
     onRestartService: () -> Unit,
     activeHabits: List<HabitEntity> = emptyList(),
@@ -238,6 +251,67 @@ fun AppCaptureSettingsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
                             Text("OPEN APP INFO")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "🎨 Theme Appearance",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Choose your preferred appearance for 2ndBrain.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            "SYSTEM" to "System",
+                            "LIGHT" to "Light",
+                            "DARK" to "Dark"
+                        ).forEach { (value, label) ->
+                            val isSelected = themePreference == value
+                            Button(
+                                onClick = { onThemeChange(value) },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isSelected) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
+                                    },
+                                    contentColor = if (isSelected) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    }
+                                ),
+                                contentPadding = PaddingValues(vertical = 8.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

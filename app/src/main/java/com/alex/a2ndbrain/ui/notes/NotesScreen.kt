@@ -30,8 +30,7 @@ import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
 import com.alex.a2ndbrain.BuildConfig
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
-import com.alex.a2ndbrain.ui.theme.PastelBlue
-import com.alex.a2ndbrain.ui.theme.PastelGreen
+import com.alex.a2ndbrain.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -298,7 +297,7 @@ fun NoteOrFolderItem(
                     imageVector = if (item.isDirectory) Icons.Default.Folder else Icons.Default.Description,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                    tint = if (item.isDirectory) PastelGreenText else PastelBlueText
                 )
             }
             

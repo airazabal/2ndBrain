@@ -19,15 +19,16 @@ import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
+import com.alex.a2ndbrain.ConsolidatedUsage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
-import com.alex.a2ndbrain.ConsolidatedUsage
 import com.alex.a2ndbrain.core.meditation.MeditationManager
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
+import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
 
 class HomeViewModel(
     private val memoryRepository: MemoryRepository,
@@ -36,7 +37,8 @@ class HomeViewModel(
     private val reflectionManager: ReflectionManager,
     val healthConnectManager: HealthConnectManager,
     private val habitsDao: HabitsDao,
-    private val applicationContext: Context
+    private val applicationContext: Context,
+    private val zendenceMeditationRepository: ZendenceMeditationRepository
 ) : ViewModel() {
 
     private val _currentTab = MutableStateFlow(0)
@@ -67,10 +69,19 @@ class HomeViewModel(
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val meditationSessions: StateFlow<List<MeditationSession>> = allMemoriesForHome.map { memories ->
-        memories.filter { it.packageName == "com.alex.zendence" }
-            .mapNotNull { MeditationManager.parseMeditationSession(it) }
-    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+    private val _meditationSessions = MutableStateFlow<List<MeditationSession>>(emptyList())
+    val meditationSessions: StateFlow<List<MeditationSession>> = _meditationSessions.asStateFlow()
+
+    init {
+        refreshMeditationSessions()
+    }
+
+    fun refreshMeditationSessions() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val sessions = zendenceMeditationRepository.loadSessions()
+            _meditationSessions.value = sessions
+        }
+    }
 
     val meditationStreaks: StateFlow<StreakResult> = meditationSessions.map { sessions ->
         MeditationManager.calculateStreaks(sessions)
