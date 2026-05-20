@@ -394,6 +394,12 @@ fun MemoryScreen(
                                     } else {
                                         expandedAppGroups + groupKey
                                     }
+                                },
+                                onMarkAppAsRead = {
+                                    val unreadIds = appGroup.memories.filter { !it.isRead }.flatMap { it.allIds }
+                                    if (unreadIds.isNotEmpty()) {
+                                        onMarkAsRead(unreadIds)
+                                    }
                                 }
                             )
                         }
@@ -658,6 +664,7 @@ private fun AppGroupHeader(
     totalCount: Int,
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
+    onMarkAppAsRead: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val chipColor = when (source) {
@@ -710,6 +717,23 @@ private fun AppGroupHeader(
             color = if (unreadCount > 0) PastelRedText else MaterialTheme.colorScheme.outline,
             fontWeight = if (unreadCount > 0) FontWeight.Bold else FontWeight.Normal
         )
+        if (unreadCount > 0 && onMarkAppAsRead != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            TextButton(
+                onClick = {
+                    onMarkAppAsRead()
+                },
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                modifier = Modifier.height(24.dp)
+            ) {
+                Text(
+                    text = "Mark read",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
         Spacer(modifier = Modifier.width(8.dp))
         HorizontalDivider(
             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),

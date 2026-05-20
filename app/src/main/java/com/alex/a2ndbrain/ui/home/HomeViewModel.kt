@@ -298,7 +298,24 @@ class HomeViewModel(
         }
         timelineList.addAll(habitEvents)
         
-        timelineList.sortedBy { it.minutesFromMidnight }
+        val uniqueEvents = mutableListOf<TimelineEvent>()
+        for (event in timelineList) {
+            val isDuplicate = uniqueEvents.any { existing ->
+                val t1 = existing.title.trim().lowercase(Locale.getDefault()).replace(Regex("[^a-z0-9 ]"), "")
+                val t2 = event.title.trim().lowercase(Locale.getDefault()).replace(Regex("[^a-z0-9 ]"), "")
+                val timeDiff = Math.abs(existing.minutesFromMidnight - event.minutesFromMidnight)
+                
+                val exactTitleMatch = t1 == t2
+                val partialTitleMatch = (t1.length >= 4 && t2.length >= 4) && (t1.contains(t2) || t2.contains(t1))
+                
+                (exactTitleMatch && timeDiff < 15) || (partialTitleMatch && timeDiff == 0)
+            }
+            if (!isDuplicate) {
+                uniqueEvents.add(event)
+            }
+        }
+        
+        uniqueEvents.sortedBy { it.minutesFromMidnight }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private val _dismissedConflictIds = MutableStateFlow<Set<String>>(emptySet())
