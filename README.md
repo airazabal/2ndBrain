@@ -7,7 +7,9 @@
 - **Automatic Logging**: Captures and groups notifications from high-signal apps like Gmail, Calendar, and Todoist.
 - **App-Specific Deep Linking**: Instantly jump from a capture back to the original email, calendar event, or task.
 - **Strict Monitoring**: Choose exactly which apps are allowed to enter your "Brain" via the granular Setup menu.
+- **Instant Data Cleaning**: Unmonitoring or deselecting an app instantly cleans up and deletes all its historical notifications and usage statistics from the database.
 - **Duplicate Merging**: Smartly merges repetitive notifications to keep your feed clean.
+- **Collapsible App & Day Feed**: Memory feed organizes captured events by app sources under collapsible daily sections, showing single-line quick summaries with direct launch/copy quick actions.
 - **Smart Folders & Dynamic Tagging**: Dynamically tags incoming captures (e.g. `#Work`, `#Health`, `#Social`, `#Finance`, `#Reference`) and allows instant filtering via a glassmorphic top-level horizontal chip selector.
 - **⚡ Real-Time Group Highlights**: Heuristically extracts high-signal values (such as physical steps or purchase dollars) and displays an aggregated group highlight (e.g. *"⚡ Logged 3 payments totaling $15.50."*).
 
@@ -16,7 +18,7 @@
 - **Physical Insights Dashboard**: Home cockpit renders steps walked today, sleep duration last night, and active heart rate zones (min/max/avg) in real-time.
 - **Physical-Digital Correlation**: Correlates your sleep and physical activity metrics with your digital focus and routine tasks to compute your custom **Sense of Day Score** (HSV-mapped progress ring).
 
-### ⏰ Dynamic Medication Reminders & Routine Alarms (Phase 2)
+### ⏰ Dynamic Medication Reminders & Routine Alarms
 - **SQLite-Backed Habit Engine**: Dynamic scheduling and persistence of custom daily habits, medication times, and routines.
 - **Proactive Notification Alarms**: Reminders triggered using exact alarms via Android's `AlarmManager` with automatic boot-rescheduling.
 - **Dynamic Quick-Actions**: Tapping `[ Done ]` or `[ Take Meds ]` directly from the notification shade (or paired smartwatch) registers completion logs in the background without needing to launch the app.
@@ -31,9 +33,10 @@
 - **Conflict Detection**: Flags "Distraction Gaps" where significant time was spent on non-productive apps during busy work windows.
 - **Customizable Models**: Dynamically downloads and runs local offline **LiteRT** models or connects securely to remote Gemini APIs directly configured inside Settings.
 
-### 🕒 Digital Time & Habits
+### 🕒 Digital Time & Nearby Sync
 - **📊 Habit Correlation Engine**: An active insight block correlating distraction trends (like spending 60+ mins on social media apps) against focused productivity tool usage.
-- **Cross-Device Sync**: Uses your **Obsidian Vault** as a private data bridge to synchronize usage stats across all your Android devices (conflict-free).
+- **Direct P2P Device Sync**: Secure peer-to-peer bidirectional sync of screen time statistics between your nearby devices using the **Google Nearby Connections API** (no internet or local router connection required).
+- **Periodic Background Sync**: Automatically triggers a background sync session every 15 minutes via **WorkManager**, featuring safety guards to skip execution while the app is in the foreground to prevent UI conflicts.
 - **Consolidated View**: See total time spent per app across your entire device ecosystem.
 - **Visual Charts**: Beautiful, modern bar charts showing your usage distribution.
 - **Time Series Reports**: Toggle between Today, This Week, and This Month views.
@@ -42,6 +45,7 @@
 - **Vault Explorer**: Navigate your Obsidian folders and read Markdown notes directly inside the app.
 - **Deep Linking**: Open any note in the Obsidian app for editing with a single tap.
 - **Quick Capture**: Create new notes in your vault with an automated timestamped template.
+- **Timeline Filtering**: Agenda files and daily logs in your Obsidian vault are automatically filtered and excluded from the Schedule & Timeline screen if Obsidian is set to unmonitored.
 
 ---
 
@@ -53,12 +57,13 @@
 ---
 
 ## 🛠️ Project Structure
-- `ui/chat/`: Interactive offline-first Q&A Co-Pilot bubble logs and thinking indicators.
-- `ui/memories/`: The main notification feed, filter chips, and capture controls.
+- `ui/chat/`: Interactive Q&A Co-Pilot bubble logs and thinking indicators.
+- `ui/memories/`: Collapsible notification feeds, quick actions, and filter chips.
 - `ui/reflection/`: AI history, dynamic model downloading, and briefing/reflection cards.
-- `ui/usage/`: Digital Time dashboard, visual charts, habit correlation cards, and multi-device totals.
+- `ui/usage/`: Digital Time dashboard, visual charts, and Nearby Sync cards.
 - `ui/notes/`: Obsidian vault explorer and markdown preview.
-- `core/usage/`: Conflict-free sync engine and `UsageStatsManager` integration.
+- `core/sync/`: Nearby Connections P2P manager and WorkManager background sync workers.
+- `core/usage/`: `UsageStatsManager` local usage collection and SQLite usage database repository.
 - `core/reflection/`: Gemini API, LiteRT on-device LLM picker, and briefing logic.
 - `core/capture/`: Notification listener service and clipboard manager with heuristic auto-tagging.
 - `core/health/`: Health Connect bridge for step count, sleep, and heart-rate tracking.
@@ -74,6 +79,7 @@
    - Enable **Usage Access** for Digital Time tracking.
    - Enable **Health Connect Permissions** inside the Home tab.
    - Select your **Obsidian Vault** folder in the Notes tab to enable syncing.
+   - Grant **Nearby Devices & Location Permissions** inside the Time screen to enable P2P device sync.
 
 ---
 *Your private data stays local or in your own vault. No cloud servers required.*
