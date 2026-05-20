@@ -71,6 +71,12 @@ class MemoryViewModel(
         }
     }
 
+    fun markMultipleAsUnread(ids: List<Long>) {
+        viewModelScope.launch {
+            memoryRepository.markMultipleAsUnread(ids)
+        }
+    }
+
     fun clearAllMemories() {
         // We'll let MemoryScreen handle clear all for now or move it here.
     }

@@ -35,6 +35,8 @@ class MemoryRepository(private val memoryDao: MemoryDao) {
     
     suspend fun markMultipleAsRead(ids: List<Long>) = memoryDao.markMultipleAsRead(ids)
     
+    suspend fun markMultipleAsUnread(ids: List<Long>) = memoryDao.markMultipleAsUnread(ids)
+    
     suspend fun deleteMemoryById(id: Long) = memoryDao.deleteMemoryById(id)
 
     suspend fun pruneOldMemories(timestamp: Long) = memoryDao.pruneOldMemories(timestamp)

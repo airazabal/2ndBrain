@@ -2,6 +2,7 @@ package com.alex.a2ndbrain.ui.memories
 
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -55,6 +56,7 @@ fun MemoryScreen(
     onSearchQueryChange: (String) -> Unit,
     onCaptureClipboard: () -> Unit,
     onMarkAsRead: (List<Long>) -> Unit,
+    onMarkAsUnread: (List<Long>) -> Unit = {},
     onClearAll: () -> Unit,
     monitoredApps: Set<String> = emptySet(),
     vaultUri: String = "",
@@ -413,6 +415,7 @@ fun MemoryScreen(
                                 MemoryCard(
                                     merged = merged,
                                     onMarkAsRead = onMarkAsRead,
+                                    onMarkAsUnread = onMarkAsUnread,
                                     modifier = Modifier.padding(bottom = 6.dp)
                                 )
                             }
@@ -809,6 +812,7 @@ private fun getQuickSummary(content: String): String {
 private fun MemoryCard(
     merged: MergedMemory,
     onMarkAsRead: (List<Long>) -> Unit,
+    onMarkAsUnread: (List<Long>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val memory = merged.primary
@@ -892,13 +896,33 @@ private fun MemoryCard(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                if (!merged.isRead) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(RoundedCornerShape(3.5.dp))
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            if (merged.isRead) {
+                                onMarkAsUnread(merged.allIds)
+                            } else {
+                                onMarkAsRead(merged.allIds)
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (!merged.isRead) {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .clip(RoundedCornerShape(4.5.dp))
+                                .background(MaterialTheme.colorScheme.primary)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(9.dp)
+                                .border(1.2.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f), RoundedCornerShape(4.5.dp))
+                        )
+                    }
                 }
             }
 

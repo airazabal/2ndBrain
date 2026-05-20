@@ -331,6 +331,7 @@ class MainActivity : ComponentActivity() {
                                                     clipboardCaptureManager.captureCurrentClipboard()
                                                 },
                                                 onMarkAsRead = { ids -> memoryViewModel.markMultipleAsRead(ids) },
+                                                onMarkAsUnread = { ids -> memoryViewModel.markMultipleAsUnread(ids) },
                                                 onClearAll = { memoryViewModel.clearAllMemories() },
                                                 monitoredApps = settingsManager.getMonitoredApps(),
                                                 vaultUri = settingsManager.getObsidianVaultUri(),

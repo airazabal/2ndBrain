@@ -51,6 +51,9 @@ interface MemoryDao {
     @Query("UPDATE memories SET isRead = 1 WHERE id IN (:ids)")
     suspend fun markMultipleAsRead(ids: List<Long>)
 
+    @Query("UPDATE memories SET isRead = 0 WHERE id IN (:ids)")
+    suspend fun markMultipleAsUnread(ids: List<Long>)
+
     @Query("DELETE FROM memories WHERE id = :id")
     suspend fun deleteMemoryById(id: Long)
 
