@@ -72,6 +72,7 @@ fun MemoryScreen(
     var showRecordingDialog by remember { mutableStateOf(false) }
     var expandedAppGroups by remember { mutableStateOf(setOf<String>()) }
     var expandedDays by remember { mutableStateOf(setOf<String>("Today")) }
+    var localReadOverrides by remember { mutableStateOf(mapOf<Long, Boolean>()) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -88,8 +89,15 @@ fun MemoryScreen(
         pagedMemories[index]
     }
 
-    val dayGroups = remember(itemsList, monitoredApps, selectedTag) {
-        val filtered = itemsList.filter { memory ->
+    val dayGroups = remember(itemsList, monitoredApps, selectedTag, localReadOverrides) {
+        val filtered = itemsList.map { memory ->
+            val override = localReadOverrides[memory.id]
+            if (override != null) {
+                memory.copy(isRead = override)
+            } else {
+                memory
+            }
+        }.filter { memory ->
             val matchesApp = if (monitoredApps.isEmpty() || memory.source != "notification") true
                              else monitoredApps.contains(memory.packageName)
             val matchesTag = if (selectedTag == "All") true
@@ -371,6 +379,7 @@ fun MemoryScreen(
                         onMarkDayAsRead = {
                             val unreadIds = dayGroup.memories.filter { !it.isRead }.map { it.id }
                             if (unreadIds.isNotEmpty()) {
+                                localReadOverrides = localReadOverrides + unreadIds.associateWith { true }
                                 onMarkAsRead(unreadIds)
                             }
                         }
@@ -400,6 +409,7 @@ fun MemoryScreen(
                                 onMarkAppAsRead = {
                                     val unreadIds = appGroup.memories.filter { !it.isRead }.flatMap { it.allIds }
                                     if (unreadIds.isNotEmpty()) {
+                                        localReadOverrides = localReadOverrides + unreadIds.associateWith { true }
                                         onMarkAsRead(unreadIds)
                                     }
                                 }
@@ -414,8 +424,14 @@ fun MemoryScreen(
                                 val merged = appGroup.memories[idx]
                                 MemoryCard(
                                     merged = merged,
-                                    onMarkAsRead = onMarkAsRead,
-                                    onMarkAsUnread = onMarkAsUnread,
+                                    onMarkAsRead = { ids ->
+                                        localReadOverrides = localReadOverrides + ids.associateWith { true }
+                                        onMarkAsRead(ids)
+                                    },
+                                    onMarkAsUnread = { ids ->
+                                        localReadOverrides = localReadOverrides + ids.associateWith { false }
+                                        onMarkAsUnread(ids)
+                                    },
                                     modifier = Modifier.padding(bottom = 6.dp)
                                 )
                             }
