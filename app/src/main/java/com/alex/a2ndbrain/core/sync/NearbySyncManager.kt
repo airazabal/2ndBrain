@@ -22,12 +22,19 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 class NearbySyncManager(
     private val context: Context,
     private val usageRepository: UsageRepository,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val meditationRepository: com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
 ) {
+    // Flow to notify when meditation data has been synced
+    private val _meditationSyncTrigger = MutableSharedFlow<Unit>(replay = 0)
+    val meditationSyncTrigger = _meditationSyncTrigger.asSharedFlow()
+
     private val connectionsClient = Nearby.getConnectionsClient(context)
     private val serviceId = "com.alex.a2ndbrain.SYNC"
 
@@ -274,8 +281,8 @@ class NearbySyncManager(
             if (payload.type == Payload.Type.BYTES) {
                 val bytes = payload.asBytes() ?: return
                 val jsonStr = String(bytes)
-                Log.d("NearbySync", "Received stats: $jsonStr")
-                importReceivedStats(jsonStr)
+                Log.d("NearbySync", "Received payload: $jsonStr")
+                importReceivedPayload(jsonStr)
                 
                 val currentStatus = _syncStatus.value
                 val remoteName = if (currentStatus is SyncStatus.Syncing) currentStatus.deviceName else "Device"
@@ -310,10 +317,11 @@ class NearbySyncManager(
                 calendar.add(Calendar.DAY_OF_YEAR, -7)
                 val startDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
                 
+                // Fetch local usage stats
                 val localStats = usageRepository.getUsageStatsSince(startDate)
                 val filteredStats = localStats.filter { it.deviceId == localDeviceId }
 
-                val jsonArray = JSONArray()
+                val usageJsonArray = JSONArray()
                 filteredStats.forEach { stat ->
                     val json = JSONObject()
                     json.put("date", stat.date)
@@ -322,22 +330,59 @@ class NearbySyncManager(
                     json.put("deviceId", localDeviceId)
                     json.put("deviceName", localDeviceName)
                     json.put("lastTimestamp", stat.lastTimestamp)
-                    jsonArray.put(json)
+                    usageJsonArray.put(json)
                 }
 
-                val payloadBytes = jsonArray.toString().toByteArray()
+                // Fetch local meditations
+                val localMeditations = meditationRepository.loadSessions()
+                val meditationJsonArray = JSONArray()
+                localMeditations.forEach { session ->
+                    val json = JSONObject()
+                    json.put("id", session.id)
+                    json.put("durationMinutes", session.durationMinutes)
+                    json.put("insight", session.insight)
+                    json.put("timestamp", session.timestamp)
+                    meditationJsonArray.put(json)
+                }
+
+                val payloadObject = JSONObject()
+                payloadObject.put("usage", usageJsonArray)
+                payloadObject.put("meditations", meditationJsonArray)
+
+                val payloadBytes = payloadObject.toString().toByteArray()
                 connectionsClient.sendPayload(endpointId, Payload.fromBytes(payloadBytes))
-                Log.d("NearbySync", "Sent ${filteredStats.size} local stats")
+                Log.d("NearbySync", "Sent ${filteredStats.size} local stats and ${localMeditations.size} meditations")
             } catch (e: Exception) {
                 Log.e("NearbySync", "Failed to send local stats", e)
             }
         }
     }
 
-    private fun importReceivedStats(jsonStr: String) {
+    private fun importReceivedPayload(jsonStr: String) {
+        try {
+            val trimmed = jsonStr.trim()
+            if (trimmed.startsWith("{")) {
+                val jsonObject = JSONObject(trimmed)
+                if (jsonObject.has("usage")) {
+                    val usageArray = jsonObject.getJSONArray("usage")
+                    importUsageStats(usageArray)
+                }
+                if (jsonObject.has("meditations")) {
+                    val meditationsArray = jsonObject.getJSONArray("meditations")
+                    importMeditations(meditationsArray)
+                }
+            } else if (trimmed.startsWith("[")) {
+                val usageArray = JSONArray(trimmed)
+                importUsageStats(usageArray)
+            }
+        } catch (e: Exception) {
+            Log.e("NearbySync", "Failed to parse incoming payload", e)
+        }
+    }
+
+    private fun importUsageStats(jsonArray: JSONArray) {
         scope.launch(Dispatchers.IO) {
             try {
-                val jsonArray = JSONArray(jsonStr)
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)
                     val entity = UsageStatEntity(
@@ -353,6 +398,36 @@ class NearbySyncManager(
                 Log.d("NearbySync", "Imported ${jsonArray.length()} stats")
             } catch (e: Exception) {
                 Log.e("NearbySync", "Failed to import received stats", e)
+            }
+        }
+    }
+
+    private fun importMeditations(jsonArray: JSONArray) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val existingSessions = meditationRepository.loadSessions()
+                val existingIds = existingSessions.map { it.id }.toSet()
+                var importedCount = 0
+
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val id = obj.getLong("id")
+                    if (!existingIds.contains(id)) {
+                        val session = com.alex.a2ndbrain.core.meditation.MeditationSession(
+                            id = id,
+                            durationMinutes = obj.getInt("durationMinutes"),
+                            insight = obj.getString("insight"),
+                            timestamp = obj.getLong("timestamp")
+                        )
+                        meditationRepository.insertSession(session)
+                        importedCount++
+                    }
+                }
+                Log.d("NearbySync", "Imported $importedCount new meditations out of ${jsonArray.length()} received")
+                // Notify listeners that new meditation data is available
+                scope.launch { _meditationSyncTrigger.emit(Unit) }
+            } catch (e: Exception) {
+                Log.e("NearbySync", "Failed to import received meditations", e)
             }
         }
     }

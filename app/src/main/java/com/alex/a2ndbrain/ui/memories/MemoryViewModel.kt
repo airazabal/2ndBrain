@@ -22,19 +22,29 @@ class MemoryViewModel(
     private val _searchQuery = MutableStateFlow("")
     val searchQuery = _searchQuery.asStateFlow()
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val pagedMemories: Flow<PagingData<MemoryEntity>> = _searchQuery
-        .flatMapLatest { rawQuery ->
-            val expandedQuery = when (rawQuery.lowercase().trim()) {
-                "workout", "fitness", "exercise", "sleep", "heart", "steps", "health" -> "#Health"
-                "task", "todoist", "calendar", "meeting", "schedule", "work" -> "#Work"
-                "pay", "spent", "money", "bank", "card", "transaction", "finance" -> "#Finance"
-                "clipboard", "copied", "url", "copy", "reference" -> "#Reference"
-                "gmail", "email", "whatsapp", "message", "chat", "social" -> "#Social"
-                else -> rawQuery
+    val memories: StateFlow<List<MemoryEntity>> = combine(
+        memoryRepository.getAllMemoriesFlow(),
+        _searchQuery
+    ) { allMemories, query ->
+        val expandedQuery = when (query.lowercase().trim()) {
+            "workout", "fitness", "exercise", "sleep", "heart", "steps", "health" -> "#Health"
+            "task", "todoist", "calendar", "meeting", "schedule", "work" -> "#Work"
+            "pay", "spent", "money", "bank", "card", "transaction", "finance" -> "#Finance"
+            "clipboard", "copied", "url", "copy", "reference" -> "#Reference"
+            "gmail", "email", "whatsapp", "message", "chat", "social" -> "#Social"
+            else -> query
+        }.trim()
+
+        if (expandedQuery.isEmpty()) {
+            allMemories
+        } else {
+            allMemories.filter {
+                it.content.contains(expandedQuery, ignoreCase = true) ||
+                (it.title?.contains(expandedQuery, ignoreCase = true) == true) ||
+                (it.tags?.contains(expandedQuery, ignoreCase = true) == true)
             }
-            memoryRepository.getPagedMemories(expandedQuery)
-        }.cachedIn(viewModelScope)
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     init {
         pruneOldMemories()

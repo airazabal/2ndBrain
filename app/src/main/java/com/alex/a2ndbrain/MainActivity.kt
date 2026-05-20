@@ -18,7 +18,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.paging.compose.collectAsLazyPagingItems
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
@@ -320,11 +319,11 @@ class MainActivity : ComponentActivity() {
                                         }
 
                                         AppTab.FEED -> {
-                                            val pagedMemories = memoryViewModel.pagedMemories.collectAsLazyPagingItems()
+                                            val memories by memoryViewModel.memories.collectAsStateWithLifecycle()
                                             val searchQuery by memoryViewModel.searchQuery.collectAsStateWithLifecycle()
 
                                             MemoryScreen(
-                                                pagedMemories = pagedMemories,
+                                                memories = memories,
                                                 searchQuery = searchQuery,
                                                 onSearchQueryChange = { memoryViewModel.setSearchQuery(it) },
                                                 onCaptureClipboard = {
@@ -400,6 +399,7 @@ class MainActivity : ComponentActivity() {
                                         AppTab.SETTINGS -> {
                                             val activeHabits by settingsViewModel.activeHabits.collectAsStateWithLifecycle()
                                             val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
+                                            val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
                                             AppCaptureSettingsScreen(
                                                 settingsManager = settingsManager,
                                                 themePreference = themePreference,
@@ -417,7 +417,10 @@ class MainActivity : ComponentActivity() {
                                                 onAddCustomHabit = { name, time, isMed -> settingsViewModel.addCustomHabit(name, time, isMed) },
                                                 onDeleteHabit = { id -> settingsViewModel.deleteHabit(id) },
                                                 onToggleHabitActive = { id -> settingsViewModel.toggleHabitActive(id) },
-                                                onUnmonitoredAppRemoved = { settingsViewModel.deleteUnmonitoredAppData(it) }
+                                                onUnmonitoredAppRemoved = { settingsViewModel.deleteUnmonitoredAppData(it) },
+                                                syncStatus = syncStatus,
+                                                onStartSync = { force -> settingsViewModel.startNearbySync(force) },
+                                                onStopSync = { settingsViewModel.stopNearbySync() }
                                             )
                                         }
                                         AppTab.COPILOT -> {

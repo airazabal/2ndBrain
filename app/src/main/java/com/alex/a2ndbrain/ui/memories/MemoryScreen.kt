@@ -27,8 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.paging.LoadState
-import androidx.paging.compose.LazyPagingItems
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.ui.theme.*
 import java.text.SimpleDateFormat
@@ -51,7 +49,7 @@ import java.io.File
 
 @Composable
 fun MemoryScreen(
-    pagedMemories: LazyPagingItems<MemoryEntity>,
+    memories: List<MemoryEntity>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onCaptureClipboard: () -> Unit,
@@ -84,13 +82,8 @@ fun MemoryScreen(
         }
     }
 
-    // Group loaded non-null memories dynamically by day
-    val itemsList = (0 until pagedMemories.itemCount).mapNotNull { index ->
-        pagedMemories[index]
-    }
-
-    val dayGroups = remember(itemsList, monitoredApps, selectedTag, localReadOverrides) {
-        val filtered = itemsList.map { memory ->
+    val dayGroups = remember(memories, monitoredApps, selectedTag, localReadOverrides) {
+        val filtered = memories.map { memory ->
             val override = localReadOverrides[memory.id]
             if (override != null) {
                 memory.copy(isRead = override)
@@ -344,13 +337,7 @@ fun MemoryScreen(
         }
 
         // Main List Content
-        if (pagedMemories.loadState.refresh is LoadState.Loading) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-        } else if (pagedMemories.itemCount == 0) {
+        if (memories.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().height(300.dp), contentAlignment = Alignment.Center) {
                     Text(
@@ -439,17 +426,8 @@ fun MemoryScreen(
                     }
                 }
             }
-            
-            if (pagedMemories.loadState.append is LoadState.Loading) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                    }
-                }
-            }
         }
-        
-        }
+    }
         
         // Floating action button for quick speech dictation
         FloatingActionButton(

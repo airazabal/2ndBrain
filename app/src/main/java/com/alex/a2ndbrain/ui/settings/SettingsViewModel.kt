@@ -22,8 +22,24 @@ class SettingsViewModel(
     private val memoryRepository: MemoryRepository,
     private val usageRepository: UsageRepository,
     private val settingsManager: CaptureSettingsManager,
+    private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager,
     private val applicationContext: Context
 ) : ViewModel() {
+
+    val syncStatus = nearbySyncManager.syncStatus
+
+    fun startNearbySync(force: Boolean = false) {
+        nearbySyncManager.startSync(force)
+    }
+
+    fun stopNearbySync() {
+        nearbySyncManager.stopSync()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        nearbySyncManager.stopSync()
+    }
 
     fun deleteUnmonitoredAppData(packageName: String) {
         viewModelScope.launch(Dispatchers.IO) {

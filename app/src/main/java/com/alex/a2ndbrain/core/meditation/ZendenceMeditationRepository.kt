@@ -1,5 +1,6 @@
 package com.alex.a2ndbrain.core.meditation
 
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 
@@ -38,5 +39,20 @@ class ZendenceMeditationRepository(
         }
 
         return sessions
+    }
+
+    fun insertSession(session: MeditationSession) {
+        val cr = context.contentResolver
+        val values = ContentValues().apply {
+            put("id", session.id)
+            put("durationMinutes", session.durationMinutes)
+            put("insight", session.insight)
+            put("timestamp", session.timestamp)
+        }
+        try {
+            cr.insert(contentUri, values)
+        } catch (e: Exception) {
+            android.util.Log.e("ZendenceMeditationRepo", "Failed to insert session", e)
+        }
     }
 }

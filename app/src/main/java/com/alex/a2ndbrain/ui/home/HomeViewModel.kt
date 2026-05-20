@@ -29,6 +29,7 @@ import com.alex.a2ndbrain.core.meditation.MeditationManager
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
+import com.alex.a2ndbrain.core.sync.NearbySyncManager
 
 class HomeViewModel(
     private val memoryRepository: MemoryRepository,
@@ -38,6 +39,7 @@ class HomeViewModel(
     val healthConnectManager: HealthConnectManager,
     private val habitsDao: HabitsDao,
     private val applicationContext: Context,
+    private val nearbySyncManager: NearbySyncManager,
     private val zendenceMeditationRepository: ZendenceMeditationRepository
 ) : ViewModel() {
 
@@ -74,6 +76,13 @@ class HomeViewModel(
 
     init {
         refreshMeditationSessions()
+        // Observe automatic meditation sync trigger
+        viewModelScope.launch {
+            nearbySyncManager.meditationSyncTrigger.collect {
+                android.util.Log.d("HomeViewModel", "Meditation sync triggered, refreshing sessions")
+                refreshMeditationSessions()
+            }
+        }
     }
 
     fun refreshMeditationSessions() {

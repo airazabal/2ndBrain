@@ -28,7 +28,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
-
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.Toast
+import com.alex.a2ndbrain.core.sync.NearbySyncManager
 
 import com.alex.a2ndbrain.ui.theme.BrainTheme
 import org.koin.android.ext.android.inject
@@ -40,6 +43,8 @@ import kotlinx.coroutines.Dispatchers
 class AppCaptureSettingsActivity : ComponentActivity() {
     private val memoryRepository: MemoryRepository by inject()
     private val usageRepository: UsageRepository by inject()
+    private val nearbySyncManager: NearbySyncManager by inject()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val settingsManager = CaptureSettingsManager(this)
@@ -52,6 +57,7 @@ class AppCaptureSettingsActivity : ComponentActivity() {
             }
             BrainTheme(darkTheme = isDark) {
                 Surface(color = MaterialTheme.colorScheme.background) {
+                    val syncStatus by nearbySyncManager.syncStatus.collectAsState(NearbySyncManager.SyncStatus.Idle)
                     AppCaptureSettingsScreen(
                         settingsManager = settingsManager,
                         themePreference = themePreference,
@@ -70,7 +76,10 @@ class AppCaptureSettingsActivity : ComponentActivity() {
                                 memoryRepository.deleteMemoriesByPackage(packageName)
                                 usageRepository.deleteUsageStatsByPackage(packageName)
                             }
-                        }
+                        },
+                        syncStatus = syncStatus,
+                        onStartSync = { force -> nearbySyncManager.startSync(force) },
+                        onStopSync = { nearbySyncManager.stopSync() }
                     )
                 }
             }
@@ -89,12 +98,39 @@ fun AppCaptureSettingsScreen(
     onAddCustomHabit: (String, String, Boolean) -> Unit = { _, _, _ -> },
     onDeleteHabit: (String) -> Unit = {},
     onToggleHabitActive: (String) -> Unit = {},
-    onUnmonitoredAppRemoved: (String) -> Unit = {}
+    onUnmonitoredAppRemoved: (String) -> Unit = {},
+    syncStatus: NearbySyncManager.SyncStatus = NearbySyncManager.SyncStatus.Idle,
+    onStartSync: (Boolean) -> Unit = {},
+    onStopSync: () -> Unit = {}
 ) {
     var monitoredApps by remember { mutableStateOf(settingsManager.getMonitoredApps()) }
     val debugEvents by com.alex.a2ndbrain.core.capture.CaptureDebugStore.events.collectAsState()
     val context = LocalContext.current
     val packageManager = context.packageManager
+    
+    val permissionsToRequest = remember {
+        val list = mutableListOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            list.add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+            list.add(android.Manifest.permission.BLUETOOTH_SCAN)
+            list.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            list.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+        list.toTypedArray()
+    }
+
+    val syncPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            onStartSync(false)
+        } else {
+            Toast.makeText(context, "Nearby Sync requires Location and Bluetooth permissions.", Toast.LENGTH_SHORT).show()
+        }
+    }
     
     val allApps = remember {
         packageManager.getInstalledPackages(PackageManager.GET_META_DATA)
@@ -265,6 +301,95 @@ fun AppCaptureSettingsScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
                             Text("OPEN APP INFO")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Nearby Sync Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "NEARBY SYNC",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val statusText = when (syncStatus) {
+                            NearbySyncManager.SyncStatus.Idle -> "Sync screen time and meditations with nearby devices."
+                            NearbySyncManager.SyncStatus.Scanning -> "Searching for nearby devices..."
+                            is NearbySyncManager.SyncStatus.Connecting -> "Connecting to ${(syncStatus as NearbySyncManager.SyncStatus.Connecting).deviceName}..."
+                            is NearbySyncManager.SyncStatus.Syncing -> "Syncing data..."
+                            is NearbySyncManager.SyncStatus.Success -> "Successfully synchronized!"
+                            is NearbySyncManager.SyncStatus.Failed -> "Sync failed: ${(syncStatus as NearbySyncManager.SyncStatus.Failed).reason}"
+                        }
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    val buttonText = when (syncStatus) {
+                        NearbySyncManager.SyncStatus.Idle -> "Sync"
+                        NearbySyncManager.SyncStatus.Scanning -> "Stop"
+                        is NearbySyncManager.SyncStatus.Connecting -> "Stop"
+                        is NearbySyncManager.SyncStatus.Syncing -> "Syncing"
+                        is NearbySyncManager.SyncStatus.Success -> "Sync"
+                        is NearbySyncManager.SyncStatus.Failed -> "Retry"
+                    }
+                    
+                    val isScanningOrConnecting = syncStatus is NearbySyncManager.SyncStatus.Scanning || syncStatus is NearbySyncManager.SyncStatus.Connecting
+                    
+                    Button(
+                        onClick = {
+                            if (isScanningOrConnecting || syncStatus is NearbySyncManager.SyncStatus.Syncing) {
+                                onStopSync()
+                            } else {
+                                val hasPermissions = permissionsToRequest.all {
+                                    androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                }
+                                if (hasPermissions) {
+                                    onStartSync(true)
+                                } else {
+                                    syncPermissionLauncher.launch(permissionsToRequest)
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isScanningOrConnecting) MaterialTheme.colorScheme.error.copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary,
+                            contentColor = if (isScanningOrConnecting) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        if (syncStatus is NearbySyncManager.SyncStatus.Syncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(buttonText, style = MaterialTheme.typography.labelMedium)
                         }
                     }
                 }
