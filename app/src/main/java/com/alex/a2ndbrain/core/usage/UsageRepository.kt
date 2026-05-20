@@ -14,7 +14,15 @@ class UsageRepository(private val memoryDao: MemoryDao) {
         return memoryDao.getUsageStatsForDate(today)
     }
 
+    suspend fun getUsageStatsForTodaySync(): List<UsageStatEntity> {
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        return memoryDao.getUsageStatsForDateSync(today)
+    }
+
     suspend fun insertUsageStat(stat: UsageStatEntity) = memoryDao.insertUsageStat(stat)
+
+    suspend fun getUsageStatByKey(date: String, packageName: String, deviceId: String): UsageStatEntity? =
+        memoryDao.getUsageStatByKey(date, packageName, deviceId)
 
     suspend fun getUsageStatsSince(startDate: String): List<UsageStatEntity> = memoryDao.getUsageStatsSince(startDate)
 

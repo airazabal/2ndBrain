@@ -69,6 +69,9 @@ interface MemoryDao {
     @Query("SELECT * FROM usage_stats WHERE date = :date")
     suspend fun getUsageStatsForDateSync(date: String): List<UsageStatEntity>
 
+    @Query("SELECT * FROM usage_stats WHERE date = :date AND packageName = :packageName AND deviceId = :deviceId LIMIT 1")
+    suspend fun getUsageStatByKey(date: String, packageName: String, deviceId: String): UsageStatEntity?
+
     @Query("SELECT * FROM usage_stats WHERE date >= :startDate")
     fun getUsageStatsSinceFlow(startDate: String): Flow<List<UsageStatEntity>>
 
@@ -80,6 +83,9 @@ interface MemoryDao {
 
     @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%' ORDER BY timestamp DESC LIMIT 30")
     suspend fun searchMemoriesSync(query: String): List<MemoryEntity>
+
+    @Query("SELECT * FROM memories WHERE packageName = :packageName ORDER BY timestamp DESC")
+    suspend fun getMemoriesByPackageSync(packageName: String): List<MemoryEntity>
 
     @Query("DELETE FROM memories WHERE packageName = :packageName")
     suspend fun deleteMemoriesByPackage(packageName: String)

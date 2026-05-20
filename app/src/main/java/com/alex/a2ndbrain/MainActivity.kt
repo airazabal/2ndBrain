@@ -122,7 +122,22 @@ class MainActivity : ComponentActivity() {
                     val configuration = androidx.compose.ui.platform.LocalConfiguration.current
                     val useRail = configuration.screenWidthDp >= 600
 
+                    val snackbarHostState = remember { SnackbarHostState() }
+                    LaunchedEffect(homeViewModel) {
+                        homeViewModel.habitUncompleted.collect { entity ->
+                            val result = snackbarHostState.showSnackbar(
+                                message = "Habit unchecked",
+                                actionLabel = "Undo",
+                                duration = SnackbarDuration.Short
+                            )
+                            if (result == SnackbarResult.ActionPerformed) {
+                                homeViewModel.undoHabitUncomplete(entity)
+                            }
+                        }
+                    }
+
                     Scaffold(
+                        snackbarHost = { SnackbarHost(snackbarHostState) },
                         bottomBar = {
                             if (!useRail) {
                                 NavigationBar(

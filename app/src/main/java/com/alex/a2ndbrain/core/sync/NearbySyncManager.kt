@@ -383,9 +383,10 @@ class NearbySyncManager(
     private fun importUsageStats(jsonArray: JSONArray) {
         scope.launch(Dispatchers.IO) {
             try {
+                var importedCount = 0
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)
-                    val entity = UsageStatEntity(
+                    val incoming = UsageStatEntity(
                         date = obj.getString("date"),
                         packageName = obj.getString("packageName"),
                         totalTimeVisibleMs = obj.getLong("totalTimeVisibleMs"),
@@ -393,9 +394,17 @@ class NearbySyncManager(
                         deviceName = obj.getString("deviceName"),
                         lastTimestamp = obj.getLong("lastTimestamp")
                     )
-                    usageRepository.insertUsageStat(entity)
+                    // Only write if there is no local record or the incoming one is more recent.
+                    // Prevents a stale sync from overwriting a locally-updated measurement.
+                    val existing = usageRepository.getUsageStatByKey(
+                        incoming.date, incoming.packageName, incoming.deviceId
+                    )
+                    if (existing == null || incoming.lastTimestamp > existing.lastTimestamp) {
+                        usageRepository.insertUsageStat(incoming)
+                        importedCount++
+                    }
                 }
-                Log.d("NearbySync", "Imported ${jsonArray.length()} stats")
+                Log.d("NearbySync", "Imported $importedCount/${jsonArray.length()} stats (skipped older records)")
             } catch (e: Exception) {
                 Log.e("NearbySync", "Failed to import received stats", e)
             }

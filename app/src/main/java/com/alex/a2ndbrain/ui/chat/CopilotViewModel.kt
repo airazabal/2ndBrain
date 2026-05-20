@@ -101,7 +101,7 @@ class CopilotViewModel(
 
                     // 3. Screen-Time Visible Usage Metrics
                     if (includeUsage || isGeneral) {
-                        val stats = usageRepository.getUsageStatsForToday().first()
+                        val stats = usageRepository.getUsageStatsForTodaySync()
                         append("USER'S ACTIVE APP SCREEN TIME TODAY:\n")
                         val activeStats = stats.filter { (it.totalTimeVisibleMs / 60000L) > 0 }
                         if (activeStats.isEmpty()) {
@@ -124,8 +124,7 @@ class CopilotViewModel(
                     // 4. Zendence Meditation Sessions
                     if (includeMeditation || isGeneral) {
                         try {
-                            val allMemories = memoryRepository.getAllMemoriesFlow().first()
-                            val zendenceMemories = allMemories.filter { it.packageName == "com.alex.zendence" }
+                            val zendenceMemories = memoryRepository.getMemoriesByPackageSync("com.alex.zendence")
                             val parsedMeditation = zendenceMemories.mapNotNull { com.alex.a2ndbrain.core.meditation.MeditationManager.parseMeditationSession(it) }
                             val streaks = com.alex.a2ndbrain.core.meditation.MeditationManager.calculateStreaks(parsedMeditation)
                             

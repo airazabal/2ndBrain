@@ -146,6 +146,9 @@ class HomeViewModel(
         last7Days
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    private val _habitUncompleted = MutableSharedFlow<HabitCompletionEntity>(replay = 0)
+    val habitUncompleted = _habitUncompleted.asSharedFlow()
+
     private val _monitoredAppsState = MutableStateFlow(settingsManager.getMonitoredApps())
     val monitoredAppsState = _monitoredAppsState.asStateFlow()
 
@@ -307,20 +310,39 @@ class HomeViewModel(
         }
         timelineList.addAll(habitEvents)
         
+        val cleanRegex = Regex("[^a-z0-9 ]")
+
+        // Normalize all titles once — avoids recompiling the regex O(n²) times
+        val normalizedTitles = timelineList.map { event ->
+            event.title.trim().lowercase(Locale.getDefault()).replace(cleanRegex, "")
+        }
+
+        // title → accepted minute values (condition A: exact match within 15 min)
+        val acceptedMinutesByTitle = HashMap<String, MutableList<Int>>()
+        // minute → accepted normalized titles (condition B: partial containment, same minute)
+        val acceptedTitlesByMinute = HashMap<Int, MutableList<String>>()
+
         val uniqueEvents = mutableListOf<TimelineEvent>()
-        for (event in timelineList) {
-            val isDuplicate = uniqueEvents.any { existing ->
-                val t1 = existing.title.trim().lowercase(Locale.getDefault()).replace(Regex("[^a-z0-9 ]"), "")
-                val t2 = event.title.trim().lowercase(Locale.getDefault()).replace(Regex("[^a-z0-9 ]"), "")
-                val timeDiff = Math.abs(existing.minutesFromMidnight - event.minutesFromMidnight)
-                
-                val exactTitleMatch = t1 == t2
-                val partialTitleMatch = (t1.length >= 4 && t2.length >= 4) && (t1.contains(t2) || t2.contains(t1))
-                
-                (exactTitleMatch && timeDiff < 15) || (partialTitleMatch && timeDiff == 0)
-            }
-            if (!isDuplicate) {
+
+        for (i in timelineList.indices) {
+            val event = timelineList[i]
+            val norm = normalizedTitles[i]
+            val minute = event.minutesFromMidnight
+
+            // Condition A: exact title, within 15 minutes of any already-accepted event
+            val isDuplicateA = acceptedMinutesByTitle[norm]
+                ?.any { Math.abs(it - minute) < 15 } == true
+
+            // Condition B: one title contains the other, at the exact same minute
+            val isDuplicateB = !isDuplicateA && norm.length >= 4 &&
+                    acceptedTitlesByMinute[minute]?.any { existing ->
+                        existing.length >= 4 && (existing.contains(norm) || norm.contains(existing))
+                    } == true
+
+            if (!isDuplicateA && !isDuplicateB) {
                 uniqueEvents.add(event)
+                acceptedMinutesByTitle.getOrPut(norm) { mutableListOf() }.add(minute)
+                acceptedTitlesByMinute.getOrPut(minute) { mutableListOf() }.add(norm)
             }
         }
         
@@ -461,10 +483,10 @@ class HomeViewModel(
         if (match2 != null) {
             val hourStr = match2.groupValues[1]
             val ampm = match2.groupValues[2]
-            
+
             var hour = hourStr.toIntOrNull() ?: return null
             if (hour > 12) return null
-            
+
             val suffix = ampm.uppercase()
             val totalMinutes = when {
                 suffix == "PM" && hour < 12 -> (hour + 12) * 60
@@ -474,7 +496,22 @@ class HomeViewModel(
             val cleanDisplayStr = "$hour:00 $suffix"
             return Pair(cleanDisplayStr, totalMinutes)
         }
-        
+
+        // regex3: 4-digit military time without colon, requires explicit "at" or "@" prefix
+        // to avoid false positives with other 4-digit numbers.
+        // Matches: "at 1430", "@0830 standup", "Review at 2300"
+        val regex3 = Regex("(?:@|at\\s+)([01]\\d|2[0-3])([0-5]\\d)\\b")
+        val match3 = regex3.find(line)
+        if (match3 != null) {
+            val hour = match3.groupValues[1].toIntOrNull() ?: return null
+            val min = match3.groupValues[2].toIntOrNull() ?: return null
+            val totalMinutes = hour * 60 + min
+            val displayHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+            val displayAmpm = if (hour >= 12) "PM" else "AM"
+            val cleanDisplayStr = "$displayHour:${min.toString().padStart(2, '0')} $displayAmpm"
+            return Pair(cleanDisplayStr, totalMinutes)
+        }
+
         return null
     }
 
@@ -483,6 +520,7 @@ class HomeViewModel(
             .replace(Regex("^\\s*[-*+]\\s*(\\[[ xX]])?\\s*"), "")
             .replace(Regex("(?:@|at\\s+)?\\b\\d{1,2}:\\d{2}\\s*(?:AM|PM|am|pm)?\\b"), "")
             .replace(Regex("(?:@|at\\s+)?\\b\\d{1,2}\\s*(?:AM|PM|am|pm)\\b"), "")
+            .replace(Regex("(?:@|at\\s+)(?:[01]\\d|2[0-3])[0-5]\\d\\b"), "")
             .replace(Regex("\\b(?:at|@)\\b"), "")
             .trim()
         if (cleaned.isBlank()) {
@@ -525,9 +563,16 @@ class HomeViewModel(
             val existing = completions.find { it.habitId == habitId }
             if (existing != null) {
                 habitsDao.deleteCompletion(existing)
+                _habitUncompleted.emit(existing)
             } else {
                 habitsDao.insertCompletion(HabitCompletionEntity(habitId = habitId, date = today))
             }
+        }
+    }
+
+    fun undoHabitUncomplete(entity: HabitCompletionEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            habitsDao.insertCompletion(entity)
         }
     }
 

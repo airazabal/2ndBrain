@@ -110,6 +110,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
     // For AGP 9.0+, kotlin configuration is built-in
     //kotlin {
       //  compilerOptions {

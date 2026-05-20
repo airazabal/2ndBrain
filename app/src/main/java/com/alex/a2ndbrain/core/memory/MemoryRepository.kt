@@ -53,6 +53,9 @@ class MemoryRepository(private val memoryDao: MemoryDao) {
         return memoryDao.getMemoriesSince(startTime)
     }
 
+    suspend fun getMemoriesByPackageSync(packageName: String): List<MemoryEntity> =
+        memoryDao.getMemoriesByPackageSync(packageName)
+
     suspend fun deleteMemoriesByPackage(packageName: String) {
         memoryDao.deleteMemoriesByPackage(packageName)
     }
