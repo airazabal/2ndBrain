@@ -25,6 +25,12 @@ import com.alex.a2ndbrain.ui.theme.*
 import com.alex.a2ndbrain.ConsolidatedUsage
 import org.koin.androidx.compose.koinViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.TabletAndroid
+import android.widget.Toast
+import com.alex.a2ndbrain.core.sync.NearbySyncManager
 
 enum class TimePeriod {
     TODAY, WEEK, MONTH
@@ -41,6 +47,31 @@ fun DigitalTimeScreen(
     val isPermissionGranted by viewModel.isPermissionGranted.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val consolidatedStats by viewModel.consolidatedUsage.collectAsStateWithLifecycle()
+    val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
+
+    val permissionsToRequest = remember {
+        val list = mutableListOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            list.add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+            list.add(android.Manifest.permission.BLUETOOTH_SCAN)
+            list.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            list.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+        list.toTypedArray()
+    }
+
+    val syncPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            viewModel.startNearbySync()
+        } else {
+            Toast.makeText(context, "Nearby Sync requires Location and Bluetooth permissions.", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.updatePermissionStatus()
@@ -54,6 +85,94 @@ fun DigitalTimeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "NEARBY SYNC",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val statusText = when (syncStatus) {
+                            NearbySyncManager.SyncStatus.Idle -> "Sync screen time with nearby devices."
+                            NearbySyncManager.SyncStatus.Scanning -> "Searching for nearby devices..."
+                            is NearbySyncManager.SyncStatus.Connecting -> "Connecting to ${(syncStatus as NearbySyncManager.SyncStatus.Connecting).deviceName}..."
+                            is NearbySyncManager.SyncStatus.Syncing -> "Syncing data..."
+                            is NearbySyncManager.SyncStatus.Success -> "Successfully synchronized!"
+                            is NearbySyncManager.SyncStatus.Failed -> "Sync failed: ${(syncStatus as NearbySyncManager.SyncStatus.Failed).reason}"
+                        }
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    val buttonText = when (syncStatus) {
+                        NearbySyncManager.SyncStatus.Idle -> "Sync"
+                        NearbySyncManager.SyncStatus.Scanning -> "Stop"
+                        is NearbySyncManager.SyncStatus.Connecting -> "Stop"
+                        is NearbySyncManager.SyncStatus.Syncing -> "Syncing"
+                        is NearbySyncManager.SyncStatus.Success -> "Sync"
+                        is NearbySyncManager.SyncStatus.Failed -> "Retry"
+                    }
+                    
+                    val isScanningOrConnecting = syncStatus is NearbySyncManager.SyncStatus.Scanning || syncStatus is NearbySyncManager.SyncStatus.Connecting
+                    
+                    Button(
+                        onClick = {
+                            if (isScanningOrConnecting || syncStatus is NearbySyncManager.SyncStatus.Syncing) {
+                                viewModel.stopNearbySync()
+                            } else {
+                                val hasPermissions = permissionsToRequest.all {
+                                    androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                }
+                                if (hasPermissions) {
+                                    viewModel.startNearbySync(force = true)
+                                } else {
+                                    syncPermissionLauncher.launch(permissionsToRequest)
+                                }
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isScanningOrConnecting) MaterialTheme.colorScheme.error.copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary,
+                            contentColor = if (isScanningOrConnecting) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        if (syncStatus is NearbySyncManager.SyncStatus.Syncing) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Text(buttonText, style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -61,7 +180,10 @@ fun DigitalTimeScreen(
             ) {
                 if (isPermissionGranted) {
                     IconButton(
-                        onClick = { viewModel.syncUsageStats() },
+                        onClick = { 
+                            viewModel.syncUsageStats()
+                            viewModel.startNearbySync(force = true)
+                        },
                         enabled = !isSyncing
                     ) {
                         if (isSyncing) {
@@ -309,15 +431,40 @@ fun ConsolidatedUsageItem(stat: ConsolidatedUsage) {
                 }
             }
             
-            if (stat.deviceBreakdown.size > 1) {
+            if (stat.deviceBreakdown.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(12.dp))
                 stat.deviceBreakdown.forEach { (device, time) ->
+                    val isCurrentDevice = device == android.os.Build.MODEL
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(start = 44.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(device, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
-                        Text(formatDuration(time), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (device.lowercase().contains("tablet") || device.lowercase().contains("tab")) {
+                                    Icons.Default.TabletAndroid
+                                } else {
+                                    Icons.Default.PhoneAndroid
+                                },
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = if (isCurrentDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isCurrentDevice) "$device (This Device)" else device,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isCurrentDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontWeight = if (isCurrentDevice) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                        Text(
+                            text = formatDuration(time),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isCurrentDevice) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

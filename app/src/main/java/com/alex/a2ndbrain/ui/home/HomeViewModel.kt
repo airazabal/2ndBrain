@@ -238,34 +238,37 @@ class HomeViewModel(
         timelineList.addAll(databaseEvents)
         
         // 2. Process Obsidian Vault Notes
-        val recentNotes = notes.take(5)
-        recentNotes.forEach { note ->
-            try {
-                applicationContext.contentResolver.openInputStream(note.uri)?.use { inputStream ->
-                    val reader = java.io.BufferedReader(java.io.InputStreamReader(inputStream))
-                    var line = reader.readLine()
-                    while (line != null) {
-                        val timeMatch = findTimePattern(line)
-                        if (timeMatch != null) {
-                            val cleanTitle = cleanAgendaLine(line, timeMatch.first)
-                            val deterministicId = "obsidian_${note.name.hashCode()}_${timeMatch.first.hashCode()}_${cleanTitle.hashCode()}"
-                            timelineList.add(
-                                TimelineEvent(
-                                    id = deterministicId,
-                                    time = timeMatch.first,
-                                    title = cleanTitle,
-                                    description = "Captured from Obsidian Note: ${note.name ?: "Unnamed"}\nLine Content: $line",
-                                    appName = "Obsidian",
-                                    sourcePackage = "obsidian",
-                                    minutesFromMidnight = timeMatch.second
+        val isObsidianMonitored = monitoredApps.isEmpty() || monitoredApps.contains("md.obsidian")
+        if (isObsidianMonitored) {
+            val recentNotes = notes.take(5)
+            recentNotes.forEach { note ->
+                try {
+                    applicationContext.contentResolver.openInputStream(note.uri)?.use { inputStream ->
+                        val reader = java.io.BufferedReader(java.io.InputStreamReader(inputStream))
+                        var line = reader.readLine()
+                        while (line != null) {
+                            val timeMatch = findTimePattern(line)
+                            if (timeMatch != null) {
+                                val cleanTitle = cleanAgendaLine(line, timeMatch.first)
+                                val deterministicId = "obsidian_${note.name.hashCode()}_${timeMatch.first.hashCode()}_${cleanTitle.hashCode()}"
+                                timelineList.add(
+                                    TimelineEvent(
+                                        id = deterministicId,
+                                        time = timeMatch.first,
+                                        title = cleanTitle,
+                                        description = "Captured from Obsidian Note: ${note.name ?: "Unnamed"}\nLine Content: $line",
+                                        appName = "Obsidian",
+                                        sourcePackage = "obsidian",
+                                        minutesFromMidnight = timeMatch.second
+                                    )
                                 )
-                            )
+                            }
+                            line = reader.readLine()
                         }
-                        line = reader.readLine()
                     }
+                } catch (e: Exception) {
+                    android.util.Log.e("2ndBrain", "Failed to parse Obsidian note in timeline: ${note.name}", e)
                 }
-            } catch (e: Exception) {
-                android.util.Log.e("2ndBrain", "Failed to parse Obsidian note in timeline: ${note.name}", e)
             }
         }
         

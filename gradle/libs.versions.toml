@@ -24,8 +24,10 @@ koin = "3.5.6"
 paging = "3.3.0"
 healthConnect = "1.1.0-alpha10"
 securityCrypto = "1.1.0-alpha06"
+playServicesNearby = "18.7.0"
 
 [libraries]
+google-play-services-nearby = { group = "com.google.android.gms", name = "play-services-nearby", version.ref = "playServicesNearby" }
 androidx-security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
 androidx-health-connect = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

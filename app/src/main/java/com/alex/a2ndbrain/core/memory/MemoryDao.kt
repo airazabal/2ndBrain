@@ -48,8 +48,14 @@ interface MemoryDao {
     @Query("UPDATE memories SET isRead = 1 WHERE id = :id")
     suspend fun markAsRead(id: Long)
 
+    @Query("UPDATE memories SET isRead = 1 WHERE id IN (:ids)")
+    suspend fun markMultipleAsRead(ids: List<Long>)
+
     @Query("DELETE FROM memories WHERE id = :id")
     suspend fun deleteMemoryById(id: Long)
+
+    @Query("DELETE FROM memories WHERE timestamp < :timestamp")
+    suspend fun pruneOldMemories(timestamp: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUsageStat(stat: UsageStatEntity)
@@ -71,4 +77,10 @@ interface MemoryDao {
 
     @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%' ORDER BY timestamp DESC LIMIT 30")
     suspend fun searchMemoriesSync(query: String): List<MemoryEntity>
+
+    @Query("DELETE FROM memories WHERE packageName = :packageName")
+    suspend fun deleteMemoriesByPackage(packageName: String)
+
+    @Query("DELETE FROM usage_stats WHERE packageName = :packageName")
+    suspend fun deleteUsageStatsByPackage(packageName: String)
 }

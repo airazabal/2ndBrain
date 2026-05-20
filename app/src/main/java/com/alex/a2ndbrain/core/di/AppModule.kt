@@ -38,6 +38,7 @@ val appModule = module {
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
     single { ZendenceMeditationRepository(androidContext()) }
+    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get()) }
 
     // ViewModels
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
@@ -45,8 +46,8 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get(), get(), get(), get(), get()) }
-    viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), get(), androidContext()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }

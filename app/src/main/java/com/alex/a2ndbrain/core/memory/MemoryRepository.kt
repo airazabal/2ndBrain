@@ -33,7 +33,11 @@ class MemoryRepository(private val memoryDao: MemoryDao) {
     
     suspend fun markAsRead(id: Long) = memoryDao.markAsRead(id)
     
+    suspend fun markMultipleAsRead(ids: List<Long>) = memoryDao.markMultipleAsRead(ids)
+    
     suspend fun deleteMemoryById(id: Long) = memoryDao.deleteMemoryById(id)
+
+    suspend fun pruneOldMemories(timestamp: Long) = memoryDao.pruneOldMemories(timestamp)
     
     suspend fun clearAllSummaries() = memoryDao.deleteAllSummaries()
     
@@ -45,5 +49,9 @@ class MemoryRepository(private val memoryDao: MemoryDao) {
 
     suspend fun getRecentMemories(startTime: Long): List<MemoryEntity> {
         return memoryDao.getMemoriesSince(startTime)
+    }
+
+    suspend fun deleteMemoriesByPackage(packageName: String) {
+        memoryDao.deleteMemoriesByPackage(packageName)
     }
 }

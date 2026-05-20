@@ -45,6 +45,34 @@ class MainActivity : ComponentActivity() {
     private val settingsManager: CaptureSettingsManager by inject()
     private val reflectionPicker: ReflectionManager by inject()
     private val digitalTimeManager: DigitalTimeManager by inject()
+    private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager by inject()
+
+    override fun onStart() {
+        super.onStart()
+        if (hasSyncPermissions()) {
+            nearbySyncManager.startSync()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        nearbySyncManager.stopSync()
+    }
+
+    private fun hasSyncPermissions(): Boolean {
+        val permissions = mutableListOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            permissions.add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+            permissions.add(android.Manifest.permission.BLUETOOTH_SCAN)
+            permissions.add(android.Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+        }
+        return permissions.all {
+            checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
 
     override fun onResume() {
         super.onResume()
@@ -56,6 +84,7 @@ class MainActivity : ComponentActivity() {
         
         reflectionPicker.schedulePeriodicReflection()
         digitalTimeManager.schedulePeriodicSync()
+        nearbySyncManager.schedulePeriodicP2pSync()
 
         enableEdgeToEdge()
         setContent {
@@ -301,7 +330,7 @@ class MainActivity : ComponentActivity() {
                                                 onCaptureClipboard = {
                                                     clipboardCaptureManager.captureCurrentClipboard()
                                                 },
-                                                onMarkAsRead = { id -> memoryViewModel.markAsRead(id) },
+                                                onMarkAsRead = { ids -> memoryViewModel.markMultipleAsRead(ids) },
                                                 onClearAll = { memoryViewModel.clearAllMemories() },
                                                 monitoredApps = settingsManager.getMonitoredApps(),
                                                 vaultUri = settingsManager.getObsidianVaultUri(),
@@ -386,7 +415,8 @@ class MainActivity : ComponentActivity() {
                                                 activeHabits = activeHabits,
                                                 onAddCustomHabit = { name, time, isMed -> settingsViewModel.addCustomHabit(name, time, isMed) },
                                                 onDeleteHabit = { id -> settingsViewModel.deleteHabit(id) },
-                                                onToggleHabitActive = { id -> settingsViewModel.toggleHabitActive(id) }
+                                                onToggleHabitActive = { id -> settingsViewModel.toggleHabitActive(id) },
+                                                onUnmonitoredAppRemoved = { settingsViewModel.deleteUnmonitoredAppData(it) }
                                             )
                                         }
                                         AppTab.COPILOT -> {

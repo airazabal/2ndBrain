@@ -36,13 +36,38 @@ class MemoryViewModel(
             memoryRepository.getPagedMemories(expandedQuery)
         }.cachedIn(viewModelScope)
 
+    init {
+        pruneOldMemories()
+    }
+
+    private fun pruneOldMemories() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val threshold = getStartOfThreeDaysAgo()
+            memoryRepository.pruneOldMemories(threshold)
+        }
+    }
+
+    private fun getStartOfThreeDaysAgo(): Long {
+        val cal = java.util.Calendar.getInstance()
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -2)
+        return cal.timeInMillis
+    }
+
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
     }
 
     fun markAsRead(id: Long) {
+        markMultipleAsRead(listOf(id))
+    }
+
+    fun markMultipleAsRead(ids: List<Long>) {
         viewModelScope.launch {
-            memoryRepository.markAsRead(id)
+            memoryRepository.markMultipleAsRead(ids)
         }
     }
 

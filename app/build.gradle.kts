@@ -56,6 +56,9 @@ dependencies {
     // Health Connect
     implementation(libs.androidx.health.connect)
 
+    // Nearby Connections
+    implementation(libs.google.play.services.nearby)
+
     // Gemini AI
     implementation(libs.google.generativeai)
     implementation(libs.kotlin.reflect.artifact)

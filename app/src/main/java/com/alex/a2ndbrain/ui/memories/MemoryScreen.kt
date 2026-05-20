@@ -54,7 +54,7 @@ fun MemoryScreen(
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
     onCaptureClipboard: () -> Unit,
-    onMarkAsRead: (Long) -> Unit,
+    onMarkAsRead: (List<Long>) -> Unit,
     onClearAll: () -> Unit,
     monitoredApps: Set<String> = emptySet(),
     vaultUri: String = "",
@@ -68,6 +68,8 @@ fun MemoryScreen(
     var isScanning by remember { mutableStateOf(false) }
     var selectedTag by remember { mutableStateOf("All") }
     var showRecordingDialog by remember { mutableStateOf(false) }
+    var expandedAppGroups by remember { mutableStateOf(setOf<String>()) }
+    var expandedDays by remember { mutableStateOf(setOf<String>("Today")) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -79,24 +81,79 @@ fun MemoryScreen(
         }
     }
 
-    // Group loaded non-null memories dynamically by category key: Pair(source, packageName)
+    // Group loaded non-null memories dynamically by day
     val itemsList = (0 until pagedMemories.itemCount).mapNotNull { index ->
         pagedMemories[index]
     }
 
-    val groupedMemories = remember(itemsList, monitoredApps, selectedTag) {
-        itemsList
-            .filter { memory ->
-                val matchesApp = if (monitoredApps.isEmpty() || memory.source != "notification") true
-                                 else monitoredApps.contains(memory.packageName)
-                val matchesTag = if (selectedTag == "All") true
-                                 else memory.tags?.contains(selectedTag) == true
-                matchesApp && matchesTag
+    val dayGroups = remember(itemsList, monitoredApps, selectedTag) {
+        val filtered = itemsList.filter { memory ->
+            val matchesApp = if (monitoredApps.isEmpty() || memory.source != "notification") true
+                             else monitoredApps.contains(memory.packageName)
+            val matchesTag = if (selectedTag == "All") true
+                             else memory.tags?.contains(selectedTag) == true
+            matchesApp && matchesTag
+        }
+
+        val startOfToday = getStartOfDay(0)
+        val startOfYesterday = getStartOfDay(1)
+        val startOfTwoDaysAgo = getStartOfDay(2)
+
+        val todayMemories = mutableListOf<MemoryEntity>()
+        val yesterdayMemories = mutableListOf<MemoryEntity>()
+        val twoDaysAgoMemories = mutableListOf<MemoryEntity>()
+
+        for (m in filtered) {
+            when {
+                m.timestamp >= startOfToday -> todayMemories.add(m)
+                m.timestamp >= startOfYesterday -> yesterdayMemories.add(m)
+                m.timestamp >= startOfTwoDaysAgo -> twoDaysAgoMemories.add(m)
             }
-            .groupBy { Pair(it.source, it.packageName) }
-            .toList()
-            // Sort groups by the most recent timestamp in each group (descending)
-            .sortedByDescending { (_, list) -> list.maxOfOrNull { it.timestamp } ?: 0L }
+        }
+
+        fun buildDayGroup(label: String, dateStart: Long, rawMemories: List<MemoryEntity>): DayGroup {
+            val sorted = rawMemories.sortedByDescending { it.timestamp }
+            val merged = deduplicateMemories(sorted)
+            
+            // Group merged memories by app/source type
+            val grouped = merged.groupBy { item ->
+                getAppName(context, item.primary.packageName, item.primary.source)
+            }
+            
+            val appGroups = grouped.map { (appName, items) ->
+                val rep = items.first().primary
+                AppGroup(
+                    appName = appName,
+                    packageName = rep.packageName,
+                    source = rep.source,
+                    memories = items
+                )
+            }.sortedByDescending { appGroup ->
+                appGroup.memories.maxOf { it.primary.timestamp }
+            }
+            
+            return DayGroup(
+                label = label,
+                dateStart = dateStart,
+                appGroups = appGroups,
+                memories = sorted,
+                unreadCount = sorted.count { !it.isRead }
+            )
+        }
+
+        val groups = mutableListOf<DayGroup>()
+        if (todayMemories.isNotEmpty()) {
+            groups.add(buildDayGroup("Today", startOfToday, todayMemories))
+        }
+        if (yesterdayMemories.isNotEmpty()) {
+            groups.add(buildDayGroup("Yesterday", startOfYesterday, yesterdayMemories))
+        }
+        if (twoDaysAgoMemories.isNotEmpty()) {
+            val sdf = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
+            val label = sdf.format(Date(startOfTwoDaysAgo))
+            groups.add(buildDayGroup(label, startOfTwoDaysAgo, twoDaysAgoMemories))
+        }
+        groups
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -293,15 +350,69 @@ fun MemoryScreen(
                 }
             }
         } else {
-            items(groupedMemories.size) { index ->
-                val (key, list) = groupedMemories[index]
-                GroupedMemoryItem(
-                    source = key.first,
-                    packageName = key.second,
-                    memories = list,
-                    onMarkAsRead = onMarkAsRead,
-                    onDeepDiveCoPilot = onDeepDiveCoPilot
-                )
+            dayGroups.forEach { dayGroup ->
+                val dayKey = dayGroup.label
+                val isDayExpanded = expandedDays.contains(dayKey)
+
+                item(key = "header_${dayGroup.label}") {
+                    DayHeaderRow(
+                        label = dayGroup.label,
+                        unreadCount = dayGroup.unreadCount,
+                        isExpanded = isDayExpanded,
+                        onToggleExpand = {
+                            expandedDays = if (isDayExpanded) {
+                                expandedDays - dayKey
+                            } else {
+                                expandedDays + dayKey
+                            }
+                        },
+                        onMarkDayAsRead = {
+                            val unreadIds = dayGroup.memories.filter { !it.isRead }.map { it.id }
+                            if (unreadIds.isNotEmpty()) {
+                                onMarkAsRead(unreadIds)
+                            }
+                        }
+                    )
+                }
+
+                if (isDayExpanded) {
+                    dayGroup.appGroups.forEach { appGroup ->
+                        val groupKey = "${dayGroup.label}_${appGroup.appName}"
+                        val isExpanded = expandedAppGroups.contains(groupKey)
+
+                        item(key = "app_header_${dayGroup.label}_${appGroup.appName}") {
+                            AppGroupHeader(
+                                appName = appGroup.appName,
+                                source = appGroup.source,
+                                packageName = appGroup.packageName,
+                                unreadCount = appGroup.memories.count { !it.isRead },
+                                totalCount = appGroup.memories.size,
+                                isExpanded = isExpanded,
+                                onToggleExpand = {
+                                    expandedAppGroups = if (isExpanded) {
+                                        expandedAppGroups - groupKey
+                                    } else {
+                                        expandedAppGroups + groupKey
+                                    }
+                                }
+                            )
+                        }
+
+                        if (isExpanded) {
+                            items(
+                                count = appGroup.memories.size,
+                                key = { idx -> "memory_${appGroup.memories[idx].primary.id}" }
+                            ) { idx ->
+                                val merged = appGroup.memories[idx]
+                                MemoryCard(
+                                    merged = merged,
+                                    onMarkAsRead = onMarkAsRead,
+                                    modifier = Modifier.padding(bottom = 6.dp)
+                                )
+                            }
+                        }
+                    }
+                }
             }
             
             if (pagedMemories.loadState.append is LoadState.Loading) {
@@ -356,412 +467,378 @@ fun MemoryScreen(
     }
 }
 
-@Composable
-private fun GroupedMemoryItem(
-    source: String,
-    packageName: String?,
-    memories: List<MemoryEntity>,
-    onMarkAsRead: (Long) -> Unit,
-    onDeepDiveCoPilot: (MemoryEntity) -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    
-    val displayName = remember(source, packageName) {
-        val pm = context.packageManager
-        val key = packageName ?: source
-        try {
-            val appInfo = pm.getApplicationInfo(key, 0)
-            pm.getApplicationLabel(appInfo).toString()
-        } catch (e: Exception) {
-            if (key == "clipboard") "Clipboard"
-            else if (key == "voice") "Voice Memos"
-            else key
-        }
-    }
-    
-    val cardColor = remember(displayName) {
-        when {
-            displayName.contains("mail", ignoreCase = true) || displayName.contains("outlook", ignoreCase = true) -> PastelBlue
-            displayName.contains("calendar", ignoreCase = true) -> PastelGreen
-            displayName.contains("todoist", ignoreCase = true) -> PastelRed
-            displayName.contains("clipboard", ignoreCase = true) -> PastelYellow
-            else -> PastelPurple
-        }
-    }
+data class AppGroup(
+    val appName: String,
+    val packageName: String?,
+    val source: String,
+    val memories: List<MergedMemory>
+)
 
-    val unreadCount = memories.count { !it.isRead }
+data class DayGroup(
+    val label: String,
+    val dateStart: Long,
+    val appGroups: List<AppGroup>,
+    val memories: List<MemoryEntity>,
+    val unreadCount: Int
+)
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp)),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Group Header Row
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { expanded = !expanded },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                val cardTextColor = remember(cardColor) {
-                    when (cardColor) {
-                        PastelBlue -> PastelBlueText
-                        PastelGreen -> PastelGreenText
-                        PastelRed -> PastelRedText
-                        PastelYellow -> PastelYellowText
-                        else -> PastelPurpleText
-                    }
-                }
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(cardColor),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = displayName.take(1).uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = cardTextColor
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = displayName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+data class MergedMemory(
+    val primary: MemoryEntity,
+    val allIds: List<Long>,
+    val duplicateCount: Int,
+    val isRead: Boolean
+)
+
+private fun getStartOfDay(daysAgo: Int): Long {
+    val cal = java.util.Calendar.getInstance()
+    cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+    cal.set(java.util.Calendar.MINUTE, 0)
+    cal.set(java.util.Calendar.SECOND, 0)
+    cal.set(java.util.Calendar.MILLISECOND, 0)
+    cal.add(java.util.Calendar.DAY_OF_YEAR, -daysAgo)
+    return cal.timeInMillis
+}
+
+private fun deduplicateMemories(memories: List<MemoryEntity>): List<MergedMemory> {
+    val sorted = memories.sortedByDescending { it.timestamp }
+    val mergedList = mutableListOf<MergedMemory>()
+    
+    for (item in sorted) {
+        val isChatApp = (item.packageName ?: "").contains("whatsapp") || 
+                        (item.packageName ?: "").contains("telegram") || 
+                        (item.packageName ?: "").contains("signal") || 
+                        (item.packageName ?: "").contains("discord") || 
+                        (item.packageName ?: "").contains("messenger") || 
+                        (item.packageName ?: "").contains("slack")
+        
+        val existingIdx = if (item.source == "voice") -1 else mergedList.indexOfFirst { merged ->
+            val existing = merged.primary
+            if (existing.source != item.source || existing.packageName != item.packageName) {
+                return@indexOfFirst false
+            }
+            
+            val similarity = calculateSimilarity(existing.content, item.content)
+            val titleSimilarity = calculateSimilarity(existing.title ?: "", item.title ?: "")
+            
+            val existingLines = existing.content.split("\n").filter { it.isNotBlank() }
+            val itemLines = item.content.split("\n").filter { it.isNotBlank() }
+            val hasLineOverlap = if (existingLines.isNotEmpty() && itemLines.isNotEmpty()) {
+                val intersection = existingLines.intersect(itemLines.toSet())
+                (intersection.size.toFloat() / itemLines.size.toFloat()) > 0.5f
+            } else false
+            
+            val isGmailSummary = (existing.packageName ?: "").contains("gm") && 
+                                 (existing.title ?: "").contains("messages") && 
+                                 (item.title ?: "").contains("messages")
+            
+            when {
+                // Exact content match
+                existing.content == item.content -> true
+                // Chat app substring match
+                isChatApp && (existing.content.contains(item.content) || item.content.contains(existing.content)) -> true
+                // Fuzzy content similarity > 0.8
+                similarity > 0.8 && (existing.title == item.title || titleSimilarity > 0.8) -> true
+                // Prefix match (only for non-voice)
+                existing.source != "voice" && existing.content.take(15) == item.content.take(15) -> true
+                // Line overlap for group summaries/conversations
+                hasLineOverlap || isGmailSummary -> true
+                else -> false
+            }
+        }
+        
+        if (existingIdx != -1) {
+            val merged = mergedList[existingIdx]
+            mergedList[existingIdx] = merged.copy(
+                allIds = merged.allIds + item.id,
+                duplicateCount = merged.duplicateCount + item.duplicateCount,
+                isRead = merged.isRead && item.isRead
+            )
+        } else {
+            mergedList.add(
+                MergedMemory(
+                    primary = item,
+                    allIds = listOf(item.id),
+                    duplicateCount = item.duplicateCount,
+                    isRead = item.isRead
                 )
-                Spacer(modifier = Modifier.weight(1f))
-                
-                if (unreadCount > 0) {
-                    Surface(
-                        color = PastelRedText.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Text(
-                            text = "$unreadCount new",
-                            color = PastelRedText,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-                
+            )
+        }
+    }
+    return mergedList
+}
+
+@Composable
+private fun DayHeaderRow(
+    label: String,
+    unreadCount: Int,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onMarkDayAsRead: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onToggleExpand() }
+            .padding(vertical = 8.dp, horizontal = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(
+                imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                contentDescription = if (isExpanded) "Collapse Day" else "Expand Day",
+                tint = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            if (unreadCount > 0) {
                 Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                    color = PastelRed.copy(alpha = 0.15f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        text = "${memories.size} total",
-                        color = MaterialTheme.colorScheme.primary,
+                        text = "$unreadCount unread",
+                        color = PastelRedText,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
                 }
-
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
-                    contentDescription = if (expanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
+            } else {
+                Surface(
+                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "All read",
+                        color = MaterialTheme.colorScheme.outline,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+        
+        if (unreadCount > 0) {
+            TextButton(
+                onClick = onMarkDayAsRead,
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                modifier = Modifier.height(32.dp)
+            ) {
+                Text(
+                    text = "Mark read",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
-            }
-            
-            // List of items inside this group (newest first), dynamically deduplicated for display
-            val sortedMemories = remember(memories) {
-                val list = memories.sortedByDescending { it.timestamp }
-                val mergedList = mutableListOf<MemoryEntity>()
-                for (item in list) {
-                    val isChatApp = (item.packageName ?: "").contains("whatsapp") || 
-                                    (item.packageName ?: "").contains("telegram") || 
-                                    (item.packageName ?: "").contains("signal") || 
-                                    (item.packageName ?: "").contains("discord") || 
-                                    (item.packageName ?: "").contains("messenger") || 
-                                    (item.packageName ?: "").contains("slack")
-                    
-                    val existingIdx = if (item.source == "voice") -1 else mergedList.indexOfFirst { existing ->
-                        val similarity = calculateSimilarity(existing.content, item.content)
-                        val titleSimilarity = calculateSimilarity(existing.title ?: "", item.title ?: "")
-                        
-                        val existingLines = existing.content.split("\n").filter { it.isNotBlank() }
-                        val itemLines = item.content.split("\n").filter { it.isNotBlank() }
-                        val hasLineOverlap = if (existingLines.isNotEmpty() && itemLines.isNotEmpty()) {
-                            val intersection = existingLines.intersect(itemLines.toSet())
-                            (intersection.size.toFloat() / itemLines.size.toFloat()) > 0.5f
-                        } else false
-                        
-                        val isGmailSummary = (existing.packageName ?: "").contains("gm") && 
-                                             (existing.title ?: "").contains("messages") && 
-                                             (item.title ?: "").contains("messages")
-                        
-                        when {
-                            // Exact content match
-                            existing.content == item.content -> true
-                            // Chat app substring match
-                            isChatApp && (existing.content.contains(item.content) || item.content.contains(existing.content)) -> true
-                            // Fuzzy content similarity > 0.8
-                            similarity > 0.8 && (existing.title == item.title || titleSimilarity > 0.8) -> true
-                            // Prefix match (only for non-voice)
-                            existing.source != "voice" && existing.content.take(15) == item.content.take(15) -> true
-                            // Line overlap for group summaries/conversations
-                            hasLineOverlap || isGmailSummary -> true
-                            else -> false
-                        }
-                    }
-                    if (existingIdx != -1) {
-                        val existing = mergedList[existingIdx]
-                        mergedList[existingIdx] = existing.copy(
-                            duplicateCount = existing.duplicateCount + item.duplicateCount
-                        )
-                    } else {
-                        mergedList.add(item)
-                    }
-                }
-                mergedList
-            }
-
-            // Aggregated Heuristic Highlight
-            val groupHighlight = remember(memories) {
-                val textContent = memories.joinToString(" ").lowercase()
-                when {
-                    textContent.contains("step") -> {
-                        val stepsList = memories.mapNotNull { 
-                            Regex("\\b\\d{1,3}(,\\d{3})*\\b").find(it.content)?.value?.replace(",", "")?.toIntOrNull()
-                        }
-                        if (stepsList.isNotEmpty()) {
-                            "⚡ Active steps logged ${stepsList.size} times, peaking at ${stepsList.maxOrNull()} steps today."
-                        } else {
-                            "⚡ Tracked active step logs."
-                        }
-                    }
-                    textContent.contains("heart") -> "⚡ Captured heart rate tracking records today."
-                    textContent.contains("sleep") -> "⚡ Sleep cycles and rest logs successfully parsed."
-                    textContent.contains("spent") || textContent.contains("transaction") || textContent.contains("amount") -> {
-                        class Transaction(val amount: Double, val merchant: String) {
-                            override fun equals(other: Any?): Boolean {
-                                if (this === other) return true
-                                if (other !is Transaction) return false
-                                return amount == other.amount && merchant == other.merchant
-                            }
-                            override fun hashCode(): Int {
-                                return 31 * amount.hashCode() + merchant.hashCode()
-                            }
-                        }
-                        
-                        fun getCleanMerchant(title: String?, content: String): String {
-                            val t = (title ?: "").lowercase()
-                            val c = content.lowercase()
-                            
-                            val isGenericTitle = t.contains("chase") || t.contains("american express") || 
-                                                 t.contains("amex") || t.contains("bank") || 
-                                                 t.contains("messages") || t.contains("gmail")
-                                                 
-                            val merchant = if (!isGenericTitle && t.isNotEmpty()) {
-                                t
-                            } else {
-                                val withIdx = c.indexOf("with ")
-                                val atIdx = c.indexOf("at ")
-                                when {
-                                    withIdx != -1 -> content.substring(withIdx + 5).trim()
-                                    atIdx != -1 -> content.substring(atIdx + 3).trim()
-                                    else -> content
-                                }
-                            }
-                            
-                            return merchant.split(Regex("[\\s\\n\\t]+")).firstOrNull { it.isNotBlank() }
-                                ?.replace(Regex("[^a-zA-Z0-9]"), "")?.lowercase() ?: ""
-                        }
-
-                        val uniqueTransactions = mutableSetOf<Transaction>()
-                        for (item in memories) {
-                            if (item.isRead) continue
-                            val matches = Regex("\\$(\\d+(?:\\.\\d{2})?)").findAll(item.content)
-                            for (match in matches) {
-                                val amount = match.groupValues[1].toDoubleOrNull() ?: continue
-                                val line = item.content.lines().firstOrNull { it.contains(match.value) } ?: item.content
-                                val lowerLine = line.lowercase()
-                                
-                                val hasExclusion = lowerLine.contains("refund") || lowerLine.contains("credit") || 
-                                                   lowerLine.contains("returned") || lowerLine.contains("code") ||
-                                                   lowerLine.contains("statement") || lowerLine.contains("notice") ||
-                                                   lowerLine.contains("level you set") || lowerLine.contains("limit") ||
-                                                   lowerLine.contains("balance") || lowerLine.contains("above the")
-                                if (hasExclusion) continue
-                                
-                                val hasContext = lowerLine.contains("transaction") || lowerLine.contains("spent") || 
-                                                 lowerLine.contains("charge") || lowerLine.contains("paid") || 
-                                                 lowerLine.contains("payment") || lowerLine.contains("purchase") ||
-                                                 lowerLine.contains("with") || lowerLine.contains("at")
-                                if (hasContext) {
-                                    val merchant = getCleanMerchant(item.title, line)
-                                    if (merchant.isNotEmpty()) {
-                                        uniqueTransactions.add(Transaction(amount, merchant))
-                                    }
-                                }
-                            }
-                        }
-                        
-                        if (uniqueTransactions.isNotEmpty()) {
-                            val totalSum = uniqueTransactions.sumOf { it.amount }
-                            "⚡ Logged ${uniqueTransactions.size} payments totaling $${String.format(Locale.getDefault(), "%.2f", totalSum)}."
-                        } else {
-                            "⚡ Transaction card movements logged."
-                        }
-                    }
-                    memories.size > 2 -> "⚡ Summarized ${memories.size} logs starting with \"${memories.last().content.take(30)}...\""
-                    else -> null
-                }
-            }
-
-            AnimatedVisibility(visible = expanded) {
-                Column {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    if (groupHighlight != null) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp)
-                        ) {
-                            Text(
-                                text = groupHighlight,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
-                            )
-                        }
-                    }
-
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        sortedMemories.forEachIndexed { idx, memory ->
-                            if (idx > 0) {
-                                HorizontalDivider(
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.15f),
-                                    thickness = 0.5.dp,
-                                    modifier = Modifier.padding(vertical = 4.dp)
-                                )
-                            }
-                            SingleMemoryRow(
-                                memory = memory,
-                                onMarkAsRead = onMarkAsRead,
-                                onDeepDiveCoPilot = onDeepDiveCoPilot,
-                                context = context
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    TextButton(
-                        onClick = { expanded = false },
-                        modifier = Modifier.fillMaxWidth(),
-                        contentPadding = PaddingValues(0.dp)
-                    ) {
-                        Text(
-                            text = "Show less",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
             }
         }
     }
 }
 
 @Composable
-private fun SingleMemoryRow(
-    memory: MemoryEntity,
-    onMarkAsRead: (Long) -> Unit,
-    onDeepDiveCoPilot: (MemoryEntity) -> Unit,
-    context: android.content.Context
+private fun AppGroupHeader(
+    appName: String,
+    source: String,
+    packageName: String?,
+    unreadCount: Int,
+    totalCount: Int,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val lines = remember(memory.content) { memory.content.split("\n").filter { it.isNotBlank() } }
-    val isLong = memory.content.length > 200 || lines.size > 3
+    val chipColor = when (source) {
+        "clipboard" -> PastelPurple
+        "voice" -> PastelGreen
+        else -> when {
+            packageName?.contains("gmail") == true -> PastelRed
+            packageName?.contains("whatsapp") == true -> PastelGreen
+            packageName?.contains("messaging") == true -> PastelBlue
+            packageName?.contains("slack") == true -> PastelOrange
+            else -> MaterialTheme.colorScheme.primaryContainer
+        }
+    }
+    val chipTextColor = when (source) {
+        "clipboard" -> PastelPurpleText
+        "voice" -> PastelGreenText
+        else -> when {
+            packageName?.contains("gmail") == true -> PastelRedText
+            packageName?.contains("whatsapp") == true -> PastelGreenText
+            packageName?.contains("messaging") == true -> PastelBlueText
+            packageName?.contains("slack") == true -> PastelOrangeText
+            else -> MaterialTheme.colorScheme.onPrimaryContainer
+        }
+    }
 
-    Column(
-        modifier = Modifier
+    Row(
+        modifier = modifier
             .fillMaxWidth()
-            .clickable {
-                onMarkAsRead(memory.id)
-                onDeepDiveCoPilot(memory)
-            }
-            .padding(vertical = 4.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onToggleExpand() }
+            .padding(vertical = 6.dp, horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            Column(modifier = Modifier.weight(1f)) {
-                if (!memory.title.isNullOrEmpty()) {
-                    Text(
-                        text = memory.title,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = if (memory.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface
-                    )
+        Surface(
+            color = chipColor,
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.padding(end = 8.dp)
+        ) {
+            Text(
+                text = appName,
+                color = chipTextColor,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+            )
+        }
+        Text(
+            text = if (unreadCount > 0) "$unreadCount unread" else "$totalCount messages",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (unreadCount > 0) PastelRedText else MaterialTheme.colorScheme.outline,
+            fontWeight = if (unreadCount > 0) FontWeight.Bold else FontWeight.Normal
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        HorizontalDivider(
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+            thickness = 0.5.dp,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Icon(
+            imageVector = if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+            contentDescription = if (isExpanded) "Collapse" else "Expand",
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+private fun getAppName(context: android.content.Context, packageName: String?, source: String): String {
+    if (source == "clipboard") return "Clipboard"
+    if (source == "voice") return "Voice Notes"
+    if (packageName.isNullOrEmpty()) return "Notification"
+    return try {
+        val pm = context.packageManager
+        val info = pm.getApplicationInfo(packageName, 0)
+        pm.getApplicationLabel(info).toString()
+    } catch (e: Exception) {
+        val lowerPkg = packageName.lowercase()
+        when {
+            lowerPkg.contains("gmail") -> "Gmail"
+            lowerPkg.contains("whatsapp") -> "WhatsApp"
+            lowerPkg.contains("messaging") -> "Messages"
+            lowerPkg.contains("slack") -> "Slack"
+            lowerPkg.contains("telegram") -> "Telegram"
+            lowerPkg.contains("discord") -> "Discord"
+            lowerPkg.contains("twitter") || lowerPkg.contains("x.android") -> "X"
+            lowerPkg.contains("instagram") -> "Instagram"
+            lowerPkg.contains("facebook") -> "Facebook"
+            else -> packageName.substringAfterLast(".").replaceFirstChar { it.uppercase() }
+        }
+    }
+}
+
+private fun getQuickSummary(content: String): String {
+    val trimmed = content.trim()
+    if (trimmed.isEmpty()) return ""
+    
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        val cleanUrl = trimmed.substringBefore("?")
+        return "Link: $cleanUrl"
+    }
+
+    val lines = trimmed.split("\n")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+    if (lines.isEmpty()) return ""
+
+    val firstLine = lines.first()
+
+    val combinedText = if (firstLine.length < 15 && lines.size > 1) {
+        "$firstLine: ${lines[1]}"
+    } else {
+        firstLine
+    }
+
+    return if (combinedText.length > 70) {
+        combinedText.take(67) + "..."
+    } else {
+        combinedText
+    }
+}
+
+@Composable
+private fun MemoryCard(
+    merged: MergedMemory,
+    onMarkAsRead: (List<Long>) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val memory = merged.primary
+    val context = LocalContext.current
+
+    val canLaunch = (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) || !memory.deepLink.isNullOrEmpty()
+
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable {
+                if (!merged.isRead) {
+                    onMarkAsRead(merged.allIds)
                 }
-                
-                Spacer(modifier = Modifier.height(2.dp))
-                
-                if (lines.size > 1) {
-                    val displayedLines = if (expanded) lines else lines.take(3)
-                    Column(
-                        modifier = Modifier.padding(top = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        displayedLines.forEach { line ->
-                            Row(verticalAlignment = Alignment.Top) {
-                                Text(
-                                    text = "•",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(end = 6.dp)
-                                )
-                                Text(
-                                    text = line,
-                                    fontSize = 14.sp,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (memory.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                if (canLaunch) {
+                    if (!memory.deepLink.isNullOrEmpty()) {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(memory.deepLink))
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            context.startActivity(intent)
+                        } catch (_: Exception) {
+                            if (!memory.packageName.isNullOrEmpty()) {
+                                val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName)
+                                if (launchIntent != null) {
+                                    context.startActivity(launchIntent)
+                                }
                             }
                         }
-                        if (!expanded && lines.size > 3) {
-                            Text(
-                                text = "... and ${lines.size - 3} more",
-                                fontSize = 12.sp,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.padding(start = 12.dp, top = 2.dp)
-                            )
-                        }
+                    } else if (!memory.packageName.isNullOrEmpty()) {
+                        try {
+                            val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName)
+                            if (launchIntent != null) {
+                                context.startActivity(launchIntent)
+                            }
+                        } catch (_: Exception) {}
                     }
-                } else {
-                    Text(
-                        text = memory.content,
-                        fontSize = 14.sp,
-                        maxLines = if (expanded) Int.MAX_VALUE else 3,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (memory.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                } else if (memory.source == "clipboard") {
+                    try {
+                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val clip = android.content.ClipData.newPlainText("2ndBrain Copy", memory.content)
+                        clipboard.setPrimaryClip(clip)
+                        android.widget.Toast.makeText(context, "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                    } catch (_: Exception) {}
                 }
-            }
-            
-            Spacer(modifier = Modifier.width(8.dp))
-            
-            Column(horizontalAlignment = Alignment.End) {
+            },
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            // Header Row: Time, Duplicate Badge, Unread Dot
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 val timeStr = remember(memory.timestamp) {
                     val date = Date(memory.timestamp)
                     val sdf = SimpleDateFormat("h:mm a", Locale.getDefault())
@@ -772,95 +849,70 @@ private fun SingleMemoryRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.outline
                 )
-                
-                if (memory.duplicateCount > 1) {
-                    Spacer(modifier = Modifier.height(4.dp))
+
+                if (merged.duplicateCount > 1) {
+                    Spacer(modifier = Modifier.width(6.dp))
                     Surface(
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(8.dp)
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text = "x${memory.duplicateCount}",
+                            text = "x${merged.duplicateCount}",
                             color = MaterialTheme.colorScheme.primary,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp)
                         )
                     }
                 }
-            }
-        }
-        
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (isLong) {
-                TextButton(
-                    onClick = { expanded = !expanded },
-                    contentPadding = PaddingValues(0.dp),
-                    modifier = Modifier.height(24.dp)
-                ) {
-                    Text(
-                        text = if (expanded) "Show less" else "Read more",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            } else {
-                Spacer(modifier = Modifier.width(1.dp))
-            }
-            
-            val canLaunch = (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) || !memory.deepLink.isNullOrEmpty()
-            if (canLaunch) {
-                TextButton(
-                    onClick = {
-                        if (memory.source != "voice" && !memory.deepLink.isNullOrEmpty()) {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(memory.deepLink))
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(intent)
-                            } catch (_: Exception) {
-                                if (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) {
-                                    val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName!!)
-                                    if (launchIntent != null) {
-                                        context.startActivity(launchIntent)
-                                    }
-                                }
-                            }
-                        } else if (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) {
-                            try {
-                                val launchIntent = context.packageManager.getLaunchIntentForPackage(memory.packageName!!)
-                                if (launchIntent != null) {
-                                    context.startActivity(launchIntent)
-                                }
-                            } catch (_: Exception) {}
-                        }
-                    },
-                    contentPadding = PaddingValues(horizontal = 8.dp),
-                    modifier = Modifier.height(28.dp)
-                ) {
-                    Text(
-                        text = "Open App",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
-                    )
-                }
-            }
-        }
 
-        if (memory.source == "voice" && !memory.deepLink.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(8.dp))
-            AudioPlayerControl(
-                audioPath = memory.deepLink,
-                modifier = Modifier.padding(top = 4.dp)
+                Spacer(modifier = Modifier.weight(1f))
+
+                if (!merged.isRead) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(RoundedCornerShape(3.5.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            if (!memory.title.isNullOrEmpty()) {
+                Text(
+                    text = memory.title,
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = if (merged.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+            }
+
+            val summary = remember(memory.content) { getQuickSummary(memory.content) }
+            Text(
+                text = summary,
+                fontSize = 13.sp,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (merged.isRead) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
+
+            if (memory.source == "voice" && !memory.deepLink.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                AudioPlayerControl(
+                    audioPath = memory.deepLink,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
         }
     }
 }
+
 
 private fun calculateSimilarity(s1: String, s2: String): Double {
     if (s1 == s2) return 1.0

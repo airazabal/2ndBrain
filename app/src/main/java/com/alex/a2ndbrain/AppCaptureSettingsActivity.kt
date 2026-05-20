@@ -31,8 +31,15 @@ import androidx.compose.ui.text.style.TextOverflow
 
 
 import com.alex.a2ndbrain.ui.theme.BrainTheme
+import org.koin.android.ext.android.inject
+import androidx.lifecycle.lifecycleScope
+import com.alex.a2ndbrain.core.memory.MemoryRepository
+import com.alex.a2ndbrain.core.usage.UsageRepository
+import kotlinx.coroutines.Dispatchers
 
 class AppCaptureSettingsActivity : ComponentActivity() {
+    private val memoryRepository: MemoryRepository by inject()
+    private val usageRepository: UsageRepository by inject()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val settingsManager = CaptureSettingsManager(this)
@@ -57,6 +64,12 @@ class AppCaptureSettingsActivity : ComponentActivity() {
                             val componentName = android.content.ComponentName(this, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java)
                             packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
                             packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
+                        },
+                        onUnmonitoredAppRemoved = { packageName ->
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                memoryRepository.deleteMemoriesByPackage(packageName)
+                                usageRepository.deleteUsageStatsByPackage(packageName)
+                            }
                         }
                     )
                 }
@@ -75,7 +88,8 @@ fun AppCaptureSettingsScreen(
     activeHabits: List<HabitEntity> = emptyList(),
     onAddCustomHabit: (String, String, Boolean) -> Unit = { _, _, _ -> },
     onDeleteHabit: (String) -> Unit = {},
-    onToggleHabitActive: (String) -> Unit = {}
+    onToggleHabitActive: (String) -> Unit = {},
+    onUnmonitoredAppRemoved: (String) -> Unit = {}
 ) {
     var monitoredApps by remember { mutableStateOf(settingsManager.getMonitoredApps()) }
     val debugEvents by com.alex.a2ndbrain.core.capture.CaptureDebugStore.events.collectAsState()
@@ -546,8 +560,10 @@ fun AppCaptureSettingsScreen(
                         Text("Select All", fontSize = 12.sp)
                     }
                     TextButton(onClick = {
+                        val removedApps = monitoredApps.toList()
                         settingsManager.saveMonitoredApps(emptySet())
                         monitoredApps = emptySet()
+                        removedApps.forEach { onUnmonitoredAppRemoved(it) }
                     }) {
                         Text("Deselect All", fontSize = 12.sp)
                     }
@@ -567,7 +583,12 @@ fun AppCaptureSettingsScreen(
                     checked = monitoredApps.contains(pkg.packageName),
                     onCheckedChange = { checked ->
                         val current = monitoredApps.toMutableSet()
-                        if (checked) current.add(pkg.packageName) else current.remove(pkg.packageName)
+                        if (checked) {
+                            current.add(pkg.packageName)
+                        } else {
+                            current.remove(pkg.packageName)
+                            onUnmonitoredAppRemoved(pkg.packageName)
+                        }
                         settingsManager.saveMonitoredApps(current)
                         monitoredApps = current
                     }

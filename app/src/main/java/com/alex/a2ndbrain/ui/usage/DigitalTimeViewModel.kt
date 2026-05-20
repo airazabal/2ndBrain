@@ -21,8 +21,24 @@ import java.util.Locale
 
 class DigitalTimeViewModel(
     private val digitalTimeManager: DigitalTimeManager,
+    private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager,
     private val applicationContext: Context
 ) : ViewModel() {
+
+    val syncStatus = nearbySyncManager.syncStatus
+
+    fun startNearbySync(force: Boolean = false) {
+        nearbySyncManager.startSync(force)
+    }
+
+    fun stopNearbySync() {
+        nearbySyncManager.stopSync()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        nearbySyncManager.stopSync()
+    }
 
     private val _selectedPeriod = MutableStateFlow(TimePeriod.TODAY)
     val selectedPeriod = _selectedPeriod.asStateFlow()

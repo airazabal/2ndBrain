@@ -19,4 +19,8 @@ class UsageRepository(private val memoryDao: MemoryDao) {
     suspend fun getUsageStatsSince(startDate: String): List<UsageStatEntity> = memoryDao.getUsageStatsSince(startDate)
 
     fun getUsageStatsSinceFlow(startDate: String): Flow<List<UsageStatEntity>> = memoryDao.getUsageStatsSinceFlow(startDate)
+
+    suspend fun deleteUsageStatsByPackage(packageName: String) {
+        memoryDao.deleteUsageStatsByPackage(packageName)
+    }
 }
