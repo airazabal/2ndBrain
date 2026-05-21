@@ -118,4 +118,27 @@ class CaptureSettingsManager(private val context: Context) {
     fun saveThemePreference(theme: String) {
         prefs.edit().putString("theme_preference", theme).apply()
     }
+
+    fun isNotificationAccessGranted(): Boolean {
+        return androidx.core.app.NotificationManagerCompat
+            .getEnabledListenerPackages(context)
+            .contains(context.packageName)
+    }
+
+    fun isUsageAccessGranted(): Boolean {
+        val appOps = context.getSystemService(android.content.Context.APP_OPS_SERVICE) as android.app.AppOpsManager
+        val mode = appOps.checkOpNoThrow(
+            android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+            android.os.Process.myUid(),
+            context.packageName
+        )
+        return mode == android.app.AppOpsManager.MODE_ALLOWED
+    }
+    fun hasCompletedSetup(): Boolean {
+        return prefs.getBoolean("has_completed_setup", false)
+    }
+
+    fun markSetupCompleted() {
+        prefs.edit().putBoolean("has_completed_setup", true).apply()
+    }
 }

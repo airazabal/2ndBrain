@@ -2,40 +2,52 @@ package com.alex.a2ndbrain
 
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.health.connect.client.PermissionController
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.health.connect.client.PermissionController
+import com.alex.a2ndbrain.ui.chat.CopilotViewModel
 import com.alex.a2ndbrain.ui.home.HomeScreen
 import com.alex.a2ndbrain.ui.home.HomeViewModel
+import com.alex.a2ndbrain.ui.meditation.MeditationScreen
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.memories.MemoryViewModel
 import com.alex.a2ndbrain.ui.notes.NotesScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionViewModel
+import com.alex.a2ndbrain.ui.settings.SettingsViewModel
 import com.alex.a2ndbrain.ui.theme.BrainTheme
 import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
-import com.alex.a2ndbrain.ui.chat.CopilotViewModel
-import com.alex.a2ndbrain.ui.settings.SettingsViewModel
-import com.alex.a2ndbrain.ui.meditation.MeditationScreen
+import com.alex.a2ndbrain.ui.wizard.PermissionWizardScreen
+import com.alex.a2ndbrain.ui.wizard.WizardPermission
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
 
@@ -96,364 +108,724 @@ class MainActivity : ComponentActivity() {
             }
             BrainTheme(darkTheme = isDark) {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    val navViewModel: NavigationViewModel = koinViewModel()
-                    val homeViewModel: HomeViewModel = koinViewModel()
-                    val memoryViewModel: MemoryViewModel = koinViewModel()
-                    val reflectionViewModel: ReflectionViewModel = koinViewModel()
-                    val copilotViewModel: CopilotViewModel = koinViewModel()
-                    
-                    val currentTab by navViewModel.currentTab.collectAsStateWithLifecycle()
-                    val error by navViewModel.errorFlow.collectAsStateWithLifecycle()
-
-                    // Automatically forward preset Copilot queries to the Copilot ViewModel
-                    LaunchedEffect(Unit) {
-                        navViewModel.presetCopilotQuery.collect { query ->
-                            copilotViewModel.sendChatMessage(query)
-                        }
+                    var setupCompleted by remember {
+                        mutableStateOf(settingsManager.hasCompletedSetup())
                     }
 
-                    LaunchedEffect(error) {
-                        error?.let {
-                            Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show()
-                            navViewModel.clearError()
-                        }
-                    }
+                    if (!setupCompleted) {
+                        val context = androidx.compose.ui.platform.LocalContext.current
 
-                    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
-                    val useRail = configuration.screenWidthDp >= 600
-
-                    val snackbarHostState = remember { SnackbarHostState() }
-                    LaunchedEffect(homeViewModel) {
-                        homeViewModel.habitUncompleted.collect { entity ->
-                            val result = snackbarHostState.showSnackbar(
-                                message = "Habit unchecked",
-                                actionLabel = "Undo",
-                                duration = SnackbarDuration.Short
+                        val isNotificationListenerGranted = remember(setupCompleted) {
+                            val cn = ComponentName(
+                                this@MainActivity,
+                                com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java
                             )
-                            if (result == SnackbarResult.ActionPerformed) {
-                                homeViewModel.undoHabitUncomplete(entity)
+                            val flat = android.provider.Settings.Secure.getString(
+                                context.contentResolver, "enabled_notification_listeners"
+                            ) ?: ""
+                            flat.contains(cn.flattenToString())
+                        }
+                        val isUsageAccessGranted = remember(setupCompleted) {
+                            try {
+                                val appOps =
+                                    context.getSystemService(APP_OPS_SERVICE) as android.app.AppOpsManager
+                                appOps.checkOpNoThrow(
+                                    android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
+                                    android.os.Process.myUid(), context.packageName
+                                ) == android.app.AppOpsManager.MODE_ALLOWED
+                            } catch (e: Exception) {
+                                false
                             }
                         }
-                    }
 
-                    Scaffold(
-                        snackbarHost = { SnackbarHost(snackbarHostState) },
-                        bottomBar = {
-                            if (!useRail) {
-                                NavigationBar(
-                                    containerColor = MaterialTheme.colorScheme.surface
-                                ) {
-                                    val tabs = listOf(
-                                        Triple("Home", Icons.Default.Home, AppTab.HOME),
-                                        Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
-                                        Triple("Brain", Icons.Default.AutoAwesome, AppTab.BRAIN),
-                                        Triple("Notes", Icons.Default.Description, AppTab.NOTES),
-                                        Triple("Time", Icons.Default.Schedule, AppTab.TIME),
-                                        Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
-                                        Triple("Co-pilot", Icons.Default.QuestionAnswer, AppTab.COPILOT),
-                                        Triple("Settings", Icons.Default.Settings, AppTab.SETTINGS)
-                                    )
-                                    tabs.forEach { (label, icon, tab) ->
-                                        NavigationBarItem(
-                                            icon = { Icon(icon, contentDescription = label) },
-                                            label = { Text(label) },
-                                            selected = currentTab == tab,
-                                            onClick = { navViewModel.setTab(tab) },
-                                            colors = NavigationBarItemDefaults.colors(
-                                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                                unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                            )
-                                        )
+                        PermissionWizardScreen(
+                            permissions = listOf(
+                                WizardPermission(
+                                    icon = Icons.Default.Notifications,
+                                    iconTint = androidx.compose.ui.graphics.Color(0xFF5C6BC0),
+                                    title = "Notification Access",
+                                    description = "Captures notifications from your apps to build your daily memory stream.",
+                                    isRequired = true,
+                                    isGranted = isNotificationListenerGranted,
+                                    actionLabel = "Enable",
+                                    onAction = { startActivity(android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }
+                                ),
+                                WizardPermission(
+                                    icon = Icons.Default.Schedule,
+                                    iconTint = androidx.compose.ui.graphics.Color(0xFF26A69A),
+                                    title = "Usage Access",
+                                    description = "Tracks your screen time per app so the AI can spot digital patterns.",
+                                    isRequired = true,
+                                    isGranted = isUsageAccessGranted,
+                                    actionLabel = "Enable",
+                                    onAction = { startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+                                ),
+                                WizardPermission(
+                                    icon = Icons.Default.Favorite,
+                                    iconTint = androidx.compose.ui.graphics.Color(0xFFEF5350),
+                                    title = "Health Connect",
+                                    description = "Syncs steps, sleep, and heart rate from your smartwatch.",
+                                    isRequired = false,
+                                    isGranted = false,
+                                    actionLabel = "Connect",
+                                    onAction = {
+                                        try {
+                                            startActivity(android.content.Intent("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS"))
+                                        } catch (e: Exception) {
+                                            startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS))
+                                        }
                                     }
+                                ),
+                                WizardPermission(
+                                    icon = Icons.Default.LocationOn,
+                                    iconTint = androidx.compose.ui.graphics.Color(0xFFFF7043),
+                                    title = "Location & Bluetooth",
+                                    description = "Required for P2P device sync between your phone and tablet.",
+                                    isRequired = false,
+                                    isGranted = hasSyncPermissions(),
+                                    actionLabel = "Enable",
+                                    onAction = {
+                                        startActivity(
+                                            android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                                                .apply {
+                                                    data =
+                                                        android.net.Uri.parse("package:${packageName}")
+                                                })
+                                    }
+                                )
+                            ),
+                            onContinue = {
+                                settingsManager.markSetupCompleted()
+                                setupCompleted = true
+                            }
+                        )
+                    } else {
+                        // --- Permission wizard state ---
+                        val settingsManagerCompose =
+                            settingsManager // already injected above setContent
+
+                        val nearbyPermissions = buildList {
+                            add(android.Manifest.permission.ACCESS_FINE_LOCATION)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                add(android.Manifest.permission.BLUETOOTH_ADVERTISE)
+                                add(android.Manifest.permission.BLUETOOTH_SCAN)
+                                add(android.Manifest.permission.BLUETOOTH_CONNECT)
+                            }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+                            }
+                        }
+
+                        val requestNearbyLauncher = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.RequestMultiplePermissions()
+                        ) { /* re-check triggers via resumeKey */ }
+
+                        val requestPostNotificationsLauncher = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.RequestPermission()
+                        ) { /* re-check triggers via resumeKey */ }
+
+                        // Increment on every onResume so permission checks rerun
+                        var resumeKey by remember { mutableIntStateOf(0) }
+                        val lifecycleOwner = LocalLifecycleOwner.current
+                        DisposableEffect(lifecycleOwner) {
+                            val observer = LifecycleEventObserver { _, event ->
+                                if (event == Lifecycle.Event.ON_RESUME) resumeKey++
+                            }
+                            lifecycleOwner.lifecycle.addObserver(observer)
+                            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+                        }
+
+                        val hasNotificationAccess =
+                            remember(resumeKey) { settingsManagerCompose.isNotificationAccessGranted() }
+                        val hasUsageAccess =
+                            remember(resumeKey) { settingsManagerCompose.isUsageAccessGranted() }
+                        val hasNearbyPerms = remember(resumeKey) { hasSyncPermissions() }
+                        val hasPostNotifications = remember(resumeKey) {
+                            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                                    checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                        }
+
+                        var showWizard by remember {
+                            mutableStateOf(!settingsManagerCompose.isNotificationAccessGranted() || !settingsManagerCompose.isUsageAccessGranted())
+                        }
+                        // --- end wizard state ---
+
+                        val navViewModel: NavigationViewModel = koinViewModel()
+                        val homeViewModel: HomeViewModel = koinViewModel()
+                        val memoryViewModel: MemoryViewModel = koinViewModel()
+                        val reflectionViewModel: ReflectionViewModel = koinViewModel()
+                        val copilotViewModel: CopilotViewModel = koinViewModel()
+
+                        // Hoisted Health Connect launcher (wizard + Home tab both use it)
+                        val requestHealthPermissionLauncher = rememberLauncherForActivityResult(
+                            contract = PermissionController.createRequestPermissionResultContract()
+                        ) {
+                            homeViewModel.checkHealthPermissionsAndSync()
+                        }
+
+                        val hasHealthConnect =
+                            remember(resumeKey) { homeViewModel.healthPermissionsGranted.value }
+
+                        val currentTab by navViewModel.currentTab.collectAsStateWithLifecycle()
+                        val error by navViewModel.errorFlow.collectAsStateWithLifecycle()
+
+                        // Automatically forward preset Copilot queries to the Copilot ViewModel
+                        LaunchedEffect(Unit) {
+                            navViewModel.presetCopilotQuery.collect { query ->
+                                copilotViewModel.sendChatMessage(query)
+                            }
+                        }
+
+                        LaunchedEffect(error) {
+                            error?.let {
+                                Toast.makeText(this@MainActivity, it, Toast.LENGTH_LONG).show()
+                                navViewModel.clearError()
+                            }
+                        }
+
+                        val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+                        val useRail = configuration.screenWidthDp >= 600
+
+                        val snackbarHostState = remember { SnackbarHostState() }
+                        LaunchedEffect(homeViewModel) {
+                            homeViewModel.habitUncompleted.collect { entity ->
+                                val result = snackbarHostState.showSnackbar(
+                                    message = "Habit unchecked",
+                                    actionLabel = "Undo",
+                                    duration = SnackbarDuration.Short
+                                )
+                                if (result == SnackbarResult.ActionPerformed) {
+                                    homeViewModel.undoHabitUncomplete(entity)
                                 }
                             }
                         }
-                    ) { innerPadding ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(innerPadding)
-                        ) {
-                            if (useRail) {
-                                NavigationRail(
-                                    modifier = Modifier.fillMaxHeight(),
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                    header = {
-                                        Column(
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            modifier = Modifier.padding(vertical = 16.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.AutoAwesome,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(32.dp),
-                                                tint = MaterialTheme.colorScheme.primary
+
+                        if (showWizard) {
+                            PermissionWizardScreen(
+                                permissions = listOf(
+                                    WizardPermission(
+                                        icon = Icons.Default.Notifications,
+                                        iconTint = androidx.compose.ui.graphics.Color(0xFF1E88E5),
+                                        title = "Notification Access",
+                                        description = "Captures Gmail, Calendar, Todoist and other app alerts into your Brain feed.",
+                                        isRequired = true,
+                                        isGranted = hasNotificationAccess,
+                                        actionLabel = "Open Settings",
+                                        onAction = { startActivity(android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }
+                                    ),
+                                    WizardPermission(
+                                        icon = Icons.Default.QueryStats,
+                                        iconTint = androidx.compose.ui.graphics.Color(0xFF8E24AA),
+                                        title = "Usage Access",
+                                        description = "Powers the Digital Time dashboard with per-app screen time data.",
+                                        isRequired = true,
+                                        isGranted = hasUsageAccess,
+                                        actionLabel = "Open Settings",
+                                        onAction = { startActivity(android.content.Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+                                    ),
+                                    WizardPermission(
+                                        icon = Icons.Default.NotificationsActive,
+                                        iconTint = androidx.compose.ui.graphics.Color(0xFFF4511E),
+                                        title = "Push Notifications",
+                                        description = "Required to deliver habit reminders and medication alarms.",
+                                        isRequired = true,
+                                        isGranted = hasPostNotifications,
+                                        actionLabel = "Grant",
+                                        onAction = {
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                requestPostNotificationsLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                                            }
+                                        }
+                                    ),
+                                    WizardPermission(
+                                        icon = Icons.Default.Bluetooth,
+                                        iconTint = androidx.compose.ui.graphics.Color(0xFF00897B),
+                                        title = "Nearby Device Sync",
+                                        description = "Syncs screen time and meditation sessions with your other devices over P2P.",
+                                        isRequired = false,
+                                        isGranted = hasNearbyPerms,
+                                        actionLabel = "Grant",
+                                        onAction = { requestNearbyLauncher.launch(nearbyPermissions.toTypedArray()) }
+                                    ),
+                                    WizardPermission(
+                                        icon = Icons.Default.Favorite,
+                                        iconTint = androidx.compose.ui.graphics.Color(0xFFE53935),
+                                        title = "Health Connect",
+                                        description = "Reads steps, sleep and heart rate from your smartwatch via Health Connect.",
+                                        isRequired = false,
+                                        isGranted = hasHealthConnect,
+                                        actionLabel = "Connect",
+                                        onAction = {
+                                            requestHealthPermissionLauncher.launch(
+                                                homeViewModel.healthConnectManager.permissions
                                             )
-                                            Text(
-                                                text = "v${BuildConfig.VERSION_NAME}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.outline,
-                                                modifier = Modifier.padding(top = 4.dp)
+                                        }
+                                    )
+                                ),
+                                onContinue = { showWizard = false }
+                            )
+                        } else {
+                            Scaffold(
+                                snackbarHost = { SnackbarHost(snackbarHostState) },
+                                bottomBar = {
+                                    if (!useRail) {
+                                        NavigationBar(
+                                            containerColor = MaterialTheme.colorScheme.surface
+                                        ) {
+                                            val tabs = listOf(
+                                                Triple("Home", Icons.Default.Home, AppTab.HOME),
+                                                Triple(
+                                                    "Feed",
+                                                    Icons.Default.Notifications,
+                                                    AppTab.FEED
+                                                ),
+                                                Triple(
+                                                    "Brain",
+                                                    Icons.Default.AutoAwesome,
+                                                    AppTab.BRAIN
+                                                ),
+                                                Triple(
+                                                    "Notes",
+                                                    Icons.Default.Description,
+                                                    AppTab.NOTES
+                                                ),
+                                                Triple("Time", Icons.Default.Schedule, AppTab.TIME),
+                                                Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
+                                                Triple(
+                                                    "Co-pilot",
+                                                    Icons.Default.QuestionAnswer,
+                                                    AppTab.COPILOT
+                                                ),
+                                                Triple(
+                                                    "Settings",
+                                                    Icons.Default.Settings,
+                                                    AppTab.SETTINGS
+                                                )
+                                            )
+                                            tabs.forEach { (label, icon, tab) ->
+                                                NavigationBarItem(
+                                                    icon = {
+                                                        Icon(
+                                                            icon,
+                                                            contentDescription = label
+                                                        )
+                                                    },
+                                                    label = { Text(label) },
+                                                    selected = currentTab == tab,
+                                                    onClick = { navViewModel.setTab(tab) },
+                                                    colors = NavigationBarItemDefaults.colors(
+                                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(
+                                                            alpha = 0.1f
+                                                        )
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            ) { innerPadding ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(innerPadding)
+                                ) {
+                                    if (useRail) {
+                                        NavigationRail(
+                                            modifier = Modifier.fillMaxHeight(),
+                                            containerColor = MaterialTheme.colorScheme.surface,
+                                            header = {
+                                                Column(
+                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                    modifier = Modifier.padding(vertical = 16.dp)
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.AutoAwesome,
+                                                        contentDescription = null,
+                                                        modifier = Modifier.size(32.dp),
+                                                        tint = MaterialTheme.colorScheme.primary
+                                                    )
+                                                    Text(
+                                                        text = "v${BuildConfig.VERSION_NAME}",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.outline,
+                                                        modifier = Modifier.padding(top = 4.dp)
+                                                    )
+                                                }
+                                            }
+                                        ) {
+                                            val tabs = listOf(
+                                                Triple("Home", Icons.Default.Home, AppTab.HOME),
+                                                Triple(
+                                                    "Feed",
+                                                    Icons.Default.Notifications,
+                                                    AppTab.FEED
+                                                ),
+                                                Triple(
+                                                    "Brain",
+                                                    Icons.Default.AutoAwesome,
+                                                    AppTab.BRAIN
+                                                ),
+                                                Triple(
+                                                    "Notes",
+                                                    Icons.Default.Description,
+                                                    AppTab.NOTES
+                                                ),
+                                                Triple("Time", Icons.Default.Schedule, AppTab.TIME),
+                                                Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
+                                                Triple(
+                                                    "Co-pilot",
+                                                    Icons.Default.QuestionAnswer,
+                                                    AppTab.COPILOT
+                                                )
+                                            )
+
+                                            tabs.forEach { (label, icon, tab) ->
+                                                NavigationRailItem(
+                                                    icon = {
+                                                        Icon(
+                                                            icon,
+                                                            contentDescription = label
+                                                        )
+                                                    },
+                                                    label = { Text(label) },
+                                                    selected = currentTab == tab,
+                                                    onClick = { navViewModel.setTab(tab) },
+                                                    colors = NavigationRailItemDefaults.colors(
+                                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(
+                                                            alpha = 0.1f
+                                                        )
+                                                    )
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.weight(1f))
+
+                                            NavigationRailItem(
+                                                icon = {
+                                                    Icon(
+                                                        Icons.Default.Settings,
+                                                        contentDescription = "Settings"
+                                                    )
+                                                },
+                                                label = { Text("Settings") },
+                                                selected = currentTab == AppTab.SETTINGS,
+                                                onClick = { navViewModel.setTab(AppTab.SETTINGS) },
+                                                colors = NavigationRailItemDefaults.colors(
+                                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                    unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.1f
+                                                    )
+                                                )
                                             )
                                         }
                                     }
-                                ) {
-                                    val tabs = listOf(
-                                        Triple("Home", Icons.Default.Home, AppTab.HOME),
-                                        Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
-                                        Triple("Brain", Icons.Default.AutoAwesome, AppTab.BRAIN),
-                                        Triple("Notes", Icons.Default.Description, AppTab.NOTES),
-                                        Triple("Time", Icons.Default.Schedule, AppTab.TIME),
-                                        Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
-                                        Triple("Co-pilot", Icons.Default.QuestionAnswer, AppTab.COPILOT)
-                                    )
-                                    
-                                    tabs.forEach { (label, icon, tab) ->
-                                        NavigationRailItem(
-                                            icon = { Icon(icon, contentDescription = label) },
-                                            label = { Text(label) },
-                                            selected = currentTab == tab,
-                                            onClick = { navViewModel.setTab(tab) },
-                                            colors = NavigationRailItemDefaults.colors(
-                                                selectedIconColor = MaterialTheme.colorScheme.primary,
-                                                unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                                                indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        // Hero Header
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 32.dp, vertical = 24.dp)
+                                        ) {
+                                            Text(
+                                                text = currentTab.title,
+                                                style = MaterialTheme.typography.headlineMedium,
+                                                fontWeight = FontWeight.Black,
+                                                lineHeight = 36.sp,
+                                                color = MaterialTheme.colorScheme.primary
                                             )
-                                        )
-                                    }
+                                        }
 
-                                    Spacer(modifier = Modifier.weight(1f))
+                                        Box(modifier = Modifier.weight(1f)) {
+                                            when (currentTab) {
+                                                AppTab.HOME -> {
+                                                    val healthMetrics by homeViewModel.healthMetricsToday.collectAsStateWithLifecycle()
+                                                    val healthPermissionGranted by homeViewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
+                                                    val healthConnectAvailable =
+                                                        homeViewModel.healthConnectManager.isAvailable()
 
-                                    NavigationRailItem(
-                                        icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                                        label = { Text("Settings") },
-                                        selected = currentTab == AppTab.SETTINGS,
-                                        onClick = { navViewModel.setTab(AppTab.SETTINGS) },
-                                        colors = NavigationRailItemDefaults.colors(
-                                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                                            unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
-                                        )
-                                    )
-                                }
-                            }
+                                                    val activeHabits by homeViewModel.activeHabitsToday.collectAsStateWithLifecycle()
+                                                    val completedHabitIds by homeViewModel.completedHabitIdsToday.collectAsStateWithLifecycle()
+                                                    val pastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
+                                                    val senseOfDayScore by homeViewModel.senseOfDayScore.collectAsStateWithLifecycle()
+                                                    val senseOfDayContext by homeViewModel.senseOfDayContext.collectAsStateWithLifecycle()
+                                                    val todayTimelineEvents by homeViewModel.todayTimelineEvents.collectAsStateWithLifecycle()
+                                                    val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
+                                                    val inlineCopilotResponses by homeViewModel.inlineCopilotResponses.collectAsStateWithLifecycle()
+                                                    val inlineCopilotLoading by homeViewModel.inlineCopilotLoading.collectAsStateWithLifecycle()
 
-                            Column(modifier = Modifier.weight(1f)) {
-                                // Hero Header
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 32.dp, vertical = 24.dp)
-                                ) {
-                                    Text(
-                                        text = currentTab.title,
-                                        style = MaterialTheme.typography.headlineMedium,
-                                        fontWeight = FontWeight.Black,
-                                        lineHeight = 36.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                }
+                                                    val allMemoriesForHome by homeViewModel.allMemoriesForHome.collectAsStateWithLifecycle()
+                                                    val meditationSessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
+                                                    val meditationStreaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
+                                                    val vaultNotes by homeViewModel.vaultNotes.collectAsStateWithLifecycle()
+                                                    val consolidatedUsage by homeViewModel.consolidatedUsage.collectAsStateWithLifecycle()
+                                                    val summaries by homeViewModel.summaries.collectAsStateWithLifecycle()
 
-                                Box(modifier = Modifier.weight(1f)) {
-                                    when (currentTab) {
-                                        AppTab.HOME -> {
-                                            val healthMetrics by homeViewModel.healthMetricsToday.collectAsStateWithLifecycle()
-                                            val healthPermissionGranted by homeViewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
-                                            val healthConnectAvailable = homeViewModel.healthConnectManager.isAvailable()
+                                                    LaunchedEffect(Unit) {
+                                                        homeViewModel.checkHealthPermissionsAndSync()
+                                                        homeViewModel.loadVaultNotes()
+                                                    }
 
-                                            val activeHabits by homeViewModel.activeHabitsToday.collectAsStateWithLifecycle()
-                                            val completedHabitIds by homeViewModel.completedHabitIdsToday.collectAsStateWithLifecycle()
-                                            val pastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
-                                            val senseOfDayScore by homeViewModel.senseOfDayScore.collectAsStateWithLifecycle()
-                                            val senseOfDayContext by homeViewModel.senseOfDayContext.collectAsStateWithLifecycle()
-                                            val todayTimelineEvents by homeViewModel.todayTimelineEvents.collectAsStateWithLifecycle()
-                                            val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
-                                            val inlineCopilotResponses by homeViewModel.inlineCopilotResponses.collectAsStateWithLifecycle()
-                                            val inlineCopilotLoading by homeViewModel.inlineCopilotLoading.collectAsStateWithLifecycle()
-                                            
-                                            val allMemoriesForHome by homeViewModel.allMemoriesForHome.collectAsStateWithLifecycle()
-                                            val meditationSessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
-                                            val meditationStreaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
-                                            val vaultNotes by homeViewModel.vaultNotes.collectAsStateWithLifecycle()
-                                            val consolidatedUsage by homeViewModel.consolidatedUsage.collectAsStateWithLifecycle()
-                                            val summaries by homeViewModel.summaries.collectAsStateWithLifecycle()
-
-                                            val requestPermissionLauncher = rememberLauncherForActivityResult(
-                                                contract = PermissionController.createRequestPermissionResultContract()
-                                            ) { grantedPermissions ->
-                                                homeViewModel.checkHealthPermissionsAndSync()
-                                            }
-
-                                            LaunchedEffect(Unit) {
-                                                homeViewModel.checkHealthPermissionsAndSync()
-                                                homeViewModel.loadVaultNotes()
-                                            }
-
-                                            HomeScreen(
-                                                memories = allMemoriesForHome,
-                                                meditationSessions = meditationSessions,
-                                                meditationStreaks = meditationStreaks,
-                                                latestReflection = summaries.firstOrNull(),
-                                                notes = vaultNotes,
-                                                consolidatedUsage = consolidatedUsage,
-                                                onNavigateToTab = { navViewModel.setTab(it) },
-                                                healthMetrics = healthMetrics,
-                                                healthPermissionGranted = healthPermissionGranted,
-                                                healthConnectAvailable = healthConnectAvailable,
-                                                onConnectHealth = {
-                                                    requestPermissionLauncher.launch(homeViewModel.healthConnectManager.permissions)
-                                                },
-                                                activeHabits = activeHabits,
-                                                completedHabitIds = completedHabitIds,
-                                                onToggleHabit = { id -> homeViewModel.toggleHabitCompletion(id) },
-                                                pastWeekHabitCompletions = pastWeekHabitCompletions,
-                                                senseOfDayScore = senseOfDayScore,
-                                                senseOfDayContext = senseOfDayContext,
-                                                todayTimelineEvents = todayTimelineEvents,
-                                                timelineConflicts = timelineConflicts,
-                                                inlineCopilotResponses = inlineCopilotResponses,
-                                                inlineCopilotLoading = inlineCopilotLoading,
-                                                onDismissConflict = { id -> homeViewModel.dismissConflict(id) },
-                                                onDeepDiveCoPilotPrompt = { prompt -> navViewModel.triggerCopilotQuery(prompt) },
-                                                onResolveInline = { id, prompt -> homeViewModel.resolveInlineCopilot(id, prompt) },
-                                                onAddManualEvent = { title, time ->
-                                                    homeViewModel.addManualAgendaEvent(title, time)
-                                                },
-                                                onRefreshHealth = { homeViewModel.checkHealthPermissionsAndSync() },
-                                                onDeepDiveCoPilot = { event ->
-                                                    val query = """
+                                                    HomeScreen(
+                                                        memories = allMemoriesForHome,
+                                                        meditationSessions = meditationSessions,
+                                                        meditationStreaks = meditationStreaks,
+                                                        latestReflection = summaries.firstOrNull(),
+                                                        notes = vaultNotes,
+                                                        consolidatedUsage = consolidatedUsage,
+                                                        onNavigateToTab = { navViewModel.setTab(it) },
+                                                        healthMetrics = healthMetrics,
+                                                        healthPermissionGranted = healthPermissionGranted,
+                                                        healthConnectAvailable = healthConnectAvailable,
+                                                        onConnectHealth = {
+                                                            requestHealthPermissionLauncher.launch(
+                                                                homeViewModel.healthConnectManager.permissions
+                                                            )
+                                                        },
+                                                        activeHabits = activeHabits,
+                                                        completedHabitIds = completedHabitIds,
+                                                        onToggleHabit = { id ->
+                                                            homeViewModel.toggleHabitCompletion(
+                                                                id
+                                                            )
+                                                        },
+                                                        pastWeekHabitCompletions = pastWeekHabitCompletions,
+                                                        senseOfDayScore = senseOfDayScore,
+                                                        senseOfDayContext = senseOfDayContext,
+                                                        todayTimelineEvents = todayTimelineEvents,
+                                                        timelineConflicts = timelineConflicts,
+                                                        inlineCopilotResponses = inlineCopilotResponses,
+                                                        inlineCopilotLoading = inlineCopilotLoading,
+                                                        onDismissConflict = { id ->
+                                                            homeViewModel.dismissConflict(
+                                                                id
+                                                            )
+                                                        },
+                                                        onDeepDiveCoPilotPrompt = { prompt ->
+                                                            navViewModel.triggerCopilotQuery(
+                                                                prompt
+                                                            )
+                                                        },
+                                                        onResolveInline = { id, prompt ->
+                                                            homeViewModel.resolveInlineCopilot(
+                                                                id,
+                                                                prompt
+                                                            )
+                                                        },
+                                                        onAddManualEvent = { title, time ->
+                                                            homeViewModel.addManualAgendaEvent(
+                                                                title,
+                                                                time
+                                                            )
+                                                        },
+                                                        onRefreshHealth = { homeViewModel.checkHealthPermissionsAndSync() },
+                                                        onDeepDiveCoPilot = { event ->
+                                                            val query = """
                                                         Analyze my memories, notes, and habits for today's event: "${event.title}" scheduled at ${event.time} (${event.appName}). Please provide a cohesive context correlation summary to help me prepare.
                                                     """.trimIndent()
-                                                    navViewModel.triggerCopilotQuery(query)
-                                                },
-                                                onDeleteManualEvent = { id ->
-                                                    homeViewModel.deleteManualAgendaEvent(id)
+                                                            navViewModel.triggerCopilotQuery(query)
+                                                        },
+                                                        onDeleteManualEvent = { id ->
+                                                            homeViewModel.deleteManualAgendaEvent(id)
+                                                        }
+                                                    )
                                                 }
-                                            )
-                                        }
 
-                                        AppTab.FEED -> {
-                                            val memories by memoryViewModel.memories.collectAsStateWithLifecycle()
-                                            val searchQuery by memoryViewModel.searchQuery.collectAsStateWithLifecycle()
+                                                AppTab.FEED -> {
+                                                    val memories by memoryViewModel.memories.collectAsStateWithLifecycle()
+                                                    val searchQuery by memoryViewModel.searchQuery.collectAsStateWithLifecycle()
 
-                                            MemoryScreen(
-                                                memories = memories,
-                                                searchQuery = searchQuery,
-                                                onSearchQueryChange = { memoryViewModel.setSearchQuery(it) },
-                                                onCaptureClipboard = {
-                                                    clipboardCaptureManager.captureCurrentClipboard()
-                                                },
-                                                onMarkAsRead = { ids -> memoryViewModel.markMultipleAsRead(ids) },
-                                                onMarkAsUnread = { ids -> memoryViewModel.markMultipleAsUnread(ids) },
-                                                onClearAll = { memoryViewModel.clearAllMemories() },
-                                                monitoredApps = settingsManager.getMonitoredApps(),
-                                                vaultUri = settingsManager.getObsidianVaultUri(),
-                                                onSaveVoiceNote = { text, audioPath ->
-                                                    memoryViewModel.saveVoiceNote(text, audioPath, settingsManager.getObsidianVaultUri())
-                                                },
-                                                onDeepDiveCoPilot = { memory ->
-                                                    val key = memory.packageName ?: memory.source
-                                                    val appName = try {
-                                                        val pm = packageManager
-                                                        val appInfo = pm.getApplicationInfo(key, 0)
-                                                        pm.getApplicationLabel(appInfo).toString()
-                                                    } catch (e: Exception) {
-                                                        if (key == "clipboard") "Clipboard"
-                                                         else if (key == "voice") "Voice Memos"
-                                                         else key
-                                                    }
-                                                    val query = """
+                                                    MemoryScreen(
+                                                        memories = memories,
+                                                        searchQuery = searchQuery,
+                                                        onSearchQueryChange = {
+                                                            memoryViewModel.setSearchQuery(
+                                                                it
+                                                            )
+                                                        },
+                                                        onCaptureClipboard = {
+                                                            clipboardCaptureManager.captureCurrentClipboard()
+                                                        },
+                                                        onMarkAsRead = { ids ->
+                                                            memoryViewModel.markMultipleAsRead(
+                                                                ids
+                                                            )
+                                                        },
+                                                        onMarkAsUnread = { ids ->
+                                                            memoryViewModel.markMultipleAsUnread(
+                                                                ids
+                                                            )
+                                                        },
+                                                        onClearAll = { memoryViewModel.clearAllMemories() },
+                                                        monitoredApps = settingsManager.getMonitoredApps(),
+                                                        vaultUri = settingsManager.getObsidianVaultUri(),
+                                                        onSaveVoiceNote = { text, audioPath ->
+                                                            memoryViewModel.saveVoiceNote(
+                                                                text,
+                                                                audioPath,
+                                                                settingsManager.getObsidianVaultUri()
+                                                            )
+                                                        },
+                                                        onDeepDiveCoPilot = { memory ->
+                                                            val key =
+                                                                memory.packageName ?: memory.source
+                                                            val appName = try {
+                                                                val pm = packageManager
+                                                                val appInfo =
+                                                                    pm.getApplicationInfo(key, 0)
+                                                                pm.getApplicationLabel(appInfo)
+                                                                    .toString()
+                                                            } catch (e: Exception) {
+                                                                if (key == "clipboard") "Clipboard"
+                                                                else if (key == "voice") "Voice Memos"
+                                                                else key
+                                                            }
+                                                            val query = """
                                                         Analyze my memories, notes, and habits for this captured log from "$appName": "${memory.title ?: "Untitled"}" - "${memory.content}". Please provide a cohesive context correlation summary to help me understand how this fits into my daily agenda and physical/cognitive trends.
                                                     """.trimIndent()
-                                                    navViewModel.triggerCopilotQuery(query)
+                                                            navViewModel.triggerCopilotQuery(query)
+                                                        }
+                                                    )
                                                 }
-                                            )
-                                        }
 
-                                        AppTab.BRAIN -> {
-                                            val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
-                                            val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
-                                            val weeklyHealthTrends by reflectionViewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
-                                            val isGeneratingReflection by reflectionViewModel.isGeneratingReflection.collectAsStateWithLifecycle()
-                                            val isGeneratingWeeklyInsight by reflectionViewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
+                                                AppTab.BRAIN -> {
+                                                    val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
+                                                    val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
+                                                    val weeklyHealthTrends by reflectionViewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
+                                                    val isGeneratingReflection by reflectionViewModel.isGeneratingReflection.collectAsStateWithLifecycle()
+                                                    val isGeneratingWeeklyInsight by reflectionViewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
 
-                                            val homeActiveHabits by homeViewModel.activeHabitsToday.collectAsStateWithLifecycle()
-                                            val homePastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
+                                                    val homeActiveHabits by homeViewModel.activeHabitsToday.collectAsStateWithLifecycle()
+                                                    val homePastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
 
-                                            LaunchedEffect(Unit) {
-                                                reflectionViewModel.loadWeeklyHealthTrends()
+                                                    LaunchedEffect(Unit) {
+                                                        reflectionViewModel.loadWeeklyHealthTrends()
+                                                    }
+
+                                                    ReflectionScreen(
+                                                        summaries = summaries,
+                                                        settingsManager = settingsManager,
+                                                        isGenerating = isGeneratingReflection,
+                                                        onGenerateReflection = { reflectionViewModel.generateReflection() },
+                                                        onCancelReflection = { reflectionViewModel.cancelReflection() },
+                                                        onClearAll = { reflectionViewModel.clearAllSummaries() },
+                                                        onDeleteSummary = { id ->
+                                                            reflectionViewModel.deleteSummary(
+                                                                id
+                                                            )
+                                                        },
+                                                        weeklyUsageStats = weeklyUsageStats,
+                                                        weeklyHealthTrends = weeklyHealthTrends,
+                                                        pastWeekHabitCompletions = homePastWeekHabitCompletions,
+                                                        isGeneratingWeeklyInsight = isGeneratingWeeklyInsight,
+                                                        onGenerateWeeklyInsight = { reflectionViewModel.generateWeeklyInsight() }
+                                                    )
+                                                }
+
+                                                AppTab.NOTES -> NotesScreen(settingsManager = settingsManager)
+                                                AppTab.MEDITATION -> {
+                                                    val sessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
+                                                    val streaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
+                                                    MeditationScreen(
+                                                        sessions = sessions,
+                                                        streaks = streaks
+                                                    )
+                                                }
+
+                                                AppTab.TIME -> DigitalTimeScreen()
+                                                AppTab.SETTINGS -> {
+                                                    val activeHabits by settingsViewModel.activeHabits.collectAsStateWithLifecycle()
+                                                    val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
+                                                    val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
+                                                    AppCaptureSettingsScreen(
+                                                        settingsManager = settingsManager,
+                                                        themePreference = themePreference,
+                                                        onThemeChange = {
+                                                            settingsViewModel.saveThemePreference(
+                                                                it
+                                                            )
+                                                        },
+                                                        onBack = {
+                                                            navViewModel.setTab(AppTab.HOME)
+                                                            homeViewModel.refreshMonitoredApps()
+                                                        },
+                                                        onRestartService = {
+                                                            val componentName =
+                                                                android.content.ComponentName(
+                                                                    this@MainActivity,
+                                                                    com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java
+                                                                )
+                                                            packageManager.setComponentEnabledSetting(
+                                                                componentName,
+                                                                PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                                                                PackageManager.DONT_KILL_APP
+                                                            )
+                                                            packageManager.setComponentEnabledSetting(
+                                                                componentName,
+                                                                PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                                                                PackageManager.DONT_KILL_APP
+                                                            )
+                                                        },
+                                                        activeHabits = activeHabits,
+                                                        onAddCustomHabit = { name, time, isMed ->
+                                                            settingsViewModel.addCustomHabit(
+                                                                name,
+                                                                time,
+                                                                isMed
+                                                            )
+                                                        },
+                                                        onDeleteHabit = { id ->
+                                                            settingsViewModel.deleteHabit(
+                                                                id
+                                                            )
+                                                        },
+                                                        onToggleHabitActive = { id ->
+                                                            settingsViewModel.toggleHabitActive(
+                                                                id
+                                                            )
+                                                        },
+                                                        onUnmonitoredAppRemoved = {
+                                                            settingsViewModel.deleteUnmonitoredAppData(
+                                                                it
+                                                            )
+                                                        },
+                                                        syncStatus = syncStatus,
+                                                        onStartSync = { force ->
+                                                            settingsViewModel.startNearbySync(
+                                                                force
+                                                            )
+                                                        },
+                                                        onStopSync = { settingsViewModel.stopNearbySync() }
+                                                    )
+                                                }
+
+                                                AppTab.COPILOT -> {
+                                                    val chatMessages by copilotViewModel.chatMessages.collectAsStateWithLifecycle()
+                                                    val chatIsThinking by copilotViewModel.chatIsThinking.collectAsStateWithLifecycle()
+                                                    com.alex.a2ndbrain.ui.chat.BrainChatScreen(
+                                                        messages = chatMessages,
+                                                        isThinking = chatIsThinking,
+                                                        onSendMessage = {
+                                                            copilotViewModel.sendChatMessage(
+                                                                it
+                                                            )
+                                                        }
+                                                    )
+                                                }
                                             }
-
-                                            ReflectionScreen(
-                                                summaries = summaries,
-                                                settingsManager = settingsManager,
-                                                isGenerating = isGeneratingReflection,
-                                                onGenerateReflection = { reflectionViewModel.generateReflection() },
-                                                onCancelReflection = { reflectionViewModel.cancelReflection() },
-                                                onClearAll = { reflectionViewModel.clearAllSummaries() },
-                                                onDeleteSummary = { id -> reflectionViewModel.deleteSummary(id) },
-                                                weeklyUsageStats = weeklyUsageStats,
-                                                weeklyHealthTrends = weeklyHealthTrends,
-                                                pastWeekHabitCompletions = homePastWeekHabitCompletions,
-                                                isGeneratingWeeklyInsight = isGeneratingWeeklyInsight,
-                                                onGenerateWeeklyInsight = { reflectionViewModel.generateWeeklyInsight() }
-                                            )
-                                        }
-
-                                        AppTab.NOTES -> NotesScreen(settingsManager = settingsManager)
-                                        AppTab.MEDITATION -> {
-                                            val sessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
-                                            val streaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
-                                            MeditationScreen(
-                                                sessions = sessions,
-                                                streaks = streaks
-                                            )
-                                        }
-                                        AppTab.TIME -> DigitalTimeScreen()
-                                        AppTab.SETTINGS -> {
-                                            val activeHabits by settingsViewModel.activeHabits.collectAsStateWithLifecycle()
-                                            val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
-                                            val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
-                                            AppCaptureSettingsScreen(
-                                                settingsManager = settingsManager,
-                                                themePreference = themePreference,
-                                                onThemeChange = { settingsViewModel.saveThemePreference(it) },
-                                                onBack = { 
-                                                    navViewModel.setTab(AppTab.HOME)
-                                                    homeViewModel.refreshMonitoredApps()
-                                                },
-                                                onRestartService = {
-                                                    val componentName = android.content.ComponentName(this@MainActivity, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java)
-                                                    packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
-                                                    packageManager.setComponentEnabledSetting(componentName, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-                                                },
-                                                activeHabits = activeHabits,
-                                                onAddCustomHabit = { name, time, isMed -> settingsViewModel.addCustomHabit(name, time, isMed) },
-                                                onDeleteHabit = { id -> settingsViewModel.deleteHabit(id) },
-                                                onToggleHabitActive = { id -> settingsViewModel.toggleHabitActive(id) },
-                                                onUnmonitoredAppRemoved = { settingsViewModel.deleteUnmonitoredAppData(it) },
-                                                syncStatus = syncStatus,
-                                                onStartSync = { force -> settingsViewModel.startNearbySync(force) },
-                                                onStopSync = { settingsViewModel.stopNearbySync() }
-                                            )
-                                        }
-                                        AppTab.COPILOT -> {
-                                            val chatMessages by copilotViewModel.chatMessages.collectAsStateWithLifecycle()
-                                            val chatIsThinking by copilotViewModel.chatIsThinking.collectAsStateWithLifecycle()
-                                            com.alex.a2ndbrain.ui.chat.BrainChatScreen(
-                                                messages = chatMessages,
-                                                isThinking = chatIsThinking,
-                                                onSendMessage = { copilotViewModel.sendChatMessage(it) }
-                                            )
                                         }
                                     }
                                 }
                             }
-                        }
+                        } // end else (wizard hidden)
                     }
                 }
-            }
+            } // end else
         }
     }
 }
