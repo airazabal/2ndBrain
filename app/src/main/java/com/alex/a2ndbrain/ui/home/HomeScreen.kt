@@ -117,24 +117,31 @@ fun HomeScreen(
     onDeleteManualEvent: (String) -> Unit = {},
     onRefreshHealth: () -> Unit = {},
     homeSummaryConfig: HomeSummaryConfig = HomeSummaryConfig(),
+    lastDetailsExpanded: Boolean = false,
+    onSaveDetailsExpanded: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val ttsManager = remember { TtsManager(context) }
     val isSpeaking by ttsManager.isSpeaking.collectAsState()
-    
+
     var showQuickAddDialog by remember { mutableStateOf(false) }
     var isTimelineExpanded by remember { mutableStateOf(true) }
     var expandedTimelineEventId by remember { mutableStateOf<String?>(null) }
 
-    // Summary / detail toggle — rememberSaveable persists across tab navigation (REMEMBER_LAST).
-    // SUMMARY_ONLY and ALWAYS_EXPANDED override the saved value whenever the mode changes.
-    var showDetails by rememberSaveable { mutableStateOf(false) }
+    val initialExpanded = remember(homeSummaryConfig.defaultMode) {
+        when (homeSummaryConfig.defaultMode) {
+            HomeDefaultMode.ALWAYS_EXPANDED -> true
+            HomeDefaultMode.SUMMARY_ONLY    -> false
+            HomeDefaultMode.REMEMBER_LAST   -> lastDetailsExpanded
+        }
+    }
+    var showDetails by rememberSaveable { mutableStateOf(initialExpanded) }
     LaunchedEffect(homeSummaryConfig.defaultMode) {
         when (homeSummaryConfig.defaultMode) {
             HomeDefaultMode.ALWAYS_EXPANDED -> showDetails = true
             HomeDefaultMode.SUMMARY_ONLY    -> showDetails = false
-            HomeDefaultMode.REMEMBER_LAST   -> { /* keep whatever rememberSaveable has */ }
+            HomeDefaultMode.REMEMBER_LAST   -> showDetails = lastDetailsExpanded
         }
     }
 
@@ -186,7 +193,13 @@ fun HomeScreen(
                 },
                 meditationWeekStreak = meditationStreaks.currentWeekStreak,
                 showDetails          = showDetails,
-                onToggleDetails      = { showDetails = !showDetails },
+                onToggleDetails      = {
+                    val next = !showDetails
+                    showDetails = next
+                    if (homeSummaryConfig.defaultMode == HomeDefaultMode.REMEMBER_LAST) {
+                        onSaveDetailsExpanded(next)
+                    }
+                },
                 onDeepDiveConflict   = onDeepDiveCoPilotPrompt
             )
         }

@@ -8,6 +8,8 @@ import androidx.room.Entity
 )
 data class HabitCompletionEntity(
     val habitId: String,
-    val date: String, // e.g. "2026-05-18"
-    val completedAt: Long = System.currentTimeMillis()
+    val date: String,               // "yyyy-MM-dd"
+    val completedAt: Long = System.currentTimeMillis(),
+    val lastModifiedAt: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false  // soft delete so un-checks propagate to peers
 )

@@ -62,20 +62,24 @@ class SettingsViewModel(
 
     fun addCustomHabit(name: String, time: String, isMedication: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
-            val habit = HabitEntity(
+            val now = System.currentTimeMillis()
+            habitsDao.insertHabit(HabitEntity(
                 id = UUID.randomUUID().toString(),
                 name = name,
                 timeString = time,
                 isMedication = isMedication,
-                isActive = true
-            )
-            habitsDao.insertHabit(habit)
+                isActive = true,
+                createdAt = now,
+                lastModifiedAt = now
+            ))
+            nearbySyncManager.requestImmediateSync()
         }
     }
 
     fun deleteHabit(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            habitsDao.deleteHabitById(id)
+            habitsDao.softDeleteHabit(id)
+            nearbySyncManager.requestImmediateSync()
         }
     }
 
@@ -83,7 +87,11 @@ class SettingsViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val habit = habitsDao.getHabitById(id)
             if (habit != null) {
-                habitsDao.insertHabit(habit.copy(isActive = !habit.isActive))
+                habitsDao.insertHabit(habit.copy(
+                    isActive = !habit.isActive,
+                    lastModifiedAt = System.currentTimeMillis()
+                ))
+                nearbySyncManager.requestImmediateSync()
             }
         }
     }
@@ -127,13 +135,16 @@ class SettingsViewModel(
         if (habitsArray != null) {
             for (i in 0 until habitsArray.length()) {
                 val h = habitsArray.getJSONObject(i)
+                val createdAt = h.optLong("createdAt", System.currentTimeMillis())
                 habitsDao.insertHabit(HabitEntity(
                     id = h.getString("id"),
                     name = h.getString("name"),
                     timeString = h.getString("timeString"),
                     isMedication = h.getBoolean("isMedication"),
                     isActive = h.optBoolean("isActive", true),
-                    createdAt = h.optLong("createdAt", System.currentTimeMillis())
+                    isDeleted = h.optBoolean("isDeleted", false),
+                    createdAt = createdAt,
+                    lastModifiedAt = h.optLong("lastModifiedAt", createdAt)
                 ))
             }
         }

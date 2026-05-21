@@ -10,6 +10,7 @@ import com.alex.a2ndbrain.TimelineConflict
 import com.alex.a2ndbrain.TimelineEvent
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.health.HealthConnectManager
+import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.health.HealthMetrics
 import com.alex.a2ndbrain.core.memory.HabitCompletionEntity
 import com.alex.a2ndbrain.core.memory.HabitEntity
@@ -40,7 +41,8 @@ class HomeViewModel(
     private val habitsDao: HabitsDao,
     private val applicationContext: Context,
     private val nearbySyncManager: NearbySyncManager,
-    private val zendenceMeditationRepository: ZendenceMeditationRepository
+    private val zendenceMeditationRepository: ZendenceMeditationRepository,
+    private val healthDao: HealthDao
 ) : ViewModel() {
 
     val summaries = memoryRepository.getAllSummariesFlow()
@@ -155,6 +157,12 @@ class HomeViewModel(
 
     private val _homeSummaryConfig = MutableStateFlow(settingsManager.getHomeSummaryConfig())
     val homeSummaryConfig = _homeSummaryConfig.asStateFlow()
+
+    val lastDetailsExpanded: Boolean get() = settingsManager.getLastDetailsExpanded()
+
+    fun saveLastDetailsExpanded(expanded: Boolean) {
+        settingsManager.saveLastDetailsExpanded(expanded)
+    }
 
     fun refreshHomeSummaryConfig() {
         _homeSummaryConfig.value = settingsManager.getHomeSummaryConfig()
@@ -356,102 +364,105 @@ class HomeViewModel(
     private val _dismissedConflictIds = MutableStateFlow<Set<String>>(emptySet())
     val dismissedConflictIds = _dismissedConflictIds.asStateFlow()
 
-    val timelineConflicts: StateFlow<List<TimelineConflict>> = combine(
+    // Raw local conflicts (no dismiss filter) — pushed to NearbySyncManager for peer sync
+    private val _localComputedConflicts: StateFlow<List<TimelineConflict>> = combine(
         todayTimelineEvents,
         activeHabitsToday,
         completedHabitIdsToday,
-        usageStats,
-        dismissedConflictIds
-    ) { events, habits, completedIds, usage, dismissedIds ->
+        usageStats
+    ) { events, habits, completedIds, usage ->
         val conflicts = mutableListOf<TimelineConflict>()
-        
+
         // 1. Overlap Detection (only explicit calendar and manual events within 45 mins)
         val sortedEvents = events.filter { it.sourcePackage == "calendar" || it.sourcePackage == "manual" }.sortedBy { it.minutesFromMidnight }
         for (i in 0 until sortedEvents.size - 1) {
             val ev1 = sortedEvents[i]
             val ev2 = sortedEvents[i+1]
             val diff = ev2.minutesFromMidnight - ev1.minutesFromMidnight
-            if (diff in 0..45) { // overlapping or very tight back-to-back
-                val id = "overlap_${ev1.id}_${ev2.id}"
-                if (!dismissedIds.contains(id)) {
+            if (diff in 0..45) {
+                conflicts.add(
+                    TimelineConflict(
+                        id = "overlap_${ev1.id}_${ev2.id}",
+                        type = ConflictType.OVERLAP,
+                        severity = if (diff < 15) ConflictSeverity.ALERT else ConflictSeverity.WARNING,
+                        title = "Schedule Crunch",
+                        description = "You have '${ev1.title}' and '${ev2.title}' scheduled within ${diff} minutes.",
+                        deepDivePrompt = "I have a schedule overlap today between '${ev1.title}' at ${ev1.time} and '${ev2.title}' at ${ev2.time}. Please suggest a strategy to manage this crunch and prioritize my time.",
+                        relatedEventIds = listOf(ev1.id, ev2.id)
+                    )
+                )
+            }
+        }
+
+        // 2. Overdue Habit/Meds
+        val currentMinutes = Calendar.getInstance().let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
+        habits.forEach { habit ->
+            if (habit.isMedication && !completedIds.contains(habit.id)) {
+                val timeParts = habit.timeString.split(":")
+                val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: 8
+                val min  = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
+                if (currentMinutes > hour * 60 + min + 30) {
                     conflicts.add(
                         TimelineConflict(
-                            id = id,
-                            type = ConflictType.OVERLAP,
-                            severity = if (diff < 15) ConflictSeverity.ALERT else ConflictSeverity.WARNING,
-                            title = "Schedule Crunch",
-                            description = "You have '${ev1.title}' and '${ev2.title}' scheduled within ${diff} minutes.",
-                            deepDivePrompt = "I have a schedule overlap today between '${ev1.title}' at ${ev1.time} and '${ev2.title}' at ${ev2.time}. Please suggest a strategy to manage this crunch and prioritize my time.",
-                            relatedEventIds = listOf(ev1.id, ev2.id)
+                            id = "overdue_${habit.id}",
+                            type = ConflictType.OVERDUE_HABIT,
+                            severity = ConflictSeverity.ALERT,
+                            title = "Medication Overdue",
+                            description = "Your medication '${habit.name}' was scheduled for ${habit.timeString} and is pending.",
+                            deepDivePrompt = "I missed my scheduled medication '${habit.name}' which was due at ${habit.timeString}. Can you help me quickly review my schedule so I can take it now and log it?",
+                            relatedEventIds = listOf(habit.id)
                         )
                     )
                 }
             }
         }
-        
-        // 2. Overdue Habit/Meds
-        val cal = Calendar.getInstance()
-        val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-        habits.forEach { habit ->
-            if (habit.isMedication && !completedIds.contains(habit.id)) {
-                val timeParts = habit.timeString.split(":")
-                val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: 8
-                val min = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
-                val habitMinutes = hour * 60 + min
-                
-                // If it's overdue by at least 30 minutes
-                if (currentMinutes > habitMinutes + 30) {
-                    val id = "overdue_${habit.id}"
-                    if (!dismissedIds.contains(id)) {
-                        conflicts.add(
-                            TimelineConflict(
-                                id = id,
-                                type = ConflictType.OVERDUE_HABIT,
-                                severity = ConflictSeverity.ALERT,
-                                title = "Medication Overdue",
-                                description = "Your medication '${habit.name}' was scheduled for ${habit.timeString} and is pending.",
-                                deepDivePrompt = "I missed my scheduled medication '${habit.name}' which was due at ${habit.timeString}. Can you help me quickly review my schedule so I can take it now and log it?",
-                                relatedEventIds = listOf(habit.id)
-                            )
-                        )
-                    }
-                }
-            }
-        }
-        
+
         // 3. Distraction Gap Detection
-        val hasWorkEvent = events.any { it.title.lowercase().contains("meeting") || it.title.lowercase().contains("work") || it.title.lowercase().contains("review") || it.title.lowercase().contains("sync") || it.title.lowercase().contains("call") }
+        val hasWorkEvent = events.any {
+            val t = it.title.lowercase()
+            t.contains("meeting") || t.contains("work") || t.contains("review") || t.contains("sync") || t.contains("call")
+        }
         if (hasWorkEvent) {
             var totalSocialTimeMs = 0L
             usage.forEach { stat ->
                 val pkg = stat.packageName.lowercase()
-                if (pkg.contains("instagram") || pkg.contains("facebook") || pkg.contains("tiktok") || pkg.contains("youtube") || pkg.contains("twitter") || pkg.contains("x.android")) {
+                if (pkg.contains("instagram") || pkg.contains("facebook") || pkg.contains("tiktok") ||
+                    pkg.contains("youtube") || pkg.contains("twitter") || pkg.contains("x.android")) {
                     totalSocialTimeMs += stat.totalTimeVisibleMs
                 }
             }
             val socialMinutes = totalSocialTimeMs / (1000 * 60)
             if (socialMinutes > 15) {
-                val id = "distraction_gap_today"
-                if (!dismissedIds.contains(id)) {
-                    conflicts.add(
-                        TimelineConflict(
-                            id = id,
-                            type = ConflictType.DISTRACTION_GAP,
-                            severity = ConflictSeverity.WARNING,
-                            title = "Focus Strain",
-                            description = "You've spent ${socialMinutes}m on social media on a deep-work day.",
-                            deepDivePrompt = "I have deep work and meetings scheduled today, but I've already spent ${socialMinutes} minutes on social media apps. Suggest a 3-step action plan to reset my focus and get back on track."
-                        )
+                conflicts.add(
+                    TimelineConflict(
+                        id = "distraction_gap_today",
+                        type = ConflictType.DISTRACTION_GAP,
+                        severity = ConflictSeverity.WARNING,
+                        title = "Focus Strain",
+                        description = "You've spent ${socialMinutes}m on social media on a deep-work day.",
+                        deepDivePrompt = "I have deep work and meetings scheduled today, but I've already spent ${socialMinutes} minutes on social media apps. Suggest a 3-step action plan to reset my focus and get back on track."
                     )
-                }
+                )
             }
         }
-        
+
         conflicts
+    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // Merge local + remote (dedup by id) then apply dismiss filter
+    val timelineConflicts: StateFlow<List<TimelineConflict>> = combine(
+        _localComputedConflicts,
+        nearbySyncManager.remoteConflicts,
+        dismissedConflictIds
+    ) { local, remote, dismissed ->
+        val localIds = local.map { it.id }.toSet()
+        (local + remote.filter { it.id !in localIds })
+            .filter { it.id !in dismissed }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     fun dismissConflict(id: String) {
         _dismissedConflictIds.value = _dismissedConflictIds.value + id
+        nearbySyncManager.addDismissedConflict(id)
     }
 
     private fun findTimePattern(line: String): Pair<String, Int>? {
@@ -563,20 +574,28 @@ class HomeViewModel(
     fun toggleHabitCompletion(habitId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val today = getTodayDateString()
-            val completions = habitsDao.getCompletionsForDateSync(today)
-            val existing = completions.find { it.habitId == habitId }
-            if (existing != null) {
-                habitsDao.deleteCompletion(existing)
+            val existing = habitsDao.getCompletionByKey(habitId, today)
+            val now = System.currentTimeMillis()
+            if (existing != null && !existing.isDeleted) {
+                // Soft-delete so the un-check tombstone propagates to peers
+                val uncompleted = existing.copy(isDeleted = true, lastModifiedAt = now)
+                habitsDao.insertCompletion(uncompleted)
                 _habitUncompleted.emit(existing)
             } else {
-                habitsDao.insertCompletion(HabitCompletionEntity(habitId = habitId, date = today))
+                habitsDao.insertCompletion(
+                    HabitCompletionEntity(habitId = habitId, date = today,
+                        completedAt = now, lastModifiedAt = now, isDeleted = false)
+                )
             }
+            nearbySyncManager.requestImmediateSync()
         }
     }
 
     fun undoHabitUncomplete(entity: HabitCompletionEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            habitsDao.insertCompletion(entity)
+            // Restore by re-inserting as not-deleted with a fresh timestamp
+            habitsDao.insertCompletion(entity.copy(isDeleted = false, lastModifiedAt = System.currentTimeMillis()))
+            nearbySyncManager.requestImmediateSync()
         }
     }
 
@@ -666,6 +685,18 @@ class HomeViewModel(
                     updateSenseOfDayScore()
                 }
         }
+
+        // Keep NearbySyncManager up-to-date with latest local conflicts for peer sync
+        viewModelScope.launch {
+            _localComputedConflicts.collect { nearbySyncManager.updateLocalConflicts(it) }
+        }
+
+        // Apply dismissed IDs received from peer so both devices stay in sync
+        viewModelScope.launch {
+            nearbySyncManager.remoteDismissedIds.collect { remoteIds ->
+                _dismissedConflictIds.value = _dismissedConflictIds.value + remoteIds
+            }
+        }
     }
 
     fun loadVaultNotes() {
@@ -693,6 +724,25 @@ class HomeViewModel(
             if (granted) {
                 val metrics = healthConnectManager.fetchHealthMetricsToday()
                 _healthMetricsToday.value = metrics
+            } else {
+                loadSyncedHealthSnapshot()
+            }
+        }
+    }
+
+    private suspend fun loadSyncedHealthSnapshot() {
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        val snapshot = healthDao.getSnapshotForDate(today)
+        if (snapshot != null) {
+            _healthMetricsToday.value = snapshot.toHealthMetrics()
+            _healthPermissionsGranted.value = true
+        }
+    }
+
+    init {
+        viewModelScope.launch {
+            nearbySyncManager.healthSyncTrigger.collect {
+                loadSyncedHealthSnapshot()
             }
         }
     }

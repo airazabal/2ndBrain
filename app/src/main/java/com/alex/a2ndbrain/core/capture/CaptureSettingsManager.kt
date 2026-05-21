@@ -174,4 +174,10 @@ class CaptureSettingsManager(private val context: Context) {
         }.toString()
         prefs.edit().putString("home_summary_config", json).apply()
     }
+
+    fun getLastDetailsExpanded(): Boolean = prefs.getBoolean("home_last_details_expanded", false)
+
+    fun saveLastDetailsExpanded(expanded: Boolean) {
+        prefs.edit().putBoolean("home_last_details_expanded", expanded).apply()
+    }
 }

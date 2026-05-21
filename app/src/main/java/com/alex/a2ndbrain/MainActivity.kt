@@ -644,7 +644,9 @@ class MainActivity : ComponentActivity() {
                                                         onDeleteManualEvent = { id ->
                                                             homeViewModel.deleteManualAgendaEvent(id)
                                                         },
-                                                        homeSummaryConfig = homeSummaryConfig
+                                                        homeSummaryConfig = homeSummaryConfig,
+                                                        lastDetailsExpanded = homeViewModel.lastDetailsExpanded,
+                                                        onSaveDetailsExpanded = { homeViewModel.saveLastDetailsExpanded(it) }
                                                     )
                                                 }
 

@@ -5,10 +5,12 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "habits")
 data class HabitEntity(
-    @PrimaryKey val id: String, // e.g. UUID.randomUUID().toString()
+    @PrimaryKey val id: String,
     val name: String,
-    val timeString: String, // e.g. "08:00" in 24h format
+    val timeString: String,         // "08:00" 24h format
     val isMedication: Boolean,
     val isActive: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val lastModifiedAt: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false  // soft delete — keeps record for sync tombstone propagation
 )

@@ -9,10 +9,13 @@ import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import android.provider.Settings
+import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 data class HealthMetrics(
     val steps: Long = 0,
@@ -23,6 +26,10 @@ data class HealthMetrics(
 )
 
 class HealthConnectManager(private val context: Context) {
+
+    private val localDeviceId: String by lazy {
+        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
+    }
 
     private val healthConnectClient by lazy {
         try {
@@ -122,6 +129,32 @@ class HealthConnectManager(private val context: Context) {
             maxHeartRate = maxBpm,
             avgHeartRate = avgBpm
         )
+    }
+
+    suspend fun fetchDailySnapshotsForSync(days: Int = 7): List<HealthSnapshotEntity> {
+        if (!hasPermissions()) return emptyList()
+        val zoneId = ZoneId.systemDefault()
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val results = mutableListOf<HealthSnapshotEntity>()
+        for (i in 0 until days) {
+            val date = LocalDate.now().minusDays(i.toLong())
+            val start = date.atStartOfDay(zoneId).toInstant()
+            val end = if (i == 0) Instant.now() else date.plusDays(1).atStartOfDay(zoneId).toInstant()
+            val metrics = fetchHealthMetricsForRange(start, end)
+            if (metrics.steps > 0 || metrics.sleepMinutes > 0 || metrics.avgHeartRate > 0) {
+                results += HealthSnapshotEntity(
+                    date = dateFormat.format(java.util.Date(start.toEpochMilli())),
+                    deviceId = localDeviceId,
+                    steps = metrics.steps,
+                    sleepMinutes = metrics.sleepMinutes,
+                    minHeartRate = metrics.minHeartRate,
+                    maxHeartRate = metrics.maxHeartRate,
+                    avgHeartRate = metrics.avgHeartRate,
+                    lastTimestamp = System.currentTimeMillis()
+                )
+            }
+        }
+        return results
     }
 
     suspend fun fetchHealthMetricsForRange(startTime: Instant, endTime: Instant): HealthMetrics {

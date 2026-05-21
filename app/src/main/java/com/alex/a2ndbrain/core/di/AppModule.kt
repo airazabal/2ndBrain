@@ -7,6 +7,7 @@ import com.alex.a2ndbrain.core.reflection.ModelPicker
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.reflection.GeminiAgent
 import com.alex.a2ndbrain.core.health.HealthConnectManager
+import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
@@ -32,6 +33,7 @@ val appModule = module {
     single { AppDatabase.getDatabase(androidContext()) }
     single { get<AppDatabase>().memoryDao() }
     single { get<AppDatabase>().habitsDao() }
+    single<HealthDao> { get<AppDatabase>().healthDao() }
 
     // Repositories
     single { MemoryRepository(get()) }
@@ -46,7 +48,7 @@ val appModule = module {
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
     single { ZendenceMeditationRepository(androidContext()) }
-    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get()) }
+    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get()) }
 
     // Agent layer (Phase 1-3 migration)
     single { MemoryAgent(get()) }
@@ -60,7 +62,7 @@ val appModule = module {
 
     // ViewModels
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), get(), androidContext(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), get(), androidContext(), get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get()) }
