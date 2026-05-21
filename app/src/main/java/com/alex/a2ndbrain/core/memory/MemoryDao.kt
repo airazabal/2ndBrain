@@ -60,6 +60,9 @@ interface MemoryDao {
     @Query("DELETE FROM memories WHERE timestamp < :timestamp")
     suspend fun pruneOldMemories(timestamp: Long)
 
+    @Query("DELETE FROM memories")
+    suspend fun deleteAllMemories()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUsageStat(stat: UsageStatEntity)
 

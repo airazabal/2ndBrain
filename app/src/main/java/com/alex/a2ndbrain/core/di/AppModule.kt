@@ -41,7 +41,7 @@ val appModule = module {
     single { ClipboardCaptureManager(androidContext(), get()) }
     single { DigitalTimeManager(androidContext(), get(), get()) }
     single { GeminiAgent(get()) }
-    single { ReflectionManager(androidContext(), get(), get(), get(), get(), get()) }
+    single { ReflectionManager(androidContext(), get(), get(), get(), get(), get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
     single { ZendenceMeditationRepository(androidContext()) }

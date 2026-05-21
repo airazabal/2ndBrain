@@ -40,6 +40,8 @@ class MemoryRepository(private val memoryDao: MemoryDao) {
     suspend fun deleteMemoryById(id: Long) = memoryDao.deleteMemoryById(id)
 
     suspend fun pruneOldMemories(timestamp: Long) = memoryDao.pruneOldMemories(timestamp)
+
+    suspend fun deleteAllMemories() = memoryDao.deleteAllMemories()
     
     suspend fun clearAllSummaries() = memoryDao.deleteAllSummaries()
     

@@ -88,7 +88,9 @@ class MemoryViewModel(
     }
 
     fun clearAllMemories() {
-        // We'll let MemoryScreen handle clear all for now or move it here.
+        viewModelScope.launch(Dispatchers.IO) {
+            memoryRepository.deleteAllMemories()
+        }
     }
 
     fun saveVoiceNote(transcript: String, audioPath: String, vaultUri: String) {
