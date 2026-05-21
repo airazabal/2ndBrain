@@ -14,9 +14,9 @@ class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
         private var cachedModel: Pair<String, String>? = null
 
         var fallbackModels = listOf(
-            "gemini-2.0-flash" to "v1beta",
-            "gemini-1.5-flash" to "v1beta",
-            "gemini-1.5-pro" to "v1beta"
+            "gemini-2.5-flash-lite" to "v1beta",
+            "gemini-2.5-flash" to "v1beta",
+            "gemini-1.5-flash" to "v1beta"
         )
     }
 

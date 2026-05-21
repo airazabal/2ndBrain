@@ -43,9 +43,6 @@ class HomeViewModel(
     private val zendenceMeditationRepository: ZendenceMeditationRepository
 ) : ViewModel() {
 
-    private val _currentTab = MutableStateFlow(0)
-    val currentTab = _currentTab.asStateFlow()
-
     val summaries = memoryRepository.getAllSummariesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 

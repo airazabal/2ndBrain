@@ -14,6 +14,9 @@ import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
+import com.alex.a2ndbrain.core.agents.OrchestratorAgent
+import com.alex.a2ndbrain.core.agents.ReflectionAgent
+import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -30,7 +33,8 @@ class ReflectionViewModel(
     private val reflectionManager: ReflectionManager,
     private val healthConnectManager: HealthConnectManager,
     private val settingsManager: CaptureSettingsManager,
-    private val applicationContext: Context
+    private val applicationContext: Context,
+    private val orchestrator: OrchestratorAgent
 ) : ViewModel() {
 
     val summaries: StateFlow<List<DailySummaryEntity>> = memoryRepository.getAllSummariesFlow()
@@ -112,9 +116,20 @@ class ReflectionViewModel(
         _isGeneratingWeeklyInsight.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                // Use OrchestratorAgent to build BrainContext (with weekly health trends)
+                // then persist the result via the existing ReflectionManager path.
+                val ctx = orchestrator.buildContext()
+                val ctxWithTrends = ctx.copy(
+                    health = ctx.health.copy(
+                        weeklyTrends = emptyList() // HealthAgent.fetchWeeklyTrends() wired in next phase
+                    )
+                )
+                val reflectionAgent = ReflectionAgent()
+                val prompt = reflectionAgent.buildPrompt(ReflectionAgent.ReflectionType.WEEKLY_CORRELATION, ctxWithTrends)
+                // Fall through to legacy path for persistence until ReflectionManager is fully slimmed
                 reflectionManager.generateWeeklyCorrelation()
             } catch (e: Exception) {
-                android.util.Log.e("2ndBrain", "Failed to generate weekly insight inside ReflectionViewModel", e)
+                android.util.Log.e("2ndBrain", "Failed to generate weekly insight", e)
             } finally {
                 _isGeneratingWeeklyInsight.value = false
             }

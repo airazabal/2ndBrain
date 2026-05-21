@@ -10,10 +10,17 @@ import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
+import com.alex.a2ndbrain.core.agents.HealthAgent
+import com.alex.a2ndbrain.core.agents.MemoryAgent
+import com.alex.a2ndbrain.core.agents.ModelRouter
+import com.alex.a2ndbrain.core.agents.OrchestratorAgent
+import com.alex.a2ndbrain.core.agents.ReflectionAgent
+import com.alex.a2ndbrain.core.agents.SessionMemory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import org.koin.android.ext.koin.androidContext
+import org.koin.android.ext.koin.androidApplication
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
 
@@ -40,12 +47,21 @@ val appModule = module {
     single { ZendenceMeditationRepository(androidContext()) }
     single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get()) }
 
+    // Agent layer (Phase 1-3 migration)
+    single { MemoryAgent(get()) }
+    single { HealthAgent(get(), get(), get(), androidContext()) }
+    single { ReflectionAgent() }
+    single { ModelRouter(get(), get(), get()) }
+    single { OrchestratorAgent(get(), get(), get(), get(), get()) }
+    // factory = new SessionMemory per Copilot session (not a global singleton)
+    factory { SessionMemory() }
+
     // ViewModels
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
     viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), get(), androidContext(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }
 
