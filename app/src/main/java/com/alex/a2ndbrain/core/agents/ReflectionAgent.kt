@@ -36,6 +36,44 @@ class ReflectionAgent {
     }
 
     /**
+     * Score a reflection draft against quality criteria. Returns null if the draft passes,
+     * or a non-empty critique string to append on retry.
+     *
+     * Checks (in order):
+     *   1. Minimum word count — 80 for daily modes, 150 for weekly
+     *   2. Weekly correlations must be narrative prose, not bullet lists
+     *   3. Data denial — output claims no data when BrainContext has it
+     */
+    fun critique(output: String, type: ReflectionType, ctx: BrainContext): String? {
+        val issues = mutableListOf<String>()
+
+        val wordCount = output.trim().split(Regex("\\s+")).count { it.isNotEmpty() }
+        val minWords = if (type == ReflectionType.WEEKLY_CORRELATION) 150 else 80
+        if (wordCount < minWords) {
+            issues += "Response is too short ($wordCount words, minimum $minWords). Provide a more detailed analysis."
+        }
+
+        if (type == ReflectionType.WEEKLY_CORRELATION) {
+            val bulletLines = output.lines().count {
+                val t = it.trimStart()
+                t.startsWith("- ") || t.startsWith("• ") || t.startsWith("* ")
+            }
+            if (bulletLines > 3) {
+                issues += "Weekly correlation must be cohesive narrative prose — rewrite without bullet points."
+            }
+        }
+
+        val lower = output.lowercase()
+        val isDenying = listOf("no data", "i don't have", "no information", "not available", "no records")
+            .any { lower.contains(it) }
+        if (isDenying && (ctx.memories.isNotEmpty() || ctx.health.isAvailable || ctx.usageStats.isNotEmpty())) {
+            issues += "Data was provided in the context but the response claims it's unavailable — reference the data above."
+        }
+
+        return if (issues.isEmpty()) null else issues.joinToString(" ")
+    }
+
+    /**
      * Build a fully-formed prompt from a BrainContext snapshot.
      * Returns a prompt string — no AI calls are made here.
      */

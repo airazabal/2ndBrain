@@ -32,19 +32,34 @@ class OrchestratorAgent(
 ) {
 
     /**
-     * Build a full BrainContext snapshot. Fetches memory + health + usage in parallel.
-     * Shared across all agents — call once per session, not once per agent.
+     * Build a BrainContext snapshot. Fetches only what the query needs (ReAct pattern).
      *
      * @param query Optional search query to focus memory retrieval.
-     *              Pass blank for reflection; pass the user's message for Copilot.
+     * @param flags Controls which data sources are fetched. When null (reflection path or
+     *              blank query), all sources are fetched unconditionally. When provided,
+     *              each async fetch is gated on the relevant flag so irrelevant I/O is skipped.
      */
-    suspend fun buildContext(query: String = ""): BrainContext = withContext(Dispatchers.IO) {
+    suspend fun buildContext(
+        query: String = "",
+        flags: DynamicContextFlags? = null
+    ): BrainContext = withContext(Dispatchers.IO) {
+        val needsMemory = flags == null || flags.includeMemories
+        val needsHealth = flags == null || flags.includeHealth || flags.includeHabits || flags.includeMeditation
+        val needsUsage  = flags == null || flags.includeUsage
+
         coroutineScope {
-            val memoriesDeferred = async { memoryAgent.retrieve(query) }
-            val healthTripleDeferred = async { healthAgent.fetchAll() }
+            val memoriesDeferred = async {
+                if (needsMemory) memoryAgent.retrieve(query) else emptyList()
+            }
+            val healthTripleDeferred = async {
+                if (needsHealth) healthAgent.fetchAll()
+                else Triple(HealthContext(), HabitsContext(), MeditationContext())
+            }
             val usageDeferred = async {
-                try { usageRepository.getUsageStatsForTodaySync() }
-                catch (e: Exception) { emptyList() }
+                if (needsUsage) {
+                    try { usageRepository.getUsageStatsForTodaySync() }
+                    catch (e: Exception) { emptyList() }
+                } else emptyList()
             }
 
             val memories = memoriesDeferred.await()
@@ -62,8 +77,11 @@ class OrchestratorAgent(
     }
 
     /**
-     * Generate a daily or weekly reflection.
-     * Builds context then delegates prompt construction to ReflectionAgent.
+     * Generate a daily or weekly reflection with a one-shot critique loop.
+     *
+     * Builds context, generates a draft, then scores it against a quality rubric.
+     * If the draft fails (too short, wrong format, data denial), appends a critique
+     * and retries once. At most two model calls per reflection.
      */
     suspend fun reflect(type: ReflectionAgent.ReflectionType): Pair<String, String> {
         Log.d("OrchestratorAgent", "reflect($type) starting")
@@ -74,7 +92,22 @@ class OrchestratorAgent(
                 ReflectionAgent.ReflectionType.WEEKLY_CORRELATION -> ModelRouter.Complexity.HIGH
                 else -> ModelRouter.Complexity.MEDIUM
             }
-            modelRouter.run(prompt, complexity)
+            val (draft, modelName) = modelRouter.run(prompt, complexity)
+
+            val critique = reflectionAgent.critique(draft, type, ctx)
+            if (critique != null) {
+                Log.d("OrchestratorAgent", "reflect($type) — retry: $critique")
+                val revisedPrompt = buildString {
+                    append(prompt)
+                    append("\n\n---\nPREVIOUS DRAFT (do not repeat it verbatim):\n")
+                    append(draft)
+                    append("\n\nCRITIQUE: $critique\n")
+                    append("Address the critique above and produce an improved response.")
+                }
+                modelRouter.run(revisedPrompt, complexity)
+            } else {
+                draft to modelName
+            }
         } catch (e: Exception) {
             Log.e("OrchestratorAgent", "reflect() failed", e)
             "Reflection failed: ${e.message}" to "Error"
@@ -96,7 +129,7 @@ class OrchestratorAgent(
     ): Pair<String, String> {
         Log.d("OrchestratorAgent", "chat() — ${sessionMemory.messageCount()} prior turns")
         return try {
-            val ctx = buildContext(query = userMessage)
+            val ctx = buildContext(query = userMessage, flags = dynamicContextFlags)
             val enrichedPrompt = buildCopilotPrompt(userMessage, ctx, dynamicContextFlags)
 
             // Store the raw question so prior turns don't pollute the context
