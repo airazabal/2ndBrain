@@ -131,6 +131,29 @@ class HealthConnectManager(private val context: Context) {
         )
     }
 
+    suspend fun fetchDailyBreakdown(days: Int = 30): List<DailyHealthMetrics> {
+        if (!hasPermissions()) return emptyList()
+        val zoneId = ZoneId.systemDefault()
+        val results = mutableListOf<DailyHealthMetrics>()
+        for (i in 0 until days) {
+            val date = LocalDate.now().minusDays(i.toLong())
+            val start = date.atStartOfDay(zoneId).toInstant()
+            val end = if (i == 0) Instant.now() else date.plusDays(1).atStartOfDay(zoneId).toInstant()
+            val m = fetchHealthMetricsForRange(start, end)
+            if (m.steps > 0 || m.sleepMinutes > 0 || m.avgHeartRate > 0) {
+                results += DailyHealthMetrics(
+                    date         = date.toString(),
+                    steps        = m.steps,
+                    sleepMinutes = m.sleepMinutes,
+                    minHeartRate = m.minHeartRate,
+                    maxHeartRate = m.maxHeartRate,
+                    avgHeartRate = m.avgHeartRate
+                )
+            }
+        }
+        return results
+    }
+
     suspend fun fetchDailySnapshotsForSync(days: Int = 7): List<HealthSnapshotEntity> {
         if (!hasPermissions()) return emptyList()
         val zoneId = ZoneId.systemDefault()

@@ -13,7 +13,8 @@ enum class AppTab(val index: Int, val label: String, val title: String) {
     TIME(4, "Time", "Understanding your routine"),
     MEDITATION(5, "Zen", "Meditation Sessions (Zendence)"),
     SETTINGS(6, "Settings", "Configure capture and permissions"),
-    COPILOT(7, "Co-pilot", "Ask your 2ndBrain Co-Pilot");
+    COPILOT(7, "Co-pilot", "Ask your 2ndBrain Co-Pilot"),
+    HEALTH(8, "Health", "Your health & fitness trends");
 
     companion object {
         fun fromIndex(index: Int): AppTab = entries.find { it.index == index } ?: HOME

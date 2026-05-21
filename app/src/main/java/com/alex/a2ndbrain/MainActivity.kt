@@ -401,6 +401,7 @@ class MainActivity : ComponentActivity() {
                                                 ),
                                                 Triple("Time", Icons.Default.Schedule, AppTab.TIME),
                                                 Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
+                                                Triple("Health", Icons.Default.Favorite, AppTab.HEALTH),
                                                 Triple(
                                                     "Co-pilot",
                                                     Icons.Default.QuestionAnswer,
@@ -484,6 +485,7 @@ class MainActivity : ComponentActivity() {
                                                 ),
                                                 Triple("Time", Icons.Default.Schedule, AppTab.TIME),
                                                 Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
+                                                Triple("Health", Icons.Default.Favorite, AppTab.HEALTH),
                                                 Triple(
                                                     "Co-pilot",
                                                     Icons.Default.QuestionAnswer,
@@ -752,6 +754,13 @@ class MainActivity : ComponentActivity() {
                                                 }
 
                                                 AppTab.TIME -> DigitalTimeScreen()
+                                                AppTab.HEALTH -> {
+                                                    val healthViewModel: com.alex.a2ndbrain.ui.health.HealthViewModel = koinViewModel()
+                                                    com.alex.a2ndbrain.ui.health.HealthScreen(
+                                                        viewModel = healthViewModel,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                }
                                                 AppTab.SETTINGS -> {
                                                     val activeHabits by settingsViewModel.activeHabits.collectAsStateWithLifecycle()
                                                     val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()

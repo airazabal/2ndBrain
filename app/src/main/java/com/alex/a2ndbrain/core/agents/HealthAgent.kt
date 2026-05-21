@@ -72,22 +72,20 @@ class HealthAgent(
     suspend fun fetchAll(): Triple<HealthContext, HabitsContext, MeditationContext> =
         withContext(Dispatchers.IO) {
             coroutineScope {
-                val healthDeferred = async { fetchHealthMetrics() }
-                val habitsDeferred = async { fetchHabits() }
+                val healthDeferred  = async { fetchHealthMetrics() }
+                val trendsDeferred  = async { fetchWeeklyTrends() }
+                val habitsDeferred  = async { fetchHabits() }
                 val meditationDeferred = async { fetchMeditation() }
-
-                val health = healthDeferred.await()
-                val habits = habitsDeferred.await()
-                val meditation = meditationDeferred.await()
 
                 Triple(
                     HealthContext(
-                        metrics = health,
-                        isAvailable = healthConnectManager.isAvailable() &&
-                                healthConnectManager.hasPermissions()
+                        metrics      = healthDeferred.await(),
+                        isAvailable  = healthConnectManager.isAvailable() &&
+                                       healthConnectManager.hasPermissions(),
+                        weeklyTrends = trendsDeferred.await()
                     ),
-                    habits,
-                    meditation
+                    habitsDeferred.await(),
+                    meditationDeferred.await()
                 )
             }
         }
