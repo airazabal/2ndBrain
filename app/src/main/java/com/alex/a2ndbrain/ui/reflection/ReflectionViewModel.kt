@@ -30,8 +30,7 @@ class ReflectionViewModel(
     private val reflectionManager: ReflectionManager,
     private val healthConnectManager: HealthConnectManager,
     private val settingsManager: CaptureSettingsManager,
-    private val applicationContext: Context,
-    private val orchestrator: OrchestratorAgent
+    private val applicationContext: Context
 ) : ViewModel() {
 
     val summaries: StateFlow<List<DailySummaryEntity>> = memoryRepository.getAllSummariesFlow()
@@ -113,17 +112,9 @@ class ReflectionViewModel(
         _isGeneratingWeeklyInsight.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // Use OrchestratorAgent to build BrainContext (with weekly health trends)
-                // then persist the result via the existing ReflectionManager path.
-                val ctx = orchestrator.buildContext()
-                val ctxWithTrends = ctx.copy(
-                    health = ctx.health.copy(
-                        weeklyTrends = emptyList() // HealthAgent.fetchWeeklyTrends() wired in next phase
-                    )
-                )
-                val reflectionAgent = ReflectionAgent()
-                val prompt = reflectionAgent.buildPrompt(ReflectionAgent.ReflectionType.WEEKLY_CORRELATION, ctxWithTrends)
-                // Fall through to legacy path for persistence until ReflectionManager is fully slimmed
+                // ReflectionManager.generateWeeklyCorrelation() now handles the full
+                // agent stack internally: HealthAgent.fetchWeeklyTrends(), MemoryAgent,
+                // ReflectionAgent prompt construction, and ModelRouter inference.
                 reflectionManager.generateWeeklyCorrelation()
             } catch (e: Exception) {
                 android.util.Log.e("2ndBrain", "Failed to generate weekly insight", e)
