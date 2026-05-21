@@ -187,8 +187,23 @@ fun MemoryScreen(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    IconButton(onClick = {
+                        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                            context,
+                            android.Manifest.permission.RECORD_AUDIO
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                        if (hasPermission) showRecordingDialog = true
+                        else permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.Mic,
+                            contentDescription = "Quick Voice Capture",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
                     TextButton(
                         onClick = {
                             context.startActivity(Intent(context, AppCaptureSettingsActivity::class.java))
@@ -429,34 +444,6 @@ fun MemoryScreen(
         }
     }
         
-        // Floating action button for quick speech dictation
-        FloatingActionButton(
-            onClick = {
-                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                    context,
-                    android.Manifest.permission.RECORD_AUDIO
-                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                
-                if (hasPermission) {
-                    showRecordingDialog = true
-                } else {
-                    permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                }
-            },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(24.dp)
-                .size(64.dp),
-            shape = RoundedCornerShape(20.dp),
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Mic,
-                contentDescription = "Quick Voice Capture",
-                modifier = Modifier.size(28.dp)
-            )
-        }
     }
 
     if (showRecordingDialog) {

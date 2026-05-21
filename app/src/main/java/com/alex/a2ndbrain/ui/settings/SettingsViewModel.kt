@@ -9,6 +9,7 @@ import com.alex.a2ndbrain.core.memory.HabitsDao
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -83,6 +84,57 @@ class SettingsViewModel(
             val habit = habitsDao.getHabitById(id)
             if (habit != null) {
                 habitsDao.insertHabit(habit.copy(isActive = !habit.isActive))
+            }
+        }
+    }
+
+    suspend fun exportBackupJson(): String = withContext(Dispatchers.IO) {
+        val habits = habitsDao.getAllHabitsSync()
+        val monitoredApps = settingsManager.getMonitoredApps()
+
+        val habitsArray = org.json.JSONArray()
+        habits.forEach { habit ->
+            habitsArray.put(org.json.JSONObject().apply {
+                put("id", habit.id)
+                put("name", habit.name)
+                put("timeString", habit.timeString)
+                put("isMedication", habit.isMedication)
+                put("isActive", habit.isActive)
+                put("createdAt", habit.createdAt)
+            })
+        }
+
+        val appsArray = org.json.JSONArray()
+        monitoredApps.forEach { appsArray.put(it) }
+
+        org.json.JSONObject().apply {
+            put("version", 1)
+            put("habits", habitsArray)
+            put("monitoredApps", appsArray)
+        }.toString(2)
+    }
+
+    suspend fun importFromJson(json: String) = withContext(Dispatchers.IO) {
+        val obj = org.json.JSONObject(json)
+
+        val appsArray = obj.optJSONArray("monitoredApps")
+        if (appsArray != null) {
+            val apps = (0 until appsArray.length()).map { appsArray.getString(it) }.toSet()
+            settingsManager.saveMonitoredApps(apps)
+        }
+
+        val habitsArray = obj.optJSONArray("habits")
+        if (habitsArray != null) {
+            for (i in 0 until habitsArray.length()) {
+                val h = habitsArray.getJSONObject(i)
+                habitsDao.insertHabit(HabitEntity(
+                    id = h.getString("id"),
+                    name = h.getString("name"),
+                    timeString = h.getString("timeString"),
+                    isMedication = h.getBoolean("isMedication"),
+                    isActive = h.optBoolean("isActive", true),
+                    createdAt = h.optLong("createdAt", System.currentTimeMillis())
+                ))
             }
         }
     }

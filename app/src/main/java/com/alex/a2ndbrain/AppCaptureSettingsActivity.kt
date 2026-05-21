@@ -32,6 +32,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.Toast
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
+import com.alex.a2ndbrain.ui.settings.SettingsViewModel
+import kotlinx.coroutines.withContext
+import org.koin.androidx.compose.koinViewModel
 
 import com.alex.a2ndbrain.ui.theme.BrainTheme
 import org.koin.android.ext.android.inject
@@ -103,10 +106,49 @@ fun AppCaptureSettingsScreen(
     onStartSync: (Boolean) -> Unit = {},
     onStopSync: () -> Unit = {}
 ) {
+    val settingsViewModel: SettingsViewModel = koinViewModel()
     var monitoredApps by remember { mutableStateOf(settingsManager.getMonitoredApps()) }
     val debugEvents by com.alex.a2ndbrain.core.capture.CaptureDebugStore.events.collectAsState()
     val context = LocalContext.current
     val packageManager = context.packageManager
+    val scope = rememberCoroutineScope()
+
+    val createBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val json = settingsViewModel.exportBackupJson()
+                    withContext(Dispatchers.IO) {
+                        context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+                    }
+                    Toast.makeText(context, "Settings backed up", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Backup failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    val openBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            scope.launch {
+                try {
+                    val json = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+                    } ?: return@launch
+                    settingsViewModel.importFromJson(json)
+                    monitoredApps = settingsManager.getMonitoredApps()
+                    Toast.makeText(context, "Settings restored", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Restore failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
     
     val permissionsToRequest = remember {
         val list = mutableListOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
@@ -727,6 +769,53 @@ fun AppCaptureSettingsScreen(
                     )
                 }
             }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Backup & Restore",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Save your monitored apps and habits/medications to a JSON file. Restore after a database reset.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                createBackupLauncher.launch("2ndbrain-settings-backup.json")
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Export")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                openBackupLauncher.launch(arrayOf("application/json"))
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Restore")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
