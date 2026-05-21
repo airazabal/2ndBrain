@@ -235,6 +235,49 @@ fun AppCaptureSettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "Backup & Restore",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Save your monitored apps and habits/medications to a JSON file. Restore after a database reset.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                createBackupLauncher.launch("2ndbrain-settings-backup.json")
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Export")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                openBackupLauncher.launch(arrayOf("application/json"))
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Restore")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
         // System Permissions Card
         item {
             Card(
@@ -767,49 +810,6 @@ fun AppCaptureSettingsScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline
                     )
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Backup & Restore",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Save your monitored apps and habits/medications to a JSON file. Restore after a database reset.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                createBackupLauncher.launch("2ndbrain-settings-backup.json")
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Export")
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                openBackupLauncher.launch(arrayOf("application/json"))
-                            },
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text("Restore")
-                        }
-                    }
                 }
             }
         }

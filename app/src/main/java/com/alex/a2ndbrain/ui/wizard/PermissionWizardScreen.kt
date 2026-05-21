@@ -104,6 +104,7 @@ fun PermissionWizardScreen(
 @Composable
 private fun PermissionCard(perm: WizardPermission) {
     Card(
+        onClick = { if (!perm.isGranted) perm.onAction() },
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),

@@ -84,14 +84,10 @@ class OrchestratorAgent(
     /**
      * Handle a Copilot chat turn with full conversation history.
      *
-     * The [SessionMemory] is owned by CopilotViewModel (factory scope, so one
-     * instance per Copilot screen session). This method:
-     *   1. Builds a focused BrainContext for the user's query
-     *   2. Constructs the enriched user message (query + context)
-     *   3. Adds it to session memory
-     *   4. Runs inference with the full conversation history
-     *   5. Adds the model reply to session memory
-     *   6. Returns the plain reply text + model name
+     * Stores the raw question in SessionMemory (not the enriched prompt) so
+     * prior turns don't pollute the context window with stale data from previous
+     * topics. The enriched prompt (question + relevant data) is injected only for
+     * the current turn at inference time.
      */
     suspend fun chat(
         userMessage: String,
@@ -100,22 +96,23 @@ class OrchestratorAgent(
     ): Pair<String, String> {
         Log.d("OrchestratorAgent", "chat() — ${sessionMemory.messageCount()} prior turns")
         return try {
-            // Fetch only what's relevant for this message
             val ctx = buildContext(query = userMessage)
-
-            // Build enriched user turn
             val enrichedPrompt = buildCopilotPrompt(userMessage, ctx, dynamicContextFlags)
 
-            // Add to rolling history
-            sessionMemory.add(AgentMessage("user", enrichedPrompt))
+            // Store the raw question so prior turns don't pollute the context
+            // window with stale data dumps from previous topics.
+            sessionMemory.add(AgentMessage("user", userMessage))
 
-            // Run inference against full history
+            // For inference, swap the last history entry for the enriched version
+            // so only the current turn carries its data context.
+            val historyForInference = sessionMemory.getHistory().dropLast(1) +
+                AgentMessage("user", enrichedPrompt)
+
             val (replyText, modelName) = modelRouter.runWithHistory(
-                history = sessionMemory.getHistory(),
+                history = historyForInference,
                 complexity = ModelRouter.Complexity.LOW
             )
 
-            // Store model reply in history for next turn
             sessionMemory.add(AgentMessage("model", replyText))
 
             replyText to modelName
@@ -215,7 +212,7 @@ data class DynamicContextFlags(
             val lower = message.lowercase(java.util.Locale.getDefault())
             val health = listOf("step", "sleep", "heart", "bpm", "walk", "physical", "active", "health", "run", "fit", "calories").any { lower.contains(it) }
             val habits = listOf("habit", "routine", "alarm", "medication", "medicine", "pill", "checklist", "todo", "task").any { lower.contains(it) }
-            val usage = listOf("screen", "app", "usage", "youtube", "chrome", "spend", "social", "distract", "phone", "tablet", "device", "screen time", "app time").any { lower.contains(it) }
+            val usage = listOf("screen", "app", "usage", "youtube", "chrome", "spend", "social", "distract", "phone", "tablet", "device", "screen time", "app time", "online", "digital").any { lower.contains(it) }
             val meditation = listOf("meditat", "zendence", "streak", "session", "mindful", "calm", "insight", "breath", "relax", "practice", "mantra", "sit").any { lower.contains(it) }
             val memories = listOf("notification", "clipboard", "log", "memory", "captured", "tag", "remember", "text", "copy", "message", "email", "chat").any { lower.contains(it) }
             val general = !health && !habits && !usage && !meditation && !memories

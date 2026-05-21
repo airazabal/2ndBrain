@@ -643,6 +643,15 @@ class HomeViewModel(
         loadVaultNotes()
         checkHealthPermissionsAndSync()
 
+        // Poll Health Connect every 15 minutes so Zepp syncs are reflected
+        // without requiring the user to relaunch the app.
+        viewModelScope.launch(Dispatchers.IO) {
+            while (true) {
+                kotlinx.coroutines.delay(15 * 60 * 1000L)
+                checkHealthPermissionsAndSync()
+            }
+        }
+
         // Recalculate score whenever habits, metrics, usages, or meditation shifts
         viewModelScope.launch {
             combine(completedHabitIdsToday, activeHabitsToday, _healthMetricsToday, usageStats, meditatedToday) { _, _, _, _, _ -> }

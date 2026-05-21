@@ -3,6 +3,7 @@ package com.alex.a2ndbrain.core.di
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.reflection.ModelDownloader
+import com.alex.a2ndbrain.core.reflection.ModelPicker
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.reflection.GeminiAgent
 import com.alex.a2ndbrain.core.health.HealthConnectManager
@@ -51,6 +52,7 @@ val appModule = module {
     single { MemoryAgent(get()) }
     single { HealthAgent(get(), get(), get(), androidContext()) }
     single { ReflectionAgent() }
+    single { ModelPicker(androidContext()) }
     single { ModelRouter(get(), get(), get()) }
     single { OrchestratorAgent(get(), get(), get(), get(), get()) }
     // factory = new SessionMemory per Copilot session (not a global singleton)

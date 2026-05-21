@@ -89,12 +89,15 @@ class ModelRouter(
             return "No message to respond to." to "Empty"
         }
 
-        // For LiteRT and template, collapse history into a single prompt
+        // For LiteRT and template, only send the current enriched prompt —
+        // small on-device models can't reason over a multi-turn collapse and
+        // end up re-answering whichever question appears first in the string.
         return when (modelPicker.getBestModel()) {
             ModelPicker.ModelType.LITERT_LOCAL,
             ModelPicker.ModelType.BASIC_TEMPLATE -> {
-                val collapsedPrompt = history.joinToString("\n") { "${it.role}: ${it.content}" }
-                run(collapsedPrompt, complexity, timeoutMs)
+                val currentPrompt = history.lastOrNull { it.role == "user" }?.content
+                    ?: return "No message to respond to." to "Empty"
+                run(currentPrompt, complexity, timeoutMs)
             }
 
             ModelPicker.ModelType.GEMINI_CLOUD -> {
@@ -106,18 +109,11 @@ class ModelRouter(
                     .takeIf { it.isNotBlank() } ?: targetModel
                 val lastSuccessful = settingsManager.getLastSuccessfulModel()
 
-                // Pass the full history as a single enriched prompt to chatInference.
-                // Full Gemini startChat() multi-turn support can be added in a future
-                // phase when the Gemini SDK's Chat type is integrated.
-                val multiTurnPrompt = history.joinToString("\n\n") {
-                    "[${it.role.uppercase()}]: ${it.content}"
-                }
-
                 try {
                     withTimeout(timeoutMs) {
                         val start = System.currentTimeMillis()
-                        val result = geminiAgent.chatInference(
-                            prompt = multiTurnPrompt,
+                        val result = geminiAgent.chatMultiTurn(
+                            history = history,
                             preferredModel = preferredModel,
                             lastSuccessfulModel = lastSuccessful,
                             onSuccessModel = { settingsManager.saveLastSuccessfulModel(it) }

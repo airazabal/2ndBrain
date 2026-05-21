@@ -270,6 +270,12 @@ class MainActivity : ComponentActivity() {
                         val currentTab by navViewModel.currentTab.collectAsStateWithLifecycle()
                         val error by navViewModel.errorFlow.collectAsStateWithLifecycle()
 
+                        // Refresh health data every time the app resumes so Zepp→Health Connect
+                        // syncs are picked up without relaunching the app.
+                        LaunchedEffect(resumeKey) {
+                            if (resumeKey > 0) homeViewModel.checkHealthPermissionsAndSync()
+                        }
+
                         // Automatically forward preset Copilot queries to the Copilot ViewModel
                         LaunchedEffect(Unit) {
                             navViewModel.presetCopilotQuery.collect { query ->

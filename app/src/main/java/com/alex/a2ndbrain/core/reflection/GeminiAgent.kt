@@ -1,12 +1,14 @@
 package com.alex.a2ndbrain.core.reflection
 
 import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.content
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.google.ai.client.generativeai.type.RequestOptions
 import android.util.Log
 
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.agents.AgentMessage
 
 class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
 
@@ -195,6 +197,63 @@ class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
             }
         }
         
+        SummaryResult("All Gemini models failed. Please check network/billing.", "Error")
+    }
+
+    /**
+     * Multi-turn chat using Gemini's startChat() API.
+     * All elements except the last are passed as history; the last user message
+     * is sent via chat.sendMessage() so each turn gets its own proper response.
+     */
+    suspend fun chatMultiTurn(
+        history: List<AgentMessage>,
+        preferredModel: String? = null,
+        lastSuccessfulModel: String? = null,
+        onSuccessModel: ((String) -> Unit)? = null
+    ): SummaryResult = withContext(Dispatchers.IO) {
+        val apiKey = settingsManager.getGeminiApiKey()
+        if (apiKey.isBlank()) {
+            return@withContext SummaryResult(
+                "❌ Gemini API Key is missing. Please go to Settings and enter your Gemini API Key.",
+                "N/A"
+            )
+        }
+        if (history.isEmpty()) return@withContext SummaryResult("No message to respond to.", "N/A")
+
+        val lastMessage = history.last()
+        // Build startChat() history from all turns before the last user message.
+        // Must alternate user/model; drop any trailing model turn to stay valid.
+        val priorTurns = history.dropLast(1).let { turns ->
+            if (turns.lastOrNull()?.role == "model") turns else turns.dropLastWhile { it.role != "model" }
+        }
+        val chatHistory = priorTurns.map { msg ->
+            content(role = msg.role) { text(msg.content) }
+        }
+
+        val attempts = mutableListOf<Pair<String, String>>()
+        if (!preferredModel.isNullOrBlank()) attempts.add(preferredModel.trim() to "v1beta")
+        else if (!lastSuccessfulModel.isNullOrBlank()) attempts.add(lastSuccessfulModel.trim() to "v1beta")
+        else if (cachedModel != null) attempts.add(cachedModel!!)
+        attempts.addAll(fallbackModels.filter {
+            it.first != preferredModel && it.first != lastSuccessfulModel && it.first != cachedModel?.first
+        })
+
+        for ((name, version) in attempts) {
+            try {
+                Log.d("GeminiAgent", "Multi-turn attempt $name prior=${priorTurns.size} turns")
+                val model = createModel(name, version)
+                val chat = model.startChat(history = chatHistory)
+                val response = chat.sendMessage(lastMessage.content)
+                val result = response.text
+                if (!result.isNullOrBlank()) {
+                    cachedModel = name to version
+                    onSuccessModel?.invoke(name)
+                    return@withContext SummaryResult(result, name)
+                }
+            } catch (e: Exception) {
+                Log.e("GeminiAgent", "Multi-turn failed $name: ${e.message}")
+            }
+        }
         SummaryResult("All Gemini models failed. Please check network/billing.", "Error")
     }
 }
