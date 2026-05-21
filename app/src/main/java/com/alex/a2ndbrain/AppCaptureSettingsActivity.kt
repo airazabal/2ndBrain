@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.HomeSummaryConfig
+import com.alex.a2ndbrain.core.capture.HomeDefaultMode
 import com.alex.a2ndbrain.core.memory.HabitEntity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -185,6 +188,8 @@ fun AppCaptureSettingsScreen(
             .sortedBy { packageManager.getApplicationLabel(it.applicationInfo ?: return@sortedBy "").toString().lowercase() }
     }
 
+    var homeSummaryConfig by remember { mutableStateOf(settingsManager.getHomeSummaryConfig()) }
+
     var appSearchQuery by remember { mutableStateOf("") }
     val filteredApps = if (appSearchQuery.isEmpty()) {
         allApps
@@ -277,6 +282,95 @@ fun AppCaptureSettingsScreen(
         item {
             Spacer(modifier = Modifier.height(8.dp))
         }
+
+        // Home Summary Settings
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Home Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        "Configure what appears on the home screen summary card.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Default mode
+                    Text("Default mode", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        HomeDefaultMode.entries.forEach { mode ->
+                            val label = when (mode) {
+                                HomeDefaultMode.SUMMARY_ONLY    -> "Summary only"
+                                HomeDefaultMode.REMEMBER_LAST   -> "Remember last state"
+                                HomeDefaultMode.ALWAYS_EXPANDED -> "Always expanded"
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val updated = homeSummaryConfig.copy(defaultMode = mode)
+                                        homeSummaryConfig = updated
+                                        settingsManager.saveHomeSummaryConfig(updated)
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = homeSummaryConfig.defaultMode == mode,
+                                    onClick = {
+                                        val updated = homeSummaryConfig.copy(defaultMode = mode)
+                                        homeSummaryConfig = updated
+                                        settingsManager.saveHomeSummaryConfig(updated)
+                                    }
+                                )
+                                Text(label, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+
+                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                    Text("Summary card sections", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+
+                    // Toggle rows
+                    listOf(
+                        "Show Sense of Day explanation"  to homeSummaryConfig.showSenseOfDayText,
+                        "Show alerts"                    to homeSummaryConfig.showAlerts,
+                        "Show habits progress pill"      to homeSummaryConfig.showHabitPill,
+                        "Show next event pill"           to homeSummaryConfig.showNextEventPill,
+                        "Show steps pill"                to homeSummaryConfig.showStepsPill,
+                        "Show sleep / meditation pill"   to homeSummaryConfig.showSleepMeditationPill
+                    ).forEach { (label, value) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            Switch(
+                                checked = value,
+                                onCheckedChange = { checked ->
+                                    val updated = when (label) {
+                                        "Show Sense of Day explanation"  -> homeSummaryConfig.copy(showSenseOfDayText     = checked)
+                                        "Show alerts"                    -> homeSummaryConfig.copy(showAlerts              = checked)
+                                        "Show habits progress pill"      -> homeSummaryConfig.copy(showHabitPill           = checked)
+                                        "Show next event pill"           -> homeSummaryConfig.copy(showNextEventPill       = checked)
+                                        "Show steps pill"                -> homeSummaryConfig.copy(showStepsPill           = checked)
+                                        "Show sleep / meditation pill"   -> homeSummaryConfig.copy(showSleepMeditationPill = checked)
+                                        else -> homeSummaryConfig
+                                    }
+                                    homeSummaryConfig = updated
+                                    settingsManager.saveHomeSummaryConfig(updated)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(4.dp)) }
 
         // System Permissions Card
         item {

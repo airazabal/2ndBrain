@@ -141,4 +141,37 @@ class CaptureSettingsManager(private val context: Context) {
     fun markSetupCompleted() {
         prefs.edit().putBoolean("has_completed_setup", true).apply()
     }
+
+    fun getHomeSummaryConfig(): HomeSummaryConfig {
+        val json = prefs.getString("home_summary_config", null) ?: return HomeSummaryConfig()
+        return try {
+            val obj = org.json.JSONObject(json)
+            HomeSummaryConfig(
+                defaultMode = HomeDefaultMode.valueOf(
+                    obj.optString("defaultMode", HomeDefaultMode.SUMMARY_ONLY.name)
+                ),
+                showHabitPill          = obj.optBoolean("showHabitPill", true),
+                showNextEventPill      = obj.optBoolean("showNextEventPill", true),
+                showStepsPill          = obj.optBoolean("showStepsPill", true),
+                showSleepMeditationPill = obj.optBoolean("showSleepMeditationPill", true),
+                showAlerts             = obj.optBoolean("showAlerts", true),
+                showSenseOfDayText     = obj.optBoolean("showSenseOfDayText", true)
+            )
+        } catch (e: Exception) {
+            HomeSummaryConfig()
+        }
+    }
+
+    fun saveHomeSummaryConfig(config: HomeSummaryConfig) {
+        val json = org.json.JSONObject().apply {
+            put("defaultMode",            config.defaultMode.name)
+            put("showHabitPill",          config.showHabitPill)
+            put("showNextEventPill",      config.showNextEventPill)
+            put("showStepsPill",          config.showStepsPill)
+            put("showSleepMeditationPill", config.showSleepMeditationPill)
+            put("showAlerts",             config.showAlerts)
+            put("showSenseOfDayText",     config.showSenseOfDayText)
+        }.toString()
+        prefs.edit().putString("home_summary_config", json).apply()
+    }
 }

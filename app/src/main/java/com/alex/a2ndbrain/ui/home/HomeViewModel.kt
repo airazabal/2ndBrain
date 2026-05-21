@@ -153,6 +153,13 @@ class HomeViewModel(
         _monitoredAppsState.value = settingsManager.getMonitoredApps()
     }
 
+    private val _homeSummaryConfig = MutableStateFlow(settingsManager.getHomeSummaryConfig())
+    val homeSummaryConfig = _homeSummaryConfig.asStateFlow()
+
+    fun refreshHomeSummaryConfig() {
+        _homeSummaryConfig.value = settingsManager.getHomeSummaryConfig()
+    }
+
     private val _inlineCopilotResponses = MutableStateFlow<Map<String, String>>(emptyMap())
     val inlineCopilotResponses = _inlineCopilotResponses.asStateFlow()
 

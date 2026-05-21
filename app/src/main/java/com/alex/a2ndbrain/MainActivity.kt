@@ -273,7 +273,10 @@ class MainActivity : ComponentActivity() {
                         // Refresh health data every time the app resumes so Zepp→Health Connect
                         // syncs are picked up without relaunching the app.
                         LaunchedEffect(resumeKey) {
-                            if (resumeKey > 0) homeViewModel.checkHealthPermissionsAndSync()
+                            if (resumeKey > 0) {
+                                homeViewModel.checkHealthPermissionsAndSync()
+                                homeViewModel.refreshHomeSummaryConfig()
+                            }
                         }
 
                         // Automatically forward preset Copilot queries to the Copilot ViewModel
@@ -572,6 +575,7 @@ class MainActivity : ComponentActivity() {
                                                     val vaultNotes by homeViewModel.vaultNotes.collectAsStateWithLifecycle()
                                                     val consolidatedUsage by homeViewModel.consolidatedUsage.collectAsStateWithLifecycle()
                                                     val summaries by homeViewModel.summaries.collectAsStateWithLifecycle()
+                                                    val homeSummaryConfig by homeViewModel.homeSummaryConfig.collectAsStateWithLifecycle()
 
                                                     LaunchedEffect(Unit) {
                                                         homeViewModel.checkHealthPermissionsAndSync()
@@ -639,7 +643,8 @@ class MainActivity : ComponentActivity() {
                                                         },
                                                         onDeleteManualEvent = { id ->
                                                             homeViewModel.deleteManualAgendaEvent(id)
-                                                        }
+                                                        },
+                                                        homeSummaryConfig = homeSummaryConfig
                                                     )
                                                 }
 

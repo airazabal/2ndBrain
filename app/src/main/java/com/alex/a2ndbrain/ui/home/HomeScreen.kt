@@ -64,6 +64,13 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.animation.core.*
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.alex.a2ndbrain.core.capture.HomeSummaryConfig
+import com.alex.a2ndbrain.core.capture.HomeDefaultMode
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.filled.Refresh
@@ -109,6 +116,7 @@ fun HomeScreen(
     onDeepDiveCoPilot: (TimelineEvent) -> Unit = {},
     onDeleteManualEvent: (String) -> Unit = {},
     onRefreshHealth: () -> Unit = {},
+    homeSummaryConfig: HomeSummaryConfig = HomeSummaryConfig(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -118,7 +126,18 @@ fun HomeScreen(
     var showQuickAddDialog by remember { mutableStateOf(false) }
     var isTimelineExpanded by remember { mutableStateOf(true) }
     var expandedTimelineEventId by remember { mutableStateOf<String?>(null) }
-    
+
+    // Summary / detail toggle — rememberSaveable persists across tab navigation (REMEMBER_LAST).
+    // SUMMARY_ONLY and ALWAYS_EXPANDED override the saved value whenever the mode changes.
+    var showDetails by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(homeSummaryConfig.defaultMode) {
+        when (homeSummaryConfig.defaultMode) {
+            HomeDefaultMode.ALWAYS_EXPANDED -> showDetails = true
+            HomeDefaultMode.SUMMARY_ONLY    -> showDetails = false
+            HomeDefaultMode.REMEMBER_LAST   -> { /* keep whatever rememberSaveable has */ }
+        }
+    }
+
     LaunchedEffect(Unit) {
         onRefreshHealth()
     }
@@ -144,8 +163,45 @@ fun HomeScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Daily Wellness & Habits Control Cockpit (Recommendation A & C)
+        // Smart summary card — always visible
         item {
+            val currentMins = java.util.Calendar.getInstance().let {
+                it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE)
+            }
+            val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+            SmartSummaryCard(
+                senseOfDayScore      = senseOfDayScore,
+                senseOfDayContext    = senseOfDayContext,
+                config               = homeSummaryConfig,
+                topConflict          = timelineConflicts.maxByOrNull { if (it.severity == ConflictSeverity.ALERT) 1 else 0 },
+                completedHabitCount  = completedHabitIds.size,
+                totalHabitCount      = activeHabits.count { it.isActive },
+                nextEvent            = todayTimelineEvents.firstOrNull { it.minutesFromMidnight >= currentMins }
+                                        ?: todayTimelineEvents.firstOrNull(),
+                healthMetrics        = healthMetrics,
+                healthAvailable      = healthPermissionGranted,
+                meditatedToday       = meditationSessions.any {
+                    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                        .format(java.util.Date(it.timestamp)) == todayStr
+                },
+                meditationWeekStreak = meditationStreaks.currentWeekStreak,
+                showDetails          = showDetails,
+                onToggleDetails      = { showDetails = !showDetails },
+                onDeepDiveConflict   = onDeepDiveCoPilotPrompt
+            )
+        }
+
+        // All detail sections — hidden until the user taps "Show all details"
+        item {
+            AnimatedVisibility(
+                visible = showDetails,
+                enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
+                exit  = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
+
+        // Daily Wellness & Habits Control Cockpit (Recommendation A & C)
+        /* detail-section-start */
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -395,9 +451,11 @@ fun HomeScreen(
                     }
                 }
             }
-        }
+        }  // end Column
+    }  // end AnimatedVisibility
+}  // end detail item
 
-        if (timelineConflicts.isNotEmpty()) {
+        if (showDetails && timelineConflicts.isNotEmpty()) {
             item {
                 ActiveConflictsSection(
                     conflicts = timelineConflicts,
@@ -411,7 +469,7 @@ fun HomeScreen(
         }
 
         // Today's Calendar & Schedule Timeline (Recommendation B)
-        item {
+        if (showDetails) item {
             val chevronRotation by animateFloatAsState(
                 targetValue = if (isTimelineExpanded) 180f else 0f,
                 animationSpec = tween(durationMillis = 300),
@@ -864,7 +922,7 @@ fun HomeScreen(
         }
 
 
-        item {
+        if (showDetails) item {
             SummaryGrid(
                 totalFeed = memories.size,
                 unreadFeed = unreadCount,
@@ -874,7 +932,7 @@ fun HomeScreen(
         }
 
         // Smartwatch Health Connect Card (Recommendation 6)
-        if (healthConnectAvailable) {
+        if (showDetails && healthConnectAvailable) {
             item {
                 HomeSectionCard(
                     title = "Smartwatch Wellness (Health Connect)",
@@ -980,7 +1038,7 @@ fun HomeScreen(
         }
 
         // Zen Meditation Card
-        item {
+        if (showDetails) item {
             HomeSectionCard(
                 title = "Zen Meditation (Zendence)",
                 icon = Icons.Default.Spa,
@@ -1082,7 +1140,7 @@ fun HomeScreen(
             }
         }
 
-        if (latestReflection != null) {
+        if (showDetails && latestReflection != null) {
             item {
                 HomeSectionCard(
                     title = "Latest Intelligence",
@@ -1102,7 +1160,7 @@ fun HomeScreen(
             }
         }
 
-        item {
+        if (showDetails) item {
             HomeSectionCard(
                 title = "Recent Notes",
                 icon = Icons.Default.Description,
@@ -1143,7 +1201,7 @@ fun HomeScreen(
             }
         }
 
-        if (consolidatedUsage.isNotEmpty()) {
+        if (showDetails && consolidatedUsage.isNotEmpty()) {
             item {
                 HomeSectionCard(
                     title = "Screen Time",
@@ -1206,6 +1264,168 @@ fun HomeScreen(
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun SmartSummaryCard(
+    senseOfDayScore: Int,
+    senseOfDayContext: String,
+    config: HomeSummaryConfig,
+    topConflict: TimelineConflict?,
+    completedHabitCount: Int,
+    totalHabitCount: Int,
+    nextEvent: TimelineEvent?,
+    healthMetrics: com.alex.a2ndbrain.core.health.HealthMetrics,
+    healthAvailable: Boolean,
+    meditatedToday: Boolean,
+    meditationWeekStreak: Int,
+    showDetails: Boolean,
+    onToggleDetails: () -> Unit,
+    onDeepDiveConflict: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val ringColor = remember(senseOfDayScore) {
+        Color.hsv(senseOfDayScore.toFloat() * 1.3f, 0.75f, 0.9f)
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+
+            // ── Score ring + context text ─────────────────────────────────
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        drawCircle(color = Color.LightGray.copy(alpha = 0.2f), style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round))
+                        drawArc(color = ringColor, startAngle = -90f, sweepAngle = senseOfDayScore / 100f * 360f, useCenter = false, style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round))
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(text = "$senseOfDayScore%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Sense of Day", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                    if (config.showSenseOfDayText) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = senseOfDayContext, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, lineHeight = 18.sp)
+                    }
+                }
+            }
+
+            // ── Top alert ─────────────────────────────────────────────────
+            if (config.showAlerts && topConflict != null) {
+                val accentColor = when (topConflict.type) {
+                    ConflictType.OVERLAP          -> Color(0xFFE53935)
+                    ConflictType.OVERDUE_HABIT    -> Color(0xFFFB8C00)
+                    ConflictType.DISTRACTION_GAP  -> Color(0xFF8E24AA)
+                }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onDeepDiveConflict(topConflict.deepDivePrompt) },
+                    colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.08f)),
+                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = topConflict.title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = accentColor)
+                            Text(text = topConflict.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = accentColor.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+
+            // ── Stats pills ───────────────────────────────────────────────
+            val activePills = buildList {
+                if (config.showHabitPill && totalHabitCount > 0) {
+                    val label = "$completedHabitCount / $totalHabitCount habits"
+                    val pillColor = when {
+                        totalHabitCount == 0           -> Color.Gray
+                        completedHabitCount == totalHabitCount -> PastelGreen
+                        completedHabitCount.toFloat() / totalHabitCount >= 0.5f -> PastelBlue
+                        else -> Color(0xFFFFCC80)
+                    }
+                    add(label to pillColor)
+                }
+                if (config.showNextEventPill) {
+                    val label = nextEvent?.let { "${it.title.take(18)} ${it.time}" } ?: "No events today"
+                    add(label to PastelYellow)
+                }
+                if (config.showStepsPill && healthAvailable) {
+                    add("${healthMetrics.steps} steps" to PastelGreen)
+                }
+                if (config.showSleepMeditationPill) {
+                    val label = when {
+                        meditatedToday -> "Meditated ✓"
+                        meditationWeekStreak > 0 -> "$meditationWeekStreak day streak"
+                        healthAvailable && healthMetrics.sleepMinutes > 0 ->
+                            "${healthMetrics.sleepMinutes / 60}h ${healthMetrics.sleepMinutes % 60}m sleep"
+                        else -> "No sleep data"
+                    }
+                    add(label to MaterialTheme.colorScheme.surfaceVariant)
+                }
+            }
+
+            if (activePills.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    activePills.forEach { (label, color) ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(color.copy(alpha = 0.18f))
+                                .border(BorderStroke(1.dp, color.copy(alpha = 0.35f)), RoundedCornerShape(20.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(text = label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            }
+
+            // ── Toggle button ─────────────────────────────────────────────
+            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onToggleDetails() }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = if (showDetails) "Show less" else "Show all details",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = if (showDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
     }
 }
 
