@@ -131,6 +131,7 @@ class OrchestratorAgent(
         flags: DynamicContextFlags
     ): String = buildString {
         append("You are the user's personal 2ndBrain assistant. Answer accurately, concisely, and friendly.\n")
+        append("Focus ONLY on the section most relevant to the user's question — ignore unrelated data sections.\n")
         append("If the data below doesn't contain relevant details, say so politely.\n\n")
 
         if (flags.includeHealth && ctx.health.isAvailable) {
@@ -213,9 +214,9 @@ data class DynamicContextFlags(
         fun fromMessage(message: String): DynamicContextFlags {
             val lower = message.lowercase(java.util.Locale.getDefault())
             val health = listOf("step", "sleep", "heart", "bpm", "walk", "physical", "active", "health", "run", "fit", "calories").any { lower.contains(it) }
-            val habits = listOf("habit", "routine", "alarm", "med", "pill", "checklist", "todo", "task").any { lower.contains(it) }
-            val usage = listOf("screen", "time", "app", "usage", "min", "hour", "youtube", "chrome", "spend", "social", "distract", "phone", "tablet", "device").any { lower.contains(it) }
-            val meditation = listOf("meditat", "zendence", "streak", "session", "mindful", "calm", "insight").any { lower.contains(it) }
+            val habits = listOf("habit", "routine", "alarm", "medication", "medicine", "pill", "checklist", "todo", "task").any { lower.contains(it) }
+            val usage = listOf("screen", "app", "usage", "youtube", "chrome", "spend", "social", "distract", "phone", "tablet", "device", "screen time", "app time").any { lower.contains(it) }
+            val meditation = listOf("meditat", "zendence", "streak", "session", "mindful", "calm", "insight", "breath", "relax", "practice", "mantra", "sit").any { lower.contains(it) }
             val memories = listOf("notification", "clipboard", "log", "memory", "captured", "tag", "remember", "text", "copy", "message", "email", "chat").any { lower.contains(it) }
             val general = !health && !habits && !usage && !meditation && !memories
             return DynamicContextFlags(
