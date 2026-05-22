@@ -52,11 +52,6 @@ class NotificationCaptureService : NotificationListenerService() {
         val packageName = sbn.packageName
         val notification = sbn.notification ?: return
 
-        val monitoredApps = settingsManager.getMonitoredApps()
-        if (monitoredApps.isNotEmpty() && !monitoredApps.contains(packageName)) {
-            return
-        }
-
         val extras = notification.extras ?: Bundle()
         
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim() ?: ""

@@ -60,6 +60,7 @@ fun MemoryScreen(
     vaultUri: String = "",
     onSaveVoiceNote: ((String, String) -> Unit)? = null,
     onDeepDiveCoPilot: (MemoryEntity) -> Unit = {},
+    onNotesSelected: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -312,7 +313,7 @@ fun MemoryScreen(
                 items(tags.size) { idx ->
                     val tag = tags[idx]
                     val isSelected = tag == selectedTag
-                    
+
                     val primaryColor = MaterialTheme.colorScheme.primary
                     val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
                     val chipBgColor = if (isSelected) {
@@ -344,6 +345,24 @@ fun MemoryScreen(
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+                item {
+                    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable { onNotesSelected() },
+                        color = surfaceVariantColor.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text(
+                            text = "Notes",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }

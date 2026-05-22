@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class NavigationViewModel : ViewModel() {
-    private val _currentTab = MutableStateFlow(AppTab.HOME)
+    private val _currentTab = MutableStateFlow(AppTab.TODAY)
     val currentTab = _currentTab.asStateFlow()
 
     private val _errorFlow = MutableStateFlow<String?>(null)

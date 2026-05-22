@@ -205,6 +205,15 @@ fun HomeScreen(
             )
         }
 
+        if (healthPermissionGranted && healthConnectAvailable) {
+            item {
+                HealthStripCard(
+                    healthMetrics = healthMetrics,
+                    onClick = { onNavigateToTab(AppTab.WELLNESS) }
+                )
+            }
+        }
+
         // All detail sections — hidden until the user taps "Show all details"
         item {
             AnimatedVisibility(
@@ -1041,297 +1050,6 @@ fun HomeScreen(
         }
 
 
-        if (showDetails) item {
-            SummaryGrid(
-                totalFeed = memories.size,
-                unreadFeed = unreadCount,
-                appsCount = appCount,
-                onCardClick = { onNavigateToTab(AppTab.FEED) }
-            )
-        }
-
-        // Smartwatch Health Connect Card (Recommendation 6)
-        if (showDetails && healthConnectAvailable) {
-            item {
-                HomeSectionCard(
-                    title = "Smartwatch Wellness (Health Connect)",
-                    icon = Icons.Default.Favorite,
-                    iconColor = PastelGreen,
-                    onClick = { if (healthPermissionGranted) onNavigateToTab(AppTab.HEALTH) else onConnectHealth() }
-                ) {
-                    if (healthPermissionGranted) {
-                        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                            // Steps Row
-                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Steps Today",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Text(
-                                        text = "${healthMetrics.steps} / 10,000",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                val progress = (healthMetrics.steps.toFloat() / 10000f).coerceIn(0f, 1f)
-                                LinearProgressIndicator(
-                                    progress = progress,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(8.dp)
-                                        .clip(RoundedCornerShape(4.dp)),
-                                    color = PastelGreen,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            }
-
-                            // Sleep & Heart Rate Row
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                // Sleep Card
-                                Card(
-                                    modifier = Modifier.weight(1f),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text("Last Sleep", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        val h = healthMetrics.sleepMinutes / 60
-                                        val m = healthMetrics.sleepMinutes % 60
-                                        Text(
-                                            text = if (healthMetrics.sleepMinutes > 0) "${h}h ${m}m" else "--",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-
-                                // Heart Rate Card
-                                Card(
-                                    modifier = Modifier.weight(1f),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text("Heart Rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = if (healthMetrics.avgHeartRate > 0) "${healthMetrics.avgHeartRate} BPM" else "--",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                            Text(
-                                text = "Synchronize physical health logs (Steps, Sleep, and Heart Rate) generated by your Zepp watch and other devices.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 12.dp)
-                            )
-                            Button(
-                                onClick = onConnectHealth,
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                            ) {
-                                Icon(Icons.Default.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Connect Health Connect", color = MaterialTheme.colorScheme.primary)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Zen Meditation Card
-        if (showDetails) item {
-            HomeSectionCard(
-                title = "Zen Meditation (Zendence)",
-                icon = Icons.Default.Spa,
-                iconColor = MaterialTheme.colorScheme.primary,
-                onClick = { onNavigateToTab(AppTab.MEDITATION) }
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    // Streaks Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text("This Week", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "${meditationStreaks.currentWeekStreak} days",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-
-                        Card(
-                            modifier = Modifier.weight(1f),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text("Overall Streak", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "${meditationStreaks.maxOverallStreak} days",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-
-                    // Latest Session Details
-                    val latestSession = meditationSessions.firstOrNull()
-                    if (latestSession != null) {
-                        Column {
-                            Text(
-                                text = "Last Session Details",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Text(
-                                            text = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date(latestSession.timestamp)),
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text = "${latestSession.durationMinutes} mins",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                    if (latestSession.insight.isNotBlank()) {
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                            text = "\"${latestSession.insight}\"",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Text(
-                            text = "No meditation sessions completed this week. Start a session in Zendence to log your first entry!",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
-        if (showDetails && latestReflection != null) {
-            item {
-                HomeSectionCard(
-                    title = "Latest Intelligence",
-                    icon = Icons.Default.AutoAwesome,
-                    iconColor = PastelBlue,
-                    onClick = { onNavigateToTab(AppTab.BRAIN) }
-                ) {
-                    Text(
-                        text = latestReflection.summary,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 4,
-                        overflow = TextOverflow.Ellipsis,
-                        lineHeight = 20.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        if (showDetails) item {
-            HomeSectionCard(
-                title = "Recent Notes",
-                icon = Icons.Default.Description,
-                iconColor = PastelGreen,
-                onClick = { onNavigateToTab(AppTab.NOTES) }
-            ) {
-                if (notes.isEmpty()) {
-                    Text("No notes found.", style = MaterialTheme.typography.bodySmall)
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        notes.take(3).forEach { note ->
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    Icons.Default.Description,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.outline
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = note.name?.removeSuffix(".md") ?: "Untitled",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                        if (notes.size > 3) {
-                            Text(
-                                text = "+ ${notes.size - 3} more",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        if (showDetails && consolidatedUsage.isNotEmpty()) {
-            item {
-                HomeSectionCard(
-                    title = "Screen Time",
-                    icon = Icons.Default.Schedule,
-                    iconColor = PastelPurple,
-                    onClick = { onNavigateToTab(AppTab.TIME) }
-                ) {
-                    UsageBarChart(consolidatedUsage.take(3))
-                }
-            }
-        }
     }
 
     if (showQuickAddDialog) {
@@ -1660,6 +1378,58 @@ fun HomeSectionCard(
             }
             Spacer(modifier = Modifier.height(16.dp))
             content()
+        }
+    }
+}
+
+@Composable
+fun HealthStripCard(
+    healthMetrics: com.alex.a2ndbrain.core.health.HealthMetrics,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth().clickable { onClick() },
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        shape = RoundedCornerShape(28.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = healthMetrics.steps.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text("steps", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                val h = healthMetrics.sleepMinutes / 60
+                val m = healthMetrics.sleepMinutes % 60
+                Text(
+                    text = if (healthMetrics.sleepMinutes > 0) "${h}h ${m}m" else "--",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text("sleep", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = if (healthMetrics.avgHeartRate > 0) "${healthMetrics.avgHeartRate} BPM" else "--",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text("heart rate", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+            }
         }
     }
 }

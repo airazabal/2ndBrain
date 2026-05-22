@@ -6,18 +6,15 @@ enum class ConflictType { OVERLAP, OVERDUE_HABIT, DISTRACTION_GAP }
 enum class ConflictSeverity { WARNING, ALERT }
 
 enum class AppTab(val index: Int, val label: String, val title: String) {
-    HOME(0, "Home", "Welcome to your 2ndBrain"),
-    FEED(1, "Feed", "Your daily stream of captures"),
-    BRAIN(2, "Brain", "Reflections & daily insights"),
-    NOTES(3, "Notes", "Your space for ideas & thoughts"),
-    TIME(4, "Time", "Understanding your routine"),
-    MEDITATION(5, "Zen", "Meditation Sessions (Zendence)"),
-    SETTINGS(6, "Settings", "Configure capture and permissions"),
-    COPILOT(7, "Co-pilot", "Ask your 2ndBrain Co-Pilot"),
-    HEALTH(8, "Health", "Your health & fitness trends");
+    TODAY(0, "Today", "Today"),
+    FEED(1, "Feed", "Feed"),
+    WELLNESS(2, "Wellness", "Wellness"),
+    COPILOT(3, "Co-pilot", "Co-pilot"),
+    SETTINGS(4, "Settings", "Settings"),
+    NOTES(5, "Notes", "Notes");
 
     companion object {
-        fun fromIndex(index: Int): AppTab = entries.find { it.index == index } ?: HOME
+        fun fromIndex(index: Int): AppTab = entries.find { it.index == index } ?: TODAY
     }
 }
 

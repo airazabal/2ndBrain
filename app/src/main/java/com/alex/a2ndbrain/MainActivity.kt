@@ -24,9 +24,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -38,15 +37,12 @@ import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.ui.chat.CopilotViewModel
 import com.alex.a2ndbrain.ui.home.HomeScreen
 import com.alex.a2ndbrain.ui.home.HomeViewModel
-import com.alex.a2ndbrain.ui.meditation.MeditationScreen
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.memories.MemoryViewModel
 import com.alex.a2ndbrain.ui.notes.NotesScreen
-import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
-import com.alex.a2ndbrain.ui.reflection.ReflectionViewModel
 import com.alex.a2ndbrain.ui.settings.SettingsViewModel
 import com.alex.a2ndbrain.ui.theme.BrainTheme
-import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
+import com.alex.a2ndbrain.ui.wellness.WellnessScreen
 import com.alex.a2ndbrain.ui.wizard.PermissionWizardScreen
 import com.alex.a2ndbrain.ui.wizard.WizardPermission
 import org.koin.android.ext.android.inject
@@ -91,6 +87,7 @@ class MainActivity : ComponentActivity() {
         clipboardCaptureManager.captureCurrentClipboard()
     }
 
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -261,7 +258,6 @@ class MainActivity : ComponentActivity() {
                         val navViewModel: NavigationViewModel = koinViewModel()
                         val homeViewModel: HomeViewModel = koinViewModel()
                         val memoryViewModel: MemoryViewModel = koinViewModel()
-                        val reflectionViewModel: ReflectionViewModel = koinViewModel()
                         val copilotViewModel: CopilotViewModel = koinViewModel()
 
                         // Hoisted Health Connect launcher (wizard + Home tab both use it)
@@ -396,63 +392,48 @@ class MainActivity : ComponentActivity() {
                         } else {
                             Scaffold(
                                 snackbarHost = { SnackbarHost(snackbarHostState) },
+                                topBar = {
+                                    if (!useRail) {
+                                        TopAppBar(
+                                            title = { Text("2ndBrain") },
+                                            actions = {
+                                                IconButton(onClick = { navViewModel.setTab(AppTab.SETTINGS) }) {
+                                                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                                                }
+                                            }
+                                        )
+                                    }
+                                },
                                 bottomBar = {
                                     if (!useRail) {
                                         NavigationBar(
                                             containerColor = MaterialTheme.colorScheme.surface
                                         ) {
                                             val tabs = listOf(
-                                                Triple("Home", Icons.Default.Home, AppTab.HOME),
-                                                Triple(
-                                                    "Feed",
-                                                    Icons.Default.Notifications,
-                                                    AppTab.FEED
-                                                ),
-                                                Triple(
-                                                    "Brain",
-                                                    Icons.Default.AutoAwesome,
-                                                    AppTab.BRAIN
-                                                ),
-                                                Triple(
-                                                    "Notes",
-                                                    Icons.Default.Description,
-                                                    AppTab.NOTES
-                                                ),
-                                                Triple("Time", Icons.Default.Schedule, AppTab.TIME),
-                                                Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
-                                                Triple("Health", Icons.Default.Favorite, AppTab.HEALTH),
-                                                Triple(
-                                                    "Co-pilot",
-                                                    Icons.Default.QuestionAnswer,
-                                                    AppTab.COPILOT
-                                                ),
-                                                Triple(
-                                                    "Settings",
-                                                    Icons.Default.Settings,
-                                                    AppTab.SETTINGS
-                                                )
+                                                Triple("Today", Icons.Default.Home, AppTab.TODAY),
+                                                Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
+                                                Triple("Wellness", Icons.Default.Favorite, AppTab.WELLNESS)
                                             )
                                             tabs.forEach { (label, icon, tab) ->
                                                 NavigationBarItem(
-                                                    icon = {
-                                                        Icon(
-                                                            icon,
-                                                            contentDescription = label
-                                                        )
-                                                    },
-                                                    label = null,
-                                                    alwaysShowLabel = false,
+                                                    icon = { Icon(icon, contentDescription = label) },
+                                                    label = { Text(label) },
                                                     selected = currentTab == tab,
                                                     onClick = { navViewModel.setTab(tab) },
                                                     colors = NavigationBarItemDefaults.colors(
                                                         selectedIconColor = MaterialTheme.colorScheme.primary,
                                                         unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(
-                                                            alpha = 0.1f
-                                                        )
+                                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                                                     )
                                                 )
                                             }
+                                        }
+                                    }
+                                },
+                                floatingActionButton = {
+                                    if (!useRail) {
+                                        FloatingActionButton(onClick = { navViewModel.setTab(AppTab.COPILOT) }) {
+                                            Icon(Icons.Default.AutoAwesome, contentDescription = "Co-pilot")
                                         }
                                     }
                                 }
@@ -467,69 +448,29 @@ class MainActivity : ComponentActivity() {
                                             modifier = Modifier.fillMaxHeight(),
                                             containerColor = MaterialTheme.colorScheme.surface,
                                             header = {
-                                                Column(
-                                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                                FloatingActionButton(
+                                                    onClick = { navViewModel.setTab(AppTab.COPILOT) },
                                                     modifier = Modifier.padding(vertical = 16.dp)
                                                 ) {
-                                                    Icon(
-                                                        Icons.Default.AutoAwesome,
-                                                        contentDescription = null,
-                                                        modifier = Modifier.size(32.dp),
-                                                        tint = MaterialTheme.colorScheme.primary
-                                                    )
-                                                    Text(
-                                                        text = "v${BuildConfig.VERSION_NAME}",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.outline,
-                                                        modifier = Modifier.padding(top = 4.dp)
-                                                    )
+                                                    Icon(Icons.Default.AutoAwesome, contentDescription = "Co-pilot")
                                                 }
                                             }
                                         ) {
                                             val tabs = listOf(
-                                                Triple("Home", Icons.Default.Home, AppTab.HOME),
-                                                Triple(
-                                                    "Feed",
-                                                    Icons.Default.Notifications,
-                                                    AppTab.FEED
-                                                ),
-                                                Triple(
-                                                    "Brain",
-                                                    Icons.Default.AutoAwesome,
-                                                    AppTab.BRAIN
-                                                ),
-                                                Triple(
-                                                    "Notes",
-                                                    Icons.Default.Description,
-                                                    AppTab.NOTES
-                                                ),
-                                                Triple("Time", Icons.Default.Schedule, AppTab.TIME),
-                                                Triple("Zen", Icons.Default.Spa, AppTab.MEDITATION),
-                                                Triple("Health", Icons.Default.Favorite, AppTab.HEALTH),
-                                                Triple(
-                                                    "Co-pilot",
-                                                    Icons.Default.QuestionAnswer,
-                                                    AppTab.COPILOT
-                                                )
+                                                Triple("Today", Icons.Default.Home, AppTab.TODAY),
+                                                Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
+                                                Triple("Wellness", Icons.Default.Favorite, AppTab.WELLNESS)
                                             )
-
                                             tabs.forEach { (label, icon, tab) ->
                                                 NavigationRailItem(
-                                                    icon = {
-                                                        Icon(
-                                                            icon,
-                                                            contentDescription = label
-                                                        )
-                                                    },
+                                                    icon = { Icon(icon, contentDescription = label) },
                                                     label = { Text(label) },
                                                     selected = currentTab == tab,
                                                     onClick = { navViewModel.setTab(tab) },
                                                     colors = NavigationRailItemDefaults.colors(
                                                         selectedIconColor = MaterialTheme.colorScheme.primary,
                                                         unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(
-                                                            alpha = 0.1f
-                                                        )
+                                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                                                     )
                                                 )
                                             }
@@ -537,45 +478,23 @@ class MainActivity : ComponentActivity() {
                                             Spacer(modifier = Modifier.weight(1f))
 
                                             NavigationRailItem(
-                                                icon = {
-                                                    Icon(
-                                                        Icons.Default.Settings,
-                                                        contentDescription = "Settings"
-                                                    )
-                                                },
+                                                icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
                                                 label = { Text("Settings") },
                                                 selected = currentTab == AppTab.SETTINGS,
                                                 onClick = { navViewModel.setTab(AppTab.SETTINGS) },
                                                 colors = NavigationRailItemDefaults.colors(
                                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                                     unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(
-                                                        alpha = 0.1f
-                                                    )
+                                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
                                                 )
                                             )
                                         }
                                     }
 
                                     Column(modifier = Modifier.weight(1f)) {
-                                        // Hero Header
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 32.dp, vertical = 24.dp)
-                                        ) {
-                                            Text(
-                                                text = currentTab.title,
-                                                style = MaterialTheme.typography.headlineMedium,
-                                                fontWeight = FontWeight.Black,
-                                                lineHeight = 36.sp,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                        }
-
                                         Box(modifier = Modifier.weight(1f)) {
                                             when (currentTab) {
-                                                AppTab.HOME -> {
+                                                AppTab.TODAY -> {
                                                     val healthMetrics by homeViewModel.healthMetricsToday.collectAsStateWithLifecycle()
                                                     val healthPermissionGranted by homeViewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
                                                     val healthConnectAvailable =
@@ -681,43 +600,22 @@ class MainActivity : ComponentActivity() {
                                                     MemoryScreen(
                                                         memories = memories,
                                                         searchQuery = searchQuery,
-                                                        onSearchQueryChange = {
-                                                            memoryViewModel.setSearchQuery(
-                                                                it
-                                                            )
-                                                        },
-                                                        onCaptureClipboard = {
-                                                            clipboardCaptureManager.captureCurrentClipboard()
-                                                        },
-                                                        onMarkAsRead = { ids ->
-                                                            memoryViewModel.markMultipleAsRead(
-                                                                ids
-                                                            )
-                                                        },
-                                                        onMarkAsUnread = { ids ->
-                                                            memoryViewModel.markMultipleAsUnread(
-                                                                ids
-                                                            )
-                                                        },
+                                                        onSearchQueryChange = { memoryViewModel.setSearchQuery(it) },
+                                                        onCaptureClipboard = { clipboardCaptureManager.captureCurrentClipboard() },
+                                                        onMarkAsRead = { ids -> memoryViewModel.markMultipleAsRead(ids) },
+                                                        onMarkAsUnread = { ids -> memoryViewModel.markMultipleAsUnread(ids) },
                                                         onClearAll = { memoryViewModel.clearAllMemories() },
                                                         monitoredApps = settingsManager.getMonitoredApps(),
                                                         vaultUri = settingsManager.getObsidianVaultUri(),
                                                         onSaveVoiceNote = { text, audioPath ->
-                                                            memoryViewModel.saveVoiceNote(
-                                                                text,
-                                                                audioPath,
-                                                                settingsManager.getObsidianVaultUri()
-                                                            )
+                                                            memoryViewModel.saveVoiceNote(text, audioPath, settingsManager.getObsidianVaultUri())
                                                         },
                                                         onDeepDiveCoPilot = { memory ->
-                                                            val key =
-                                                                memory.packageName ?: memory.source
+                                                            val key = memory.packageName ?: memory.source
                                                             val appName = try {
                                                                 val pm = packageManager
-                                                                val appInfo =
-                                                                    pm.getApplicationInfo(key, 0)
-                                                                pm.getApplicationLabel(appInfo)
-                                                                    .toString()
+                                                                val appInfo = pm.getApplicationInfo(key, 0)
+                                                                pm.getApplicationLabel(appInfo).toString()
                                                             } catch (e: Exception) {
                                                                 if (key == "clipboard") "Clipboard"
                                                                 else if (key == "voice") "Voice Memos"
@@ -727,63 +625,15 @@ class MainActivity : ComponentActivity() {
                                                         Analyze my memories, notes, and habits for this captured log from "$appName": "${memory.title ?: "Untitled"}" - "${memory.content}". Please provide a cohesive context correlation summary to help me understand how this fits into my daily agenda and physical/cognitive trends.
                                                     """.trimIndent()
                                                             navViewModel.triggerCopilotQuery(query)
-                                                        }
-                                                    )
-                                                }
-
-                                                AppTab.BRAIN -> {
-                                                    val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
-                                                    val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
-                                                    val weeklyHealthTrends by reflectionViewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
-                                                    val isGeneratingReflection by reflectionViewModel.isGeneratingReflection.collectAsStateWithLifecycle()
-                                                    val isGeneratingWeeklyInsight by reflectionViewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
-
-                                                    val homeActiveHabits by homeViewModel.activeHabitsToday.collectAsStateWithLifecycle()
-                                                    val homePastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
-
-                                                    LaunchedEffect(Unit) {
-                                                        reflectionViewModel.loadWeeklyHealthTrends()
-                                                    }
-
-                                                    ReflectionScreen(
-                                                        summaries = summaries,
-                                                        settingsManager = settingsManager,
-                                                        isGenerating = isGeneratingReflection,
-                                                        onGenerateReflection = { reflectionViewModel.generateReflection() },
-                                                        onCancelReflection = { reflectionViewModel.cancelReflection() },
-                                                        onClearAll = { reflectionViewModel.clearAllSummaries() },
-                                                        onDeleteSummary = { id ->
-                                                            reflectionViewModel.deleteSummary(
-                                                                id
-                                                            )
                                                         },
-                                                        weeklyUsageStats = weeklyUsageStats,
-                                                        weeklyHealthTrends = weeklyHealthTrends,
-                                                        pastWeekHabitCompletions = homePastWeekHabitCompletions,
-                                                        isGeneratingWeeklyInsight = isGeneratingWeeklyInsight,
-                                                        onGenerateWeeklyInsight = { reflectionViewModel.generateWeeklyInsight() }
+                                                        onNotesSelected = { navViewModel.setTab(AppTab.NOTES) }
                                                     )
                                                 }
+
+                                                AppTab.WELLNESS -> WellnessScreen(settingsManager = settingsManager)
 
                                                 AppTab.NOTES -> NotesScreen(settingsManager = settingsManager)
-                                                AppTab.MEDITATION -> {
-                                                    val sessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
-                                                    val streaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
-                                                    MeditationScreen(
-                                                        sessions = sessions,
-                                                        streaks = streaks
-                                                    )
-                                                }
 
-                                                AppTab.TIME -> DigitalTimeScreen()
-                                                AppTab.HEALTH -> {
-                                                    val healthViewModel: com.alex.a2ndbrain.ui.health.HealthViewModel = koinViewModel()
-                                                    LaunchedEffect(Unit) { healthViewModel.refresh() }
-                                                    com.alex.a2ndbrain.ui.health.HealthScreen(
-                                                        viewModel = healthViewModel,
-                                                        modifier = Modifier.fillMaxSize()
-                                                    )
-                                                }
                                                 AppTab.SETTINGS -> {
                                                     val activeHabits by settingsViewModel.activeHabits.collectAsStateWithLifecycle()
                                                     val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
@@ -797,7 +647,7 @@ class MainActivity : ComponentActivity() {
                                                             )
                                                         },
                                                         onBack = {
-                                                            navViewModel.setTab(AppTab.HOME)
+                                                            navViewModel.setTab(AppTab.TODAY)
                                                             homeViewModel.refreshMonitoredApps()
                                                         },
                                                         onRestartService = {
