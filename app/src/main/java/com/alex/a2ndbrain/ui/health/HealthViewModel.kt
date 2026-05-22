@@ -6,6 +6,7 @@ import com.alex.a2ndbrain.core.health.DailyHealthMetrics
 import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.health.toDailyMetrics
+import com.alex.a2ndbrain.core.sync.NearbySyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,7 +19,8 @@ enum class HealthPeriod { TODAY, WEEK, MONTH }
 
 class HealthViewModel(
     private val healthConnectManager: HealthConnectManager,
-    private val healthDao: HealthDao
+    private val healthDao: HealthDao,
+    private val nearbySyncManager: NearbySyncManager
 ) : ViewModel() {
 
     private val _selectedPeriod = MutableStateFlow(HealthPeriod.TODAY)
@@ -38,6 +40,12 @@ class HealthViewModel(
 
     init {
         loadPeriod(HealthPeriod.TODAY)
+        // Auto-reload when the phone pushes fresh health data via P2P sync
+        viewModelScope.launch {
+            nearbySyncManager.healthSyncTrigger.collect {
+                loadPeriod(_selectedPeriod.value)
+            }
+        }
     }
 
     fun selectPeriod(period: HealthPeriod) {
@@ -61,7 +69,11 @@ class HealthViewModel(
             val metrics = if (hasHC) {
                 healthConnectManager.fetchDailyBreakdown(days)
             } else {
-                // Fall back to synced snapshots from DB (received from phone via P2P)
+                // Request a fresh push from the phone so stale snapshots are replaced.
+                // The incoming health data will fire healthSyncTrigger, which triggers
+                // another loadPeriod() call and updates the UI automatically.
+                nearbySyncManager.requestImmediateSync()
+                // Show whatever is in the DB while the sync is in flight
                 val sinceDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                     .format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -(days - 1)) }.time)
                 healthDao.getSnapshotsSince(sinceDate).map { it.toDailyMetrics() }
