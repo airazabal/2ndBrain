@@ -66,7 +66,20 @@ class HealthConnectManager(private val context: Context) {
     suspend fun fetchHealthMetricsToday(): HealthMetrics {
         val zoneId = ZoneId.systemDefault()
         val todayStart = LocalDate.now().atStartOfDay(zoneId).toInstant()
-        return fetchHealthMetricsForRange(todayStart, Instant.now())
+        val now = Instant.now()
+        val metrics = fetchHealthMetricsForRange(todayStart, now)
+
+        // Zepp and other watches upload sleep only after the session ends (user wakes up).
+        // If the worker fires before that, HC has only partial early-cycle data (e.g. 52 min).
+        // Fall back to yesterday's complete window so the briefing reflects a realistic value.
+        if (metrics.sleepMinutes < 120) {
+            val yesterdayStart = LocalDate.now().minusDays(1).atStartOfDay(zoneId).toInstant()
+            val yesterdayMetrics = fetchHealthMetricsForRange(yesterdayStart, todayStart)
+            if (yesterdayMetrics.sleepMinutes > metrics.sleepMinutes) {
+                return metrics.copy(sleepMinutes = yesterdayMetrics.sleepMinutes)
+            }
+        }
+        return metrics
     }
 
     suspend fun fetchDailyBreakdown(days: Int = 30): List<DailyHealthMetrics> {
@@ -101,7 +114,10 @@ class HealthConnectManager(private val context: Context) {
             val date = LocalDate.now().minusDays(i.toLong())
             val start = date.atStartOfDay(zoneId).toInstant()
             val end = if (i == 0) Instant.now() else date.plusDays(1).atStartOfDay(zoneId).toInstant()
-            val metrics = fetchHealthMetricsForRange(start, end)
+            // Use fetchHealthMetricsToday() for today so the sleep fallback
+            // (yesterday's value when the watch upload is still partial) is applied
+            // to the snapshot that gets synced to the tablet.
+            val metrics = if (i == 0) fetchHealthMetricsToday() else fetchHealthMetricsForRange(start, end)
             if (metrics.steps > 0 || metrics.sleepMinutes > 0 || metrics.avgHeartRate > 0) {
                 results += HealthSnapshotEntity(
                     date = dateFormat.format(java.util.Date(start.toEpochMilli())),

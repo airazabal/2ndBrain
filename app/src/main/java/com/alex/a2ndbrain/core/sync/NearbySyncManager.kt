@@ -68,12 +68,22 @@ class NearbySyncManager(
     }
 
     // Bypass the 30-second rate limit and initiate a sync immediately.
-    // No-ops if a connection/sync is already in progress (the in-flight send
-    // will already include the latest DB state).
+    // No-ops if a scan/connection/sync is already in progress — the in-flight
+    // session will include the latest DB state and there is no benefit in
+    // restarting it (which would call stopSyncInternal() and could trigger error 8002).
     fun requestImmediateSync() {
         val s = _syncStatus.value
-        if (s is SyncStatus.Connecting || s is SyncStatus.Syncing) return
+        if (s is SyncStatus.Scanning || s is SyncStatus.Connecting || s is SyncStatus.Syncing) return
         startSync(force = true)
+    }
+
+    // Start advertising+discovering only if currently idle or failed.
+    // Safe to call from the phone on every app open — does not interrupt an
+    // in-progress scan, connection, or successful sync session.
+    fun ensureScanning() {
+        val s = _syncStatus.value
+        if (s !is SyncStatus.Idle && s !is SyncStatus.Failed) return
+        startSync(force = false)
     }
 
     private val connectionsClient = Nearby.getConnectionsClient(context)
@@ -185,15 +195,17 @@ class NearbySyncManager(
     }
 
     private fun handleSyncFailure(reason: String) {
+        val wasForced = isForcedSync
         _syncStatus.value = SyncStatus.Failed(reason)
         isForcedSync = false
-        
-        // Automatically restart scanning after 5 seconds to self-heal from failures
+
+        // Automatically restart scanning after 5 seconds to self-heal from failures.
+        // Preserve wasForced so rate limits / tie-breaker stay bypassed on retry.
         scope.launch(Dispatchers.Main) {
             kotlinx.coroutines.delay(5000)
             if (_syncStatus.value is SyncStatus.Failed) {
                 Log.d("NearbySync", "Restarting search after failure to recover.")
-                startSync(force = false)
+                startSync(force = wasForced)
             }
         }
     }
@@ -582,27 +594,27 @@ class NearbySyncManager(
     private fun importHealthSnapshots(jsonArray: JSONArray) {
         scope.launch(Dispatchers.IO) {
             try {
-                var importedCount = 0
+                // Health data only originates from the phone (Health Connect). The tablet
+                // never generates its own health data, so there is no conflict to resolve —
+                // always overwrite with the authoritative phone snapshot. OnConflictStrategy.REPLACE
+                // in the DAO handles the upsert.
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)
-                    val incoming = HealthSnapshotEntity(
-                        date = obj.getString("date"),
-                        deviceId = obj.getString("deviceId"),
-                        steps = obj.getLong("steps"),
-                        sleepMinutes = obj.getInt("sleepMinutes"),
-                        minHeartRate = obj.getInt("minHeartRate"),
-                        maxHeartRate = obj.getInt("maxHeartRate"),
-                        avgHeartRate = obj.getInt("avgHeartRate"),
-                        lastTimestamp = obj.getLong("lastTimestamp")
+                    healthDao.insertSnapshot(
+                        HealthSnapshotEntity(
+                            date         = obj.getString("date"),
+                            deviceId     = obj.getString("deviceId"),
+                            steps        = obj.getLong("steps"),
+                            sleepMinutes = obj.getInt("sleepMinutes"),
+                            minHeartRate = obj.getInt("minHeartRate"),
+                            maxHeartRate = obj.getInt("maxHeartRate"),
+                            avgHeartRate = obj.getInt("avgHeartRate"),
+                            lastTimestamp = obj.getLong("lastTimestamp")
+                        )
                     )
-                    val existing = healthDao.getSnapshotForDate(incoming.date)
-                    if (existing == null || incoming.lastTimestamp > existing.lastTimestamp) {
-                        healthDao.insertSnapshot(incoming)
-                        importedCount++
-                    }
                 }
-                Log.d("NearbySync", "Imported $importedCount/${jsonArray.length()} health snapshots")
-                if (importedCount > 0) scope.launch { _healthSyncTrigger.emit(Unit) }
+                Log.d("NearbySync", "Imported ${jsonArray.length()} health snapshots")
+                if (jsonArray.length() > 0) scope.launch { _healthSyncTrigger.emit(Unit) }
             } catch (e: Exception) {
                 Log.e("NearbySync", "Failed to import health snapshots", e)
             }

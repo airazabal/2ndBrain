@@ -3,6 +3,7 @@ package com.alex.a2ndbrain.core.agents
 import android.content.Context
 import android.util.Log
 import com.alex.a2ndbrain.core.health.HealthConnectManager
+import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.health.HealthMetrics
 import com.alex.a2ndbrain.core.meditation.MeditationManager
 import com.alex.a2ndbrain.core.meditation.MeditationSession
@@ -38,7 +39,8 @@ class HealthAgent(
     private val healthConnectManager: HealthConnectManager,
     private val habitsDao: HabitsDao,
     private val meditationRepository: ZendenceMeditationRepository,
-    private val context: Context
+    private val context: Context,
+    private val healthDao: HealthDao
 ) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -58,9 +60,10 @@ class HealthAgent(
             // Merge into HabitsContext + MeditationContext (returned separately in BrainContext)
             // HealthAgent returns HealthContext only; habits/meditation surface separately so
             // ViewModels can still observe them individually via their own StateFlows.
+            val hcAvailable = healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()
             HealthContext(
                 metrics = health,
-                isAvailable = healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()
+                isAvailable = hcAvailable || (health.steps > 0 || health.sleepMinutes > 0)
             )
         }
     }
@@ -77,11 +80,12 @@ class HealthAgent(
                 val habitsDeferred  = async { fetchHabits() }
                 val meditationDeferred = async { fetchMeditation() }
 
+                val healthMetrics = healthDeferred.await()
+                val hcAvailable = healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()
                 Triple(
                     HealthContext(
-                        metrics      = healthDeferred.await(),
-                        isAvailable  = healthConnectManager.isAvailable() &&
-                                       healthConnectManager.hasPermissions(),
+                        metrics      = healthMetrics,
+                        isAvailable  = hcAvailable || (healthMetrics.steps > 0 || healthMetrics.sleepMinutes > 0),
                         weeklyTrends = trendsDeferred.await()
                     ),
                     habitsDeferred.await(),
@@ -120,7 +124,10 @@ class HealthAgent(
             if (healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()) {
                 healthConnectManager.fetchHealthMetricsToday()
             } else {
-                HealthMetrics()
+                // Tablet or device without Health Connect: use the latest synced DB snapshot
+                // so the AI briefing has real health data instead of zeros.
+                val today = dateFormat.format(Date())
+                healthDao.getSnapshotForDate(today)?.toHealthMetrics() ?: HealthMetrics()
             }
         } catch (e: Exception) {
             Log.e("HealthAgent", "fetchHealthMetrics failed", e)

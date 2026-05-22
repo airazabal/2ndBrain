@@ -826,27 +826,45 @@ class HomeViewModel(
         refreshMonitoredApps()
         viewModelScope.launch(Dispatchers.IO) {
             val granted = healthConnectManager.hasPermissions()
-            _healthPermissionsGranted.value = granted
             if (granted) {
                 val metrics = healthConnectManager.fetchHealthMetricsToday()
-                _healthMetricsToday.value = metrics
-            } else {
-                loadSyncedHealthSnapshot()
+                // A wearable (Zepp/watch) always provides sleep and/or HR.
+                // If both are zero this device has HC permissions but no paired watch
+                // (e.g. a tablet with HC enabled). Fall through to the synced DB path
+                // so we display the phone's data instead of the tablet's own sensors.
+                if (metrics.sleepMinutes > 0 || metrics.avgHeartRate > 0) {
+                    _healthPermissionsGranted.value = true
+                    _healthMetricsToday.value = metrics
+                    nearbySyncManager.ensureScanning()
+                    return@launch
+                }
             }
+            _healthPermissionsGranted.value = false
+            loadSyncedHealthSnapshot()
+            nearbySyncManager.requestImmediateSync()
         }
     }
 
     private suspend fun loadSyncedHealthSnapshot() {
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        val snapshot = healthDao.getSnapshotForDate(today)
-        if (snapshot != null) {
-            _healthMetricsToday.value = snapshot.toHealthMetrics()
-            _healthPermissionsGranted.value = true
-        } else {
-            // No snapshot for today yet — request an immediate P2P sync so the
-            // phone can push a fresh snapshot to this device.
-            nearbySyncManager.requestImmediateSync()
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val today = fmt.format(Date())
+        val snapshot = healthDao.getSnapshotForDate(today) ?: return
+        var metrics = snapshot.toHealthMetrics()
+        // Mirror the phone's sleep fallback: if today's synced snapshot has partial sleep
+        // (watch upload not yet complete), use yesterday's snapshot sleep value instead.
+        if (metrics.sleepMinutes < 120) {
+            val yesterday = fmt.format(
+                Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }.time
+            )
+            val prev = healthDao.getSnapshotForDate(yesterday)
+            if (prev != null && prev.sleepMinutes > metrics.sleepMinutes) {
+                metrics = metrics.copy(sleepMinutes = prev.sleepMinutes)
+            }
         }
+        _healthMetricsToday.value = metrics
+        _healthPermissionsGranted.value = true
+        // Sync is always driven by checkHealthPermissionsAndSync() — no request here
+        // to avoid an emit → load → request → emit loop.
     }
 
     init {

@@ -52,7 +52,7 @@ val appModule = module {
 
     // Agent layer (Phase 1-3 migration)
     single { MemoryAgent(get()) }
-    single { HealthAgent(get(), get(), get(), androidContext()) }
+    single { HealthAgent(get(), get(), get(), androidContext(), get()) }
     single { ReflectionAgent() }
     single { ModelPicker(androidContext()) }
     single { ModelRouter(get(), get(), get()) }

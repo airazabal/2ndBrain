@@ -1057,7 +1057,7 @@ fun HomeScreen(
                     title = "Smartwatch Wellness (Health Connect)",
                     icon = Icons.Default.Favorite,
                     iconColor = PastelGreen,
-                    onClick = { if (!healthPermissionGranted) onConnectHealth() }
+                    onClick = { if (healthPermissionGranted) onNavigateToTab(AppTab.HEALTH) else onConnectHealth() }
                 ) {
                     if (healthPermissionGranted) {
                         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
