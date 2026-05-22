@@ -64,71 +64,9 @@ class HealthConnectManager(private val context: Context) {
     }
 
     suspend fun fetchHealthMetricsToday(): HealthMetrics {
-        val client = healthConnectClient ?: return HealthMetrics()
-        if (!hasPermissions()) return HealthMetrics()
-
         val zoneId = ZoneId.systemDefault()
         val todayStart = LocalDate.now().atStartOfDay(zoneId).toInstant()
-        val todayEnd = Instant.now()
-
-        // 1. Fetch Steps
-        var totalSteps = 0L
-        try {
-            val stepsAggregateRequest = AggregateRequest(
-                metrics = setOf(StepsRecord.COUNT_TOTAL),
-                timeRangeFilter = TimeRangeFilter.between(todayStart, todayEnd)
-            )
-            val stepsResponse = client.aggregate(stepsAggregateRequest)
-            totalSteps = stepsResponse[StepsRecord.COUNT_TOTAL] ?: 0L
-        } catch (e: Exception) {
-            // Ignore individual query failures
-        }
-
-        // 2. Fetch Sleep (Look back 24 hours to capture last night's sleep session)
-        var totalSleepMins = 0
-        try {
-            val sleepStart = Instant.now().minus(24, ChronoUnit.HOURS)
-            val sleepRequest = ReadRecordsRequest(
-                recordType = SleepSessionRecord::class,
-                timeRangeFilter = TimeRangeFilter.between(sleepStart, todayEnd)
-            )
-            val sleepResponse = client.readRecords(sleepRequest)
-            val totalSleepDuration = sleepResponse.records.sumOf { record ->
-                ChronoUnit.MINUTES.between(record.startTime, record.endTime)
-            }
-            totalSleepMins = totalSleepDuration.toInt()
-        } catch (e: Exception) {
-            // Ignore
-        }
-
-        // 3. Fetch Heart Rate
-        var minBpm = 0
-        var maxBpm = 0
-        var avgBpm = 0
-        try {
-            val hrRequest = ReadRecordsRequest(
-                recordType = HeartRateRecord::class,
-                timeRangeFilter = TimeRangeFilter.between(todayStart, todayEnd)
-            )
-            val hrResponse = client.readRecords(hrRequest)
-            val samples = hrResponse.records.flatMap { it.samples }
-            if (samples.isNotEmpty()) {
-                val bpms = samples.map { it.beatsPerMinute.toInt() }
-                minBpm = bpms.minOrNull() ?: 0
-                maxBpm = bpms.maxOrNull() ?: 0
-                avgBpm = bpms.average().toInt()
-            }
-        } catch (e: Exception) {
-            // Ignore
-        }
-
-        return HealthMetrics(
-            steps = totalSteps,
-            sleepMinutes = totalSleepMins,
-            minHeartRate = minBpm,
-            maxHeartRate = maxBpm,
-            avgHeartRate = avgBpm
-        )
+        return fetchHealthMetricsForRange(todayStart, Instant.now())
     }
 
     suspend fun fetchDailyBreakdown(days: Int = 30): List<DailyHealthMetrics> {
@@ -198,14 +136,18 @@ class HealthConnectManager(private val context: Context) {
 
         var totalSleepMins = 0
         try {
+            // Sleep starts the previous evening — look back 16 h to catch last night's session.
+            // Only count sessions that END after startTime so the same session isn't attributed
+            // to both yesterday and today.
+            val sleepQueryStart = startTime.minus(16, ChronoUnit.HOURS)
             val sleepRequest = ReadRecordsRequest(
                 recordType = SleepSessionRecord::class,
-                timeRangeFilter = TimeRangeFilter.between(startTime, endTime)
+                timeRangeFilter = TimeRangeFilter.between(sleepQueryStart, endTime)
             )
             val sleepResponse = client.readRecords(sleepRequest)
-            val totalSleepDuration = sleepResponse.records.sumOf { record ->
-                ChronoUnit.MINUTES.between(record.startTime, record.endTime)
-            }
+            val totalSleepDuration = sleepResponse.records
+                .filter { it.endTime.isAfter(startTime) }
+                .sumOf { record -> ChronoUnit.MINUTES.between(record.startTime, record.endTime) }
             totalSleepMins = totalSleepDuration.toInt()
         } catch (e: Exception) {
             // Ignore

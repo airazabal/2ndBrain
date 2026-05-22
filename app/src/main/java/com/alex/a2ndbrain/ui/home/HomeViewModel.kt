@@ -205,17 +205,21 @@ class HomeViewModel(
         val timelineList = mutableListOf<TimelineEvent>()
         
         // 1. Process Database Notification & Manual Memories
+        // Calendar packages are excluded here — CalendarContract (section 3) is the authoritative source.
+        val calendarPackageKeywords = setOf("calendar", "agenda")
         val databaseEvents = memories.filter { mem ->
+            val isCalendarApp = mem.packageName != null &&
+                calendarPackageKeywords.any { mem.packageName!!.contains(it) }
+            if (isCalendarApp) return@filter false  // handled by CalendarContract query
+
             val isMonitored = if (mem.source == "notification" && mem.packageName != null) {
                 monitoredApps.isEmpty() || monitoredApps.contains(mem.packageName)
             } else {
                 true
             }
-            
+
             isMonitored && mem.timestamp >= startOfToday && (
-                mem.packageName?.contains("calendar") == true ||
                 mem.packageName?.contains("outlook") == true ||
-                mem.packageName?.contains("agenda") == true ||
                 mem.content.lowercase().contains("meeting") ||
                 mem.content.lowercase().contains("appointment") ||
                 mem.content.lowercase().contains("schedule") ||
@@ -296,7 +300,10 @@ class HomeViewModel(
             }
         }
         
-        // 3. Process Scheduled Habits today
+        // 3. Read today's events directly from Android Calendar Provider (Google accounts only)
+        timelineList.addAll(queryGoogleCalendarEvents(startOfToday, startOfToday + DAY_MS))
+
+        // 4. Process Scheduled Habits today
         val habitEvents = habits.map { habit ->
             val timeParts = habit.timeString.split(":")
             val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: 8
@@ -360,6 +367,105 @@ class HomeViewModel(
         
         uniqueEvents.sortedBy { it.minutesFromMidnight }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val tomorrowTimelineEvents: StateFlow<List<TimelineEvent>> = activeHabitsToday
+        .map { habits ->
+            val tomorrowStart = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, 1)
+                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            val events = mutableListOf<TimelineEvent>()
+            events.addAll(queryGoogleCalendarEvents(tomorrowStart, tomorrowStart + DAY_MS))
+            habits.forEach { habit ->
+                val parts = habit.timeString.split(":")
+                val hour = parts.getOrNull(0)?.toIntOrNull() ?: 8
+                val min  = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                val dispHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+                val ampm = if (hour >= 12) "PM" else "AM"
+                events.add(TimelineEvent(
+                    id = "tmrw_habit_${habit.id}",
+                    time = "$dispHour:${min.toString().padStart(2, '0')} $ampm",
+                    title = habit.name,
+                    description = "Daily Routine (${if (habit.isMedication) "Medication" else "Habit"})\nStatus: ⏰ Scheduled",
+                    appName = "Routines",
+                    sourcePackage = "habit",
+                    minutesFromMidnight = hour * 60 + min
+                ))
+            }
+            events.sortedBy { it.minutesFromMidnight }
+        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    private fun queryGoogleCalendarEvents(startMs: Long, endMs: Long): List<TimelineEvent> {
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                applicationContext, android.Manifest.permission.READ_CALENDAR)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) return emptyList()
+        return try {
+            val googleCalIds = mutableListOf<Long>()
+            applicationContext.contentResolver.query(
+                android.provider.CalendarContract.Calendars.CONTENT_URI,
+                arrayOf(android.provider.CalendarContract.Calendars._ID),
+                "${android.provider.CalendarContract.Calendars.ACCOUNT_TYPE} = ?",
+                arrayOf("com.google"), null
+            )?.use { c ->
+                val col = c.getColumnIndex(android.provider.CalendarContract.Calendars._ID)
+                while (c.moveToNext()) googleCalIds.add(c.getLong(col))
+            }
+            if (googleCalIds.isEmpty()) return emptyList()
+            val calIdIn = googleCalIds.joinToString(",")
+            val uri = android.provider.CalendarContract.Instances.CONTENT_URI.buildUpon()
+                .appendPath(startMs.toString()).appendPath(endMs.toString()).build()
+            val projection = arrayOf(
+                android.provider.CalendarContract.Instances.EVENT_ID,
+                android.provider.CalendarContract.Instances.TITLE,
+                android.provider.CalendarContract.Instances.DESCRIPTION,
+                android.provider.CalendarContract.Instances.BEGIN,
+                android.provider.CalendarContract.Instances.ALL_DAY,
+                android.provider.CalendarContract.Instances.CALENDAR_DISPLAY_NAME
+            )
+            val results = mutableListOf<TimelineEvent>()
+            applicationContext.contentResolver.query(
+                uri, projection,
+                "${android.provider.CalendarContract.Instances.ALL_DAY} = 0 AND " +
+                    "${android.provider.CalendarContract.Instances.CALENDAR_ID} IN ($calIdIn)",
+                null,
+                "${android.provider.CalendarContract.Instances.BEGIN} ASC"
+            )?.use { cursor ->
+                val titleIdx = cursor.getColumnIndex(android.provider.CalendarContract.Instances.TITLE)
+                val descIdx  = cursor.getColumnIndex(android.provider.CalendarContract.Instances.DESCRIPTION)
+                val beginIdx = cursor.getColumnIndex(android.provider.CalendarContract.Instances.BEGIN)
+                val calIdx   = cursor.getColumnIndex(android.provider.CalendarContract.Instances.CALENDAR_DISPLAY_NAME)
+                val idIdx    = cursor.getColumnIndex(android.provider.CalendarContract.Instances.EVENT_ID)
+                while (cursor.moveToNext()) {
+                    val title = cursor.getString(titleIdx)?.ifBlank { null } ?: continue
+                    val beginMs = cursor.getLong(beginIdx)
+                    val calName = cursor.getString(calIdx) ?: "Google Calendar"
+                    val eventId = cursor.getLong(idIdx)
+                    val description = cursor.getString(descIdx)?.ifBlank { null } ?: "Calendar event"
+                    val cal = Calendar.getInstance().apply { timeInMillis = beginMs }
+                    val hour = cal.get(Calendar.HOUR_OF_DAY)
+                    val min  = cal.get(Calendar.MINUTE)
+                    val dispHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
+                    val ampm = if (hour >= 12) "PM" else "AM"
+                    results.add(TimelineEvent(
+                        id = "cal_${eventId}_$beginMs",
+                        time = "$dispHour:${min.toString().padStart(2, '0')} $ampm",
+                        title = title,
+                        description = description,
+                        appName = calName,
+                        sourcePackage = "calendar",
+                        minutesFromMidnight = hour * 60 + min
+                    ))
+                }
+            }
+            results
+        } catch (e: Exception) {
+            android.util.Log.e("2ndBrain", "Calendar provider query failed", e)
+            emptyList()
+        }
+    }
+
+    companion object { private const val DAY_MS = 24 * 60 * 60 * 1000L }
 
     private val _dismissedConflictIds = MutableStateFlow<Set<String>>(emptySet())
     val dismissedConflictIds = _dismissedConflictIds.asStateFlow()
@@ -736,6 +842,10 @@ class HomeViewModel(
         if (snapshot != null) {
             _healthMetricsToday.value = snapshot.toHealthMetrics()
             _healthPermissionsGranted.value = true
+        } else {
+            // No snapshot for today yet — request an immediate P2P sync so the
+            // phone can push a fresh snapshot to this device.
+            nearbySyncManager.requestImmediateSync()
         }
     }
 

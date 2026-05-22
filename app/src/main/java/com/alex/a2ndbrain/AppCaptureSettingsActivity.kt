@@ -27,8 +27,13 @@ import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.capture.HomeSummaryConfig
 import com.alex.a2ndbrain.core.capture.HomeDefaultMode
 import com.alex.a2ndbrain.core.memory.HabitEntity
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -152,7 +157,7 @@ fun AppCaptureSettingsScreen(
             }
         }
     }
-    
+
     val permissionsToRequest = remember {
         val list = mutableListOf(android.Manifest.permission.ACCESS_FINE_LOCATION)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -176,11 +181,11 @@ fun AppCaptureSettingsScreen(
             Toast.makeText(context, "Nearby Sync requires Location and Bluetooth permissions.", Toast.LENGTH_SHORT).show()
         }
     }
-    
+
     val allApps = remember {
         packageManager.getInstalledPackages(PackageManager.GET_META_DATA)
-            .filter { (it.applicationInfo?.flags ?: 0) and android.content.pm.ApplicationInfo.FLAG_SYSTEM == 0 || 
-                     it.packageName == "com.google.android.gm" || 
+            .filter { (it.applicationInfo?.flags ?: 0) and android.content.pm.ApplicationInfo.FLAG_SYSTEM == 0 ||
+                     it.packageName == "com.google.android.gm" ||
                      it.packageName == "com.google.android.apps.messaging" ||
                      it.packageName == "com.microsoft.office.outlook" ||
                      it.packageName.contains("mail", ignoreCase = true) ||
@@ -189,117 +194,306 @@ fun AppCaptureSettingsScreen(
     }
 
     var homeSummaryConfig by remember { mutableStateOf(settingsManager.getHomeSummaryConfig()) }
-
+    var monitorAppsExpanded by remember { mutableStateOf(false) }
     var appSearchQuery by remember { mutableStateOf("") }
-    val filteredApps = if (appSearchQuery.isEmpty()) {
-        allApps
-    } else {
-        allApps.filter { 
-            packageManager.getApplicationLabel(it.applicationInfo ?: return@filter false).toString()
-                .contains(appSearchQuery, ignoreCase = true) || it.packageName.contains(appSearchQuery, ignoreCase = true)
-        }
+    val filteredApps = if (appSearchQuery.isEmpty()) allApps else allApps.filter {
+        packageManager.getApplicationLabel(it.applicationInfo ?: return@filter false).toString()
+            .contains(appSearchQuery, ignoreCase = true) || it.packageName.contains(appSearchQuery, ignoreCase = true)
+    }
+
+    var hasCalendarPermission by remember {
+        mutableStateOf(
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.READ_CALENDAR
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val calendarPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasCalendarPermission = granted
+        if (!granted) Toast.makeText(context, "Calendar permission denied", Toast.LENGTH_SHORT).show()
     }
 
     var isListenerEnabled by remember { mutableStateOf(false) }
     var showDebugLogs by remember { mutableStateOf(false) }
-    
-    // Check listener status periodically
+
     LaunchedEffect(Unit) {
-        while(true) {
-            val enabledListeners = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
-            isListenerEnabled = enabledListeners?.contains(context.packageName) == true
+        while (true) {
+            val enabled = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
+            isListenerEnabled = enabled?.contains(context.packageName) == true
             kotlinx.coroutines.delay(2000)
         }
     }
 
+    val cardColors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    val cardShape = RoundedCornerShape(16.dp)
+
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(vertical = 16.dp)
     ) {
+        // ── Header ────────────────────────────────────────────────────────────
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("Capture Settings", style = MaterialTheme.typography.headlineSmall)
-                    Text(
-                        text = "v${com.alex.a2ndbrain.BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-                Button(onClick = onBack) { Text("Done") }
+            Column(modifier = Modifier.padding(bottom = 4.dp)) {
+                Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                Text(
+                    text = "v${com.alex.a2ndbrain.BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
             }
         }
-        
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-        }
 
+        // ── Permissions & Access ───────────────────────────────────────────────
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        "Backup & Restore",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
+            SettingsSectionLabel("Permissions & Access")
+        }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    // Notification Listener
+                    PermissionRow(
+                        label = "Notification Access",
+                        subtitle = if (isListenerEnabled) "Granted — capturing notifications" else "Required for notification capture",
+                        isGranted = isListenerEnabled,
+                        actionLabel = "Open Settings",
+                        onAction = { context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }
                     )
-                    Text(
-                        text = "Save your monitored apps and habits/medications to a JSON file. Restore after a database reset.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                createBackupLauncher.launch("2ndbrain-settings-backup.json")
-                            },
-                            modifier = Modifier.weight(1f)
+                    if (!isListenerEnabled) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            shape = RoundedCornerShape(8.dp)
                         ) {
-                            Text("Export")
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Text(
+                                    text = "Access is restricted. Open App Info below, scroll to Notifications or Advanced to unlock the toggle.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                OutlinedButton(
+                                    onClick = {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = android.net.Uri.fromParts("package", context.packageName, null)
+                                            }
+                                        )
+                                    },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                                ) { Text("Open App Info") }
+                            }
                         }
-                        OutlinedButton(
-                            onClick = {
-                                openBackupLauncher.launch(arrayOf("application/json"))
-                            },
-                            modifier = Modifier.weight(1f)
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+                    // Usage Access
+                    PermissionRow(
+                        label = "Usage Access",
+                        subtitle = "Required for screen time tracking",
+                        isGranted = true,
+                        actionLabel = "Open Settings",
+                        onAction = { context.startActivity(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+                    // Calendar
+                    PermissionRow(
+                        label = "Calendar",
+                        subtitle = if (hasCalendarPermission) "Granted — Google Calendar events shown on home timeline" else "Optional — shows Google Calendar events on home",
+                        isGranted = hasCalendarPermission,
+                        actionLabel = if (hasCalendarPermission) null else "Grant",
+                        onAction = { calendarPermissionLauncher.launch(android.Manifest.permission.READ_CALENDAR) }
+                    )
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+
+                    // Restart service + debug
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(onClick = onRestartService) { Text("Restart Capture Service") }
+                        TextButton(onClick = { showDebugLogs = !showDebugLogs }) {
+                            Text(if (showDebugLogs) "Hide Logs" else "Show Logs", fontSize = 12.sp)
+                        }
+                    }
+                    if (showDebugLogs) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(4.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp)
                         ) {
-                            Text("Restore")
+                            LazyColumn(modifier = Modifier.padding(8.dp)) {
+                                items(debugEvents) { log ->
+                                    Text(log, style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // Home Summary Settings
+        // ── Nearby Sync ───────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Nearby Sync") }
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                shape = cardShape,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Home Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        "Configure what appears on the home screen summary card.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        val statusText = when (syncStatus) {
+                            NearbySyncManager.SyncStatus.Idle -> "Sync screen time, health, and meditations with nearby devices."
+                            NearbySyncManager.SyncStatus.Scanning -> "Searching for nearby devices..."
+                            is NearbySyncManager.SyncStatus.Connecting -> "Connecting to ${syncStatus.deviceName}..."
+                            is NearbySyncManager.SyncStatus.Syncing -> "Syncing data..."
+                            is NearbySyncManager.SyncStatus.Success -> "Successfully synchronized!"
+                            is NearbySyncManager.SyncStatus.Failed -> "Sync failed: ${syncStatus.reason}"
+                        }
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    val isBusy = syncStatus is NearbySyncManager.SyncStatus.Scanning ||
+                            syncStatus is NearbySyncManager.SyncStatus.Connecting ||
+                            syncStatus is NearbySyncManager.SyncStatus.Syncing
+                    Button(
+                        onClick = {
+                            if (isBusy) {
+                                onStopSync()
+                            } else {
+                                val hasPerms = permissionsToRequest.all {
+                                    androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                }
+                                if (hasPerms) onStartSync(true) else syncPermissionLauncher.launch(permissionsToRequest)
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (isBusy) MaterialTheme.colorScheme.error.copy(alpha = 0.12f) else MaterialTheme.colorScheme.primary,
+                            contentColor = if (isBusy) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        if (syncStatus is NearbySyncManager.SyncStatus.Syncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
+                        } else {
+                            val btnLabel = when (syncStatus) {
+                                is NearbySyncManager.SyncStatus.Scanning,
+                                is NearbySyncManager.SyncStatus.Connecting -> "Stop"
+                                is NearbySyncManager.SyncStatus.Failed -> "Retry"
+                                else -> "Sync Now"
+                            }
+                            Text(btnLabel, style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+            }
+        }
 
-                    // Default mode
-                    Text("Default mode", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        // ── Daily Routines ────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Daily Routines & Medications") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (activeHabits.isEmpty()) {
+                        Text(
+                            text = "No routines configured yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    } else {
+                        activeHabits.forEach { habit ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (habit.isMedication) "💊" else "🏃",
+                                    modifier = Modifier.padding(end = 10.dp),
+                                    fontSize = 18.sp
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(habit.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("${habit.timeString}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                }
+                                Switch(checked = habit.isActive, onCheckedChange = { onToggleHabitActive(habit.id) })
+                                if (habit.id != "default_meds" && habit.id != "default_walk" && habit.id != "default_reflection") {
+                                    IconButton(onClick = { onDeleteHabit(habit.id) }, modifier = Modifier.size(36.dp)) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                    }
+                                }
+                            }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Add Routine", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
+
+                    var newHabitName by remember { mutableStateOf("") }
+                    var newHabitTime by remember { mutableStateOf("") }
+                    var newHabitIsMedication by remember { mutableStateOf(false) }
+                    var validationError by remember { mutableStateOf<String?>(null) }
+
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = newHabitName,
+                            onValueChange = { newHabitName = it },
+                            label = { Text("Name") },
+                            modifier = Modifier.weight(1.5f),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium
+                        )
+                        OutlinedTextField(
+                            value = newHabitTime,
+                            onValueChange = { newHabitTime = it },
+                            label = { Text("Time") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            placeholder = { Text("HH:mm") },
+                            textStyle = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                    if (validationError != null) {
+                        Text(validationError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Checkbox(checked = newHabitIsMedication, onCheckedChange = { newHabitIsMedication = it })
+                            Text("Medication", style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Button(onClick = {
+                            if (newHabitName.isBlank()) { validationError = "Enter a name."; return@Button }
+                            if (!newHabitTime.matches(Regex("^([01]?[0-9]|2[0-3]):[0-5][0-9]$"))) { validationError = "Use HH:mm format."; return@Button }
+                            validationError = null
+                            onAddCustomHabit(newHabitName.trim(), newHabitTime.trim(), newHabitIsMedication)
+                            newHabitName = ""; newHabitTime = ""; newHabitIsMedication = false
+                        }) { Text("Add") }
+                    }
+                }
+            }
+        }
+
+        // ── Home Screen ───────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Home Screen") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Default mode", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
+                    Column {
                         HomeDefaultMode.entries.forEach { mode ->
                             val label = when (mode) {
                                 HomeDefaultMode.SUMMARY_ONLY    -> "Summary only"
@@ -307,14 +501,11 @@ fun AppCaptureSettingsScreen(
                                 HomeDefaultMode.ALWAYS_EXPANDED -> "Always expanded"
                             }
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        val updated = homeSummaryConfig.copy(defaultMode = mode)
-                                        homeSummaryConfig = updated
-                                        settingsManager.saveHomeSummaryConfig(updated)
-                                    }
-                                    .padding(vertical = 4.dp),
+                                modifier = Modifier.fillMaxWidth().clickable {
+                                    val updated = homeSummaryConfig.copy(defaultMode = mode)
+                                    homeSummaryConfig = updated
+                                    settingsManager.saveHomeSummaryConfig(updated)
+                                }.padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(
@@ -330,34 +521,29 @@ fun AppCaptureSettingsScreen(
                         }
                     }
 
-                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-                    Text("Summary card sections", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                    Text("Summary card", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
 
-                    // Toggle rows
                     listOf(
-                        "Show Sense of Day explanation"  to homeSummaryConfig.showSenseOfDayText,
-                        "Show alerts"                    to homeSummaryConfig.showAlerts,
-                        "Show habits progress pill"      to homeSummaryConfig.showHabitPill,
-                        "Show next event pill"           to homeSummaryConfig.showNextEventPill,
-                        "Show steps pill"                to homeSummaryConfig.showStepsPill,
-                        "Show sleep / meditation pill"   to homeSummaryConfig.showSleepMeditationPill
+                        "Sense of Day text"       to homeSummaryConfig.showSenseOfDayText,
+                        "Alerts"                  to homeSummaryConfig.showAlerts,
+                        "Habits progress pill"    to homeSummaryConfig.showHabitPill,
+                        "Next event pill"         to homeSummaryConfig.showNextEventPill,
+                        "Steps pill"              to homeSummaryConfig.showStepsPill,
+                        "Sleep / meditation pill" to homeSummaryConfig.showSleepMeditationPill
                     ).forEach { (label, value) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                             Switch(
                                 checked = value,
                                 onCheckedChange = { checked ->
                                     val updated = when (label) {
-                                        "Show Sense of Day explanation"  -> homeSummaryConfig.copy(showSenseOfDayText     = checked)
-                                        "Show alerts"                    -> homeSummaryConfig.copy(showAlerts              = checked)
-                                        "Show habits progress pill"      -> homeSummaryConfig.copy(showHabitPill           = checked)
-                                        "Show next event pill"           -> homeSummaryConfig.copy(showNextEventPill       = checked)
-                                        "Show steps pill"                -> homeSummaryConfig.copy(showStepsPill           = checked)
-                                        "Show sleep / meditation pill"   -> homeSummaryConfig.copy(showSleepMeditationPill = checked)
+                                        "Sense of Day text"       -> homeSummaryConfig.copy(showSenseOfDayText     = checked)
+                                        "Alerts"                  -> homeSummaryConfig.copy(showAlerts              = checked)
+                                        "Habits progress pill"    -> homeSummaryConfig.copy(showHabitPill           = checked)
+                                        "Next event pill"         -> homeSummaryConfig.copy(showNextEventPill       = checked)
+                                        "Steps pill"              -> homeSummaryConfig.copy(showStepsPill           = checked)
+                                        "Sleep / meditation pill" -> homeSummaryConfig.copy(showSleepMeditationPill = checked)
                                         else -> homeSummaryConfig
                                     }
                                     homeSummaryConfig = updated
@@ -370,546 +556,171 @@ fun AppCaptureSettingsScreen(
             }
         }
 
-        item { Spacer(modifier = Modifier.height(4.dp)) }
-
-        // System Permissions Card
+        // ── Appearance ────────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Appearance") }
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isListenerEnabled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.errorContainer
-                )
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("SYSTEM" to "System", "LIGHT" to "Light", "DARK" to "Dark").forEach { (value, label) ->
+                        val isSelected = themePreference == value
+                        Button(
+                            onClick = { onThemeChange(value) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                            ),
+                            contentPadding = PaddingValues(vertical = 10.dp)
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Backup & Restore ──────────────────────────────────────────────────
+        item { SettingsSectionLabel("Backup & Restore") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Export your monitored apps and routines to a JSON file. Restore after a reset.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { createBackupLauncher.launch("2ndbrain-backup.json") }, modifier = Modifier.weight(1f)) {
+                            Text("Export")
+                        }
+                        OutlinedButton(onClick = { openBackupLauncher.launch(arrayOf("application/json")) }, modifier = Modifier.weight(1f)) {
+                            Text("Restore")
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Monitored Apps ────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Monitored Apps") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().clickable { monitorAppsExpanded = !monitorAppsExpanded }.padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("System Access", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        TextButton(onClick = { showDebugLogs = !showDebugLogs }) {
-                            Text(if (showDebugLogs) "Hide Logs" else "Show Logs", fontSize = 12.sp)
-                        }
-                    }
-                    Text(
-                        if (isListenerEnabled) "✓ Notification access granted" else "✗ Notification access required",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    
-                    if (showDebugLogs) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(4.dp),
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp)
-                        ) {
-                            LazyColumn(modifier = Modifier.padding(8.dp)) {
-                                items(debugEvents) { log ->
-                                    Text(log, style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row {
-                        Button(onClick = {
-                            context.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
-                        }) {
-                            Text("System")
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(onClick = {
-                            context.startActivity(Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS))
-                        }) {
-                            Text("Usage Access")
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        OutlinedButton(
-                            onClick = onRestartService,
-                            modifier = Modifier
-                                .width(130.dp)
-                                .height(40.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.primary,
-                                containerColor = Color.Transparent
-                            ),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-                        ) {
+                        Column {
+                            val count = monitoredApps.size
+                            Text("App filter", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             Text(
-                                text = "Refresh",
-                                color = MaterialTheme.colorScheme.primary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
+                                if (count == 0) "All notifications captured" else "$count app${if (count == 1) "" else "s"} selected",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Icon(if (monitorAppsExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
                     }
-                }
-            }
-        }
 
-        if (!isListenerEnabled) {
-            item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                    modifier = Modifier.padding(vertical = 8.dp)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = "⚠️ Notification Access is Restricted",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "To fix this:\n1. Click 'OPEN APP INFO' below.\n2. In that screen, if you don't see (⋮), SCROLL DOWN and tap 'Notifications' or 'Advanced' first.\n3. If still not there, return to 'System' and try to toggle the greyed-out switch again to 'trigger' the menu.\n4. Once unblocked, the switch in 'System' will work.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = android.net.Uri.fromParts("package", context.packageName, null)
-                                }
-                                context.startActivity(intent)
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Text("OPEN APP INFO")
-                        }
-                    }
-                }
-            }
-        }
-
-        // Nearby Sync Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "NEARBY SYNC",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            letterSpacing = 1.sp
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val statusText = when (syncStatus) {
-                            NearbySyncManager.SyncStatus.Idle -> "Sync screen time and meditations with nearby devices."
-                            NearbySyncManager.SyncStatus.Scanning -> "Searching for nearby devices..."
-                            is NearbySyncManager.SyncStatus.Connecting -> "Connecting to ${(syncStatus as NearbySyncManager.SyncStatus.Connecting).deviceName}..."
-                            is NearbySyncManager.SyncStatus.Syncing -> "Syncing data..."
-                            is NearbySyncManager.SyncStatus.Success -> "Successfully synchronized!"
-                            is NearbySyncManager.SyncStatus.Failed -> "Sync failed: ${(syncStatus as NearbySyncManager.SyncStatus.Failed).reason}"
-                        }
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    
-                    Spacer(modifier = Modifier.width(12.dp))
-                    
-                    val buttonText = when (syncStatus) {
-                        NearbySyncManager.SyncStatus.Idle -> "Sync"
-                        NearbySyncManager.SyncStatus.Scanning -> "Stop"
-                        is NearbySyncManager.SyncStatus.Connecting -> "Stop"
-                        is NearbySyncManager.SyncStatus.Syncing -> "Syncing"
-                        is NearbySyncManager.SyncStatus.Success -> "Sync"
-                        is NearbySyncManager.SyncStatus.Failed -> "Retry"
-                    }
-                    
-                    val isScanningOrConnecting = syncStatus is NearbySyncManager.SyncStatus.Scanning || syncStatus is NearbySyncManager.SyncStatus.Connecting
-                    
-                    Button(
-                        onClick = {
-                            if (isScanningOrConnecting || syncStatus is NearbySyncManager.SyncStatus.Syncing) {
-                                onStopSync()
-                            } else {
-                                val hasPermissions = permissionsToRequest.all {
-                                    androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                }
-                                if (hasPermissions) {
-                                    onStartSync(true)
-                                } else {
-                                    syncPermissionLauncher.launch(permissionsToRequest)
-                                }
-                            }
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isScanningOrConnecting) MaterialTheme.colorScheme.error.copy(alpha = 0.1f) else MaterialTheme.colorScheme.primary,
-                            contentColor = if (isScanningOrConnecting) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        if (syncStatus is NearbySyncManager.SyncStatus.Syncing) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(buttonText, style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "🎨 Theme Appearance",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Choose your preferred appearance for 2ndBrain.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        listOf(
-                            "SYSTEM" to "System",
-                            "LIGHT" to "Light",
-                            "DARK" to "Dark"
-                        ).forEach { (value, label) ->
-                            val isSelected = themePreference == value
-                            Button(
-                                onClick = { onThemeChange(value) },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isSelected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.05f)
-                                    },
-                                    contentColor = if (isSelected) {
-                                        MaterialTheme.colorScheme.onPrimary
-                                    } else {
-                                        MaterialTheme.colorScheme.primary
+                    AnimatedVisibility(visible = monitorAppsExpanded) {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            OutlinedTextField(
+                                value = appSearchQuery,
+                                onValueChange = { appSearchQuery = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("Search apps") },
+                                singleLine = true,
+                                trailingIcon = {
+                                    if (appSearchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { appSearchQuery = "" }) { Text("✕") }
                                     }
-                                ),
-                                contentPadding = PaddingValues(vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = label,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.Bold
-                                )
+                                }
+                            )
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = {
+                                    val all = allApps.map { it.packageName }.toSet()
+                                    settingsManager.saveMonitoredApps(all)
+                                    monitoredApps = all
+                                }) { Text("All", fontSize = 12.sp) }
+                                TextButton(onClick = {
+                                    monitoredApps.toList().forEach { onUnmonitoredAppRemoved(it) }
+                                    settingsManager.saveMonitoredApps(emptySet())
+                                    monitoredApps = emptySet()
+                                }) { Text("None", fontSize = 12.sp) }
                             }
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // Daily Habits & Routines Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = "💊 Daily Routines & Medications",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = "Configure daily checklists, medications, and custom alarms.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // List of existing habits
-                    if (activeHabits.isEmpty()) {
-                        Text(
-                            text = "No routines configured.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    } else {
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            activeHabits.forEach { habit ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f)
-                                    ) {
-                                        Text(
-                                            text = if (habit.isMedication) "💊" else "🏃",
-                                            modifier = Modifier.padding(end = 8.dp),
-                                            fontSize = 18.sp
-                                        )
-                                        Column {
-                                            Text(
-                                                text = habit.name,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = "Alarm: ${habit.timeString}",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.outline
-                                            )
+                            filteredApps.forEach { pkg ->
+                                val appName = packageManager.getApplicationLabel(pkg.applicationInfo ?: return@forEach).toString()
+                                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Checkbox(
+                                        checked = monitoredApps.contains(pkg.packageName),
+                                        onCheckedChange = { checked ->
+                                            val current = monitoredApps.toMutableSet()
+                                            if (checked) current.add(pkg.packageName)
+                                            else { current.remove(pkg.packageName); onUnmonitoredAppRemoved(pkg.packageName) }
+                                            settingsManager.saveMonitoredApps(current)
+                                            monitoredApps = current
                                         }
-                                    }
-
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Switch(
-                                            checked = habit.isActive,
-                                            onCheckedChange = { onToggleHabitActive(habit.id) }
-                                        )
-                                        
-                                        // Allow deleting custom habits (anything that is not prepopulated)
-                                        if (habit.id != "default_meds" && habit.id != "default_walk" && habit.id != "default_reflection") {
-                                            IconButton(
-                                                onClick = { onDeleteHabit(habit.id) },
-                                                modifier = Modifier.size(32.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = "Delete Habit",
-                                                    tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-                                        }
+                                    )
+                                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                                        Text(appName, style = MaterialTheme.typography.bodyMedium)
+                                        Text(pkg.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                                     }
                                 }
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Add Custom Habit Form
-                    Text(
-                        text = "Add Custom Habit / Medication",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-
-                    var newHabitName by remember { mutableStateOf("") }
-                    var newHabitTime by remember { mutableStateOf("") }
-                    var newHabitIsMedication by remember { mutableStateOf(false) }
-                    var validationError by remember { mutableStateOf<String?>(null) }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = newHabitName,
-                            onValueChange = { newHabitName = it },
-                            label = { Text("Name (e.g. Vitamin D)") },
-                            modifier = Modifier.weight(1.5f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyMedium
-                        )
-
-                        OutlinedTextField(
-                            value = newHabitTime,
-                            onValueChange = { newHabitTime = it },
-                            label = { Text("Time (e.g. 08:30)") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            placeholder = { Text("HH:mm") },
-                            textStyle = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-
-                    if (validationError != null) {
-                        Text(
-                            text = validationError!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(
-                                checked = newHabitIsMedication,
-                                onCheckedChange = { newHabitIsMedication = it }
-                            )
-                            Text(
-                                text = "Is Medication Alarm",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        }
-
-                        Button(
-                            onClick = {
-                                if (newHabitName.isBlank()) {
-                                    validationError = "Please enter habit name."
-                                    return@Button
-                                }
-                                if (!newHabitTime.matches(Regex("^([01]?[0-9]|2[0-3]):[0-5][0-9]$"))) {
-                                    validationError = "Use HH:mm format (e.g. 08:30)."
-                                    return@Button
-                                }
-                                validationError = null
-                                onAddCustomHabit(newHabitName.trim(), newHabitTime.trim(), newHabitIsMedication)
-                                newHabitName = ""
-                                newHabitTime = ""
-                                newHabitIsMedication = false
-                            }
-                        ) {
-                            Text("Add Alarm")
-                        }
-                    }
                 }
             }
         }
 
-        item {
-            Spacer(modifier = Modifier.height(16.dp))
-        }
+        item { Spacer(modifier = Modifier.height(24.dp)) }
+    }
+}
 
-        item {
-            OutlinedTextField(
-                value = appSearchQuery,
-                onValueChange = { appSearchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search apps (e.g. Gmail)") },
-                singleLine = true,
-                trailingIcon = {
-                    if (appSearchQuery.isNotEmpty()) {
-                        IconButton(onClick = { appSearchQuery = "" }) {
-                            Text("✕")
-                        }
-                    }
-                }
-            )
-        }
+@Composable
+private fun SettingsSectionLabel(text: String) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+        letterSpacing = 0.8.sp,
+        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+    )
+}
 
-        item {
-            Spacer(modifier = Modifier.height(8.dp))
+@Composable
+private fun PermissionRow(
+    label: String,
+    subtitle: String,
+    isGranted: Boolean,
+    actionLabel: String?,
+    onAction: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Icon(
+            imageVector = if (isGranted) Icons.Default.CheckCircle else Icons.Default.Warning,
+            contentDescription = null,
+            tint = if (isGranted) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(20.dp)
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Monitor Apps", style = MaterialTheme.typography.titleMedium)
-                Row {
-                    TextButton(onClick = {
-                        val allPackageNames = allApps.map { it.packageName }.toSet()
-                        settingsManager.saveMonitoredApps(allPackageNames)
-                        monitoredApps = allPackageNames
-                    }) {
-                        Text("Select All", fontSize = 12.sp)
-                    }
-                    TextButton(onClick = {
-                        val removedApps = monitoredApps.toList()
-                        settingsManager.saveMonitoredApps(emptySet())
-                        monitoredApps = emptySet()
-                        removedApps.forEach { onUnmonitoredAppRemoved(it) }
-                    }) {
-                        Text("Deselect All", fontSize = 12.sp)
-                    }
-                }
+        if (actionLabel != null) {
+            TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                Text(actionLabel, style = MaterialTheme.typography.labelMedium)
             }
-        }
-        
-        items(filteredApps) { pkg ->
-            val appName = packageManager.getApplicationLabel(pkg.applicationInfo ?: return@items).toString()
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Checkbox(
-                    checked = monitoredApps.contains(pkg.packageName),
-                    onCheckedChange = { checked ->
-                        val current = monitoredApps.toMutableSet()
-                        if (checked) {
-                            current.add(pkg.packageName)
-                        } else {
-                            current.remove(pkg.packageName)
-                            onUnmonitoredAppRemoved(pkg.packageName)
-                        }
-                        settingsManager.saveMonitoredApps(current)
-                        monitoredApps = current
-                    }
-                )
-                Column(modifier = Modifier.padding(start = 8.dp)) {
-                    Text(appName, style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        text = pkg.packageName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-            }
-        }
-
-        item {
-            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

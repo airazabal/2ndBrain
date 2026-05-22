@@ -33,9 +33,16 @@ import java.util.Locale
 
 @Composable
 fun HealthScreen(viewModel: HealthViewModel, modifier: Modifier = Modifier) {
-    val period      by viewModel.selectedPeriod.collectAsStateWithLifecycle()
-    val metrics     by viewModel.dailyMetrics.collectAsStateWithLifecycle()
-    val isLoading   by viewModel.isLoading.collectAsStateWithLifecycle()
+    val period           by viewModel.selectedPeriod.collectAsStateWithLifecycle()
+    val metrics          by viewModel.dailyMetrics.collectAsStateWithLifecycle()
+    val isLoading        by viewModel.isLoading.collectAsStateWithLifecycle()
+    val lastRefreshedMs  by viewModel.lastRefreshedMs.collectAsStateWithLifecycle()
+
+    val lastRefreshedLabel = remember(lastRefreshedMs) {
+        if (lastRefreshedMs == 0L) "Never synced"
+        else "Synced " + SimpleDateFormat("h:mm a", Locale.getDefault())
+            .format(java.util.Date(lastRefreshedMs))
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         // ── Top bar ──────────────────────────────────────────────────────────
@@ -45,12 +52,18 @@ fun HealthScreen(viewModel: HealthViewModel, modifier: Modifier = Modifier) {
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Health",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Health",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "$lastRefreshedLabel · Zepp syncs to HC periodically",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
             IconButton(onClick = { viewModel.refresh() }) {
                 Icon(Icons.Default.Refresh, contentDescription = "Refresh")
             }

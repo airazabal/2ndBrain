@@ -225,6 +225,10 @@ class MainActivity : ComponentActivity() {
                             contract = ActivityResultContracts.RequestPermission()
                         ) { /* re-check triggers via resumeKey */ }
 
+                        val requestCalendarLauncher = rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.RequestPermission()
+                        ) { /* re-check triggers via resumeKey */ }
+
                         // Increment on every onResume so permission checks rerun
                         var resumeKey by remember { mutableIntStateOf(0) }
                         val lifecycleOwner = LocalLifecycleOwner.current
@@ -244,6 +248,9 @@ class MainActivity : ComponentActivity() {
                         val hasPostNotifications = remember(resumeKey) {
                             Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
                                     checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+                        }
+                        val hasCalendarPermission = remember(resumeKey) {
+                            checkSelfPermission(android.Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED
                         }
 
                         var showWizard by remember {
@@ -370,6 +377,18 @@ class MainActivity : ComponentActivity() {
                                                 homeViewModel.healthConnectManager.permissions
                                             )
                                         }
+                                    ),
+                                    WizardPermission(
+                                        icon = Icons.Default.CalendarMonth,
+                                        iconTint = androidx.compose.ui.graphics.Color(0xFF039BE5),
+                                        title = "Calendar Access",
+                                        description = "Shows today's Google Calendar events in your home timeline.",
+                                        isRequired = false,
+                                        isGranted = hasCalendarPermission,
+                                        actionLabel = "Grant",
+                                        onAction = {
+                                            requestCalendarLauncher.launch(android.Manifest.permission.READ_CALENDAR)
+                                        }
                                     )
                                 ),
                                 onContinue = { showWizard = false }
@@ -421,7 +440,8 @@ class MainActivity : ComponentActivity() {
                                                             contentDescription = label
                                                         )
                                                     },
-                                                    label = { Text(label) },
+                                                    label = null,
+                                                    alwaysShowLabel = false,
                                                     selected = currentTab == tab,
                                                     onClick = { navViewModel.setTab(tab) },
                                                     colors = NavigationBarItemDefaults.colors(
@@ -567,6 +587,7 @@ class MainActivity : ComponentActivity() {
                                                     val senseOfDayScore by homeViewModel.senseOfDayScore.collectAsStateWithLifecycle()
                                                     val senseOfDayContext by homeViewModel.senseOfDayContext.collectAsStateWithLifecycle()
                                                     val todayTimelineEvents by homeViewModel.todayTimelineEvents.collectAsStateWithLifecycle()
+                                                    val tomorrowTimelineEvents by homeViewModel.tomorrowTimelineEvents.collectAsStateWithLifecycle()
                                                     val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
                                                     val inlineCopilotResponses by homeViewModel.inlineCopilotResponses.collectAsStateWithLifecycle()
                                                     val inlineCopilotLoading by homeViewModel.inlineCopilotLoading.collectAsStateWithLifecycle()
@@ -611,6 +632,7 @@ class MainActivity : ComponentActivity() {
                                                         senseOfDayScore = senseOfDayScore,
                                                         senseOfDayContext = senseOfDayContext,
                                                         todayTimelineEvents = todayTimelineEvents,
+                                                        tomorrowTimelineEvents = tomorrowTimelineEvents,
                                                         timelineConflicts = timelineConflicts,
                                                         inlineCopilotResponses = inlineCopilotResponses,
                                                         inlineCopilotLoading = inlineCopilotLoading,
@@ -756,6 +778,7 @@ class MainActivity : ComponentActivity() {
                                                 AppTab.TIME -> DigitalTimeScreen()
                                                 AppTab.HEALTH -> {
                                                     val healthViewModel: com.alex.a2ndbrain.ui.health.HealthViewModel = koinViewModel()
+                                                    LaunchedEffect(Unit) { healthViewModel.refresh() }
                                                     com.alex.a2ndbrain.ui.health.HealthScreen(
                                                         viewModel = healthViewModel,
                                                         modifier = Modifier.fillMaxSize()

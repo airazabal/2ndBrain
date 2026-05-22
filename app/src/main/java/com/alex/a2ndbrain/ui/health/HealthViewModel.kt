@@ -33,6 +33,9 @@ class HealthViewModel(
     private val _healthAvailable = MutableStateFlow(false)
     val healthAvailable = _healthAvailable.asStateFlow()
 
+    private val _lastRefreshedMs = MutableStateFlow(0L)
+    val lastRefreshedMs = _lastRefreshedMs.asStateFlow()
+
     init {
         loadPeriod(HealthPeriod.TODAY)
     }
@@ -65,6 +68,7 @@ class HealthViewModel(
             }
 
             _dailyMetrics.value = metrics.sortedByDescending { it.date }
+            _lastRefreshedMs.value = System.currentTimeMillis()
             _isLoading.value = false
         }
     }

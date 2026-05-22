@@ -106,6 +106,7 @@ fun HomeScreen(
     senseOfDayScore: Int = 75,
     senseOfDayContext: String = "🎯 Calibrating your day...",
     todayTimelineEvents: List<TimelineEvent> = emptyList(),
+    tomorrowTimelineEvents: List<TimelineEvent> = emptyList(),
     timelineConflicts: List<TimelineConflict> = emptyList(),
     inlineCopilotResponses: Map<String, String> = emptyMap(),
     inlineCopilotLoading: Set<String> = emptySet(),
@@ -521,12 +522,18 @@ fun HomeScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Today's Schedule & Timeline",
+                                text = "Upcoming Schedule & Timeline",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold
                             )
+                            val totalEvents = todayTimelineEvents.size + tomorrowTimelineEvents.size
                             Text(
-                                text = if (todayTimelineEvents.isEmpty()) "No events scheduled" else "${todayTimelineEvents.size} events on timeline",
+                                text = when {
+                                    totalEvents == 0 -> "No events scheduled"
+                                    tomorrowTimelineEvents.isEmpty() -> "${todayTimelineEvents.size} events today"
+                                    todayTimelineEvents.isEmpty() -> "${tomorrowTimelineEvents.size} events tomorrow"
+                                    else -> "${todayTimelineEvents.size} today · ${tomorrowTimelineEvents.size} tomorrow"
+                                },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline
                             )
@@ -589,9 +596,15 @@ fun HomeScreen(
                                                 if (todayTimelineEvents.isEmpty()) {
                                                     append("You have no events scheduled for today.")
                                                 } else {
-                                                    append("You have ${todayTimelineEvents.size} events on your timeline today. ")
+                                                    append("You have ${todayTimelineEvents.size} events today. ")
                                                     todayTimelineEvents.forEach { event ->
-                                                        append("At ${event.time}, you have ${event.title} from ${event.appName}. ")
+                                                        append("At ${event.time}, ${event.title}. ")
+                                                    }
+                                                }
+                                                if (tomorrowTimelineEvents.isNotEmpty()) {
+                                                    append("Tomorrow you have ${tomorrowTimelineEvents.size} events. ")
+                                                    tomorrowTimelineEvents.forEach { event ->
+                                                        append("At ${event.time}, ${event.title}. ")
                                                     }
                                                 }
                                                 if (timelineConflicts.isNotEmpty()) {
@@ -630,7 +643,7 @@ fun HomeScreen(
                                 }
                             }
 
-                            if (todayTimelineEvents.isEmpty()) {
+                            if (todayTimelineEvents.isEmpty() && tomorrowTimelineEvents.isEmpty()) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -642,7 +655,7 @@ fun HomeScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "No upcoming appointments captured yet today. Calendar events, routine habits, and parsed Obsidian logs will automatically synchronize here.",
+                                        text = "No upcoming appointments found. Calendar events, routine habits, and parsed Obsidian logs will synchronize here automatically.",
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.fillMaxWidth(),
@@ -650,6 +663,24 @@ fun HomeScreen(
                                     )
                                 }
                             } else {
+                                // TODAY section
+                                Text(
+                                    text = "Today",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(vertical = 6.dp)
+                                )
+                                if (todayTimelineEvents.isEmpty()) {
+                                    Text(
+                                        "No events captured yet for today.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+                                }
+                            }
+                            if (todayTimelineEvents.isNotEmpty()) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -922,6 +953,81 @@ fun HomeScreen(
                                                             }
                                                         }
                                                     }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // TOMORROW section
+                            if (todayTimelineEvents.isNotEmpty() || tomorrowTimelineEvents.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(16.dp))
+                                val tomorrowLabel = run {
+                                    val cal = java.util.Calendar.getInstance().apply {
+                                        add(java.util.Calendar.DAY_OF_YEAR, 1)
+                                    }
+                                    "Tomorrow · " + java.text.SimpleDateFormat("EEE, MMM d", java.util.Locale.getDefault()).format(cal.time)
+                                }
+                                Text(
+                                    text = tomorrowLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.padding(vertical = 6.dp)
+                                )
+                                if (tomorrowTimelineEvents.isEmpty()) {
+                                    Text(
+                                        "No events found for tomorrow.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        tomorrowTimelineEvents.forEach { event ->
+                                            val dotColor = when (event.sourcePackage) {
+                                                "calendar" -> Color(0xFF1E88E5)
+                                                "habit"    -> Color(0xFFF4511E)
+                                                else       -> Color(0xFF9E9E9E)
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(8.dp)
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(dotColor)
+                                                )
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Text(
+                                                    text = event.time,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.outline,
+                                                    modifier = Modifier.width(60.dp)
+                                                )
+                                                Text(
+                                                    text = event.title,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Medium,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(4.dp))
+                                                        .background(dotColor.copy(alpha = 0.15f))
+                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text(
+                                                        text = event.appName,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = dotColor
+                                                    )
                                                 }
                                             }
                                         }
