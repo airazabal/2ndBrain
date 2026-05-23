@@ -78,6 +78,18 @@
         </activity-alias>
 
         <!-- Habit Alarms & Broadcast Receivers -->
+        <!-- Home screen widget -->
+        <receiver
+            android:name=".ui.widget.BrainWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/brain_widget_info" />
+        </receiver>
+
         <receiver
             android:name=".core.health.HabitReminderReceiver"
             android:enabled="true"
