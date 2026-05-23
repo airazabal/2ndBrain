@@ -863,8 +863,6 @@ class HomeViewModel(
         }
         _healthMetricsToday.value = metrics
         _healthPermissionsGranted.value = true
-        // Sync is always driven by checkHealthPermissionsAndSync() — no request here
-        // to avoid an emit → load → request → emit loop.
     }
 
     init {

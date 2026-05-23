@@ -594,10 +594,6 @@ class NearbySyncManager(
     private fun importHealthSnapshots(jsonArray: JSONArray) {
         scope.launch(Dispatchers.IO) {
             try {
-                // Health data only originates from the phone (Health Connect). The tablet
-                // never generates its own health data, so there is no conflict to resolve —
-                // always overwrite with the authoritative phone snapshot. OnConflictStrategy.REPLACE
-                // in the DAO handles the upsert.
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)
                     healthDao.insertSnapshot(

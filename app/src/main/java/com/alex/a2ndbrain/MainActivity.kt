@@ -299,6 +299,15 @@ class MainActivity : ComponentActivity() {
                         val configuration = androidx.compose.ui.platform.LocalConfiguration.current
                         val useRail = configuration.screenWidthDp >= 600
 
+                        val navTabs = listOf(
+                            Triple("Today", Icons.Default.Home, AppTab.TODAY),
+                            Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
+                            Triple("Wellness", Icons.Default.Favorite, AppTab.WELLNESS)
+                        )
+                        val navSelectedColor = MaterialTheme.colorScheme.primary
+                        val navUnselectedColor = MaterialTheme.colorScheme.secondary
+                        val navIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+
                         val snackbarHostState = remember { SnackbarHostState() }
                         LaunchedEffect(homeViewModel) {
                             homeViewModel.habitUncompleted.collect { entity ->
@@ -409,21 +418,16 @@ class MainActivity : ComponentActivity() {
                                         NavigationBar(
                                             containerColor = MaterialTheme.colorScheme.surface
                                         ) {
-                                            val tabs = listOf(
-                                                Triple("Today", Icons.Default.Home, AppTab.TODAY),
-                                                Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
-                                                Triple("Wellness", Icons.Default.Favorite, AppTab.WELLNESS)
-                                            )
-                                            tabs.forEach { (label, icon, tab) ->
+                                            navTabs.forEach { (label, icon, tab) ->
                                                 NavigationBarItem(
                                                     icon = { Icon(icon, contentDescription = label) },
                                                     label = { Text(label) },
                                                     selected = currentTab == tab,
                                                     onClick = { navViewModel.setTab(tab) },
                                                     colors = NavigationBarItemDefaults.colors(
-                                                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                                        selectedIconColor = navSelectedColor,
+                                                        unselectedIconColor = navUnselectedColor,
+                                                        indicatorColor = navIndicatorColor
                                                     )
                                                 )
                                             }
@@ -456,21 +460,16 @@ class MainActivity : ComponentActivity() {
                                                 }
                                             }
                                         ) {
-                                            val tabs = listOf(
-                                                Triple("Today", Icons.Default.Home, AppTab.TODAY),
-                                                Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
-                                                Triple("Wellness", Icons.Default.Favorite, AppTab.WELLNESS)
-                                            )
-                                            tabs.forEach { (label, icon, tab) ->
+                                            navTabs.forEach { (label, icon, tab) ->
                                                 NavigationRailItem(
                                                     icon = { Icon(icon, contentDescription = label) },
                                                     label = { Text(label) },
                                                     selected = currentTab == tab,
                                                     onClick = { navViewModel.setTab(tab) },
                                                     colors = NavigationRailItemDefaults.colors(
-                                                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                                                        unselectedIconColor = MaterialTheme.colorScheme.secondary,
-                                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                                        selectedIconColor = navSelectedColor,
+                                                        unselectedIconColor = navUnselectedColor,
+                                                        indicatorColor = navIndicatorColor
                                                     )
                                                 )
                                             }

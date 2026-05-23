@@ -515,9 +515,9 @@ fun ReflectionScreen(
                             }
                         }
                     }
-                } // closes Column
-            } // closes AnimatedVisibility
-        } // closes item
+                }
+            }
+        }
 
         if (summaries.isEmpty()) {
             item {

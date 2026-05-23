@@ -124,10 +124,17 @@ class HealthAgent(
             if (healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()) {
                 healthConnectManager.fetchHealthMetricsToday()
             } else {
-                // Tablet or device without Health Connect: use the latest synced DB snapshot
-                // so the AI briefing has real health data instead of zeros.
                 val today = dateFormat.format(Date())
-                healthDao.getSnapshotForDate(today)?.toHealthMetrics() ?: HealthMetrics()
+                var metrics = healthDao.getSnapshotForDate(today)?.toHealthMetrics() ?: HealthMetrics()
+                if (metrics.sleepMinutes < 120) {
+                    val cal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+                    val yesterday = dateFormat.format(cal.time)
+                    val prev = healthDao.getSnapshotForDate(yesterday)
+                    if (prev != null && prev.sleepMinutes > metrics.sleepMinutes) {
+                        metrics = metrics.copy(sleepMinutes = prev.sleepMinutes)
+                    }
+                }
+                metrics
             }
         } catch (e: Exception) {
             Log.e("HealthAgent", "fetchHealthMetrics failed", e)

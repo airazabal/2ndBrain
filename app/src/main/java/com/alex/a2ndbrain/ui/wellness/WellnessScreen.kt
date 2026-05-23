@@ -13,7 +13,12 @@ import com.alex.a2ndbrain.ui.meditation.MeditationScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionViewModel
 import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
+
+private enum class WellnessTab(val label: String) {
+    HEALTH("Health"), TIME("Time"), ZEN("Zen"), REFLECT("Reflect")
+}
 
 @Composable
 fun WellnessScreen(
@@ -34,30 +39,29 @@ fun WellnessScreen(
     val pastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
-        healthViewModel.refresh()
-        reflectionViewModel.loadWeeklyHealthTrends()
+        launch { healthViewModel.refresh() }
+        launch { reflectionViewModel.loadWeeklyHealthTrends() }
     }
 
-    val tabs = listOf("Health", "Time", "Zen", "Reflect")
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember { mutableStateOf(WellnessTab.HEALTH) }
 
     Column(modifier = modifier.fillMaxSize()) {
-        TabRow(selectedTabIndex = selectedTab) {
-            tabs.forEachIndexed { index, title ->
+        TabRow(selectedTabIndex = selectedTab.ordinal) {
+            WellnessTab.entries.forEach { tab ->
                 Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(title) }
+                    selected = selectedTab == tab,
+                    onClick = { selectedTab = tab },
+                    text = { Text(tab.label) }
                 )
             }
         }
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (selectedTab) {
-                0 -> HealthScreen(viewModel = healthViewModel, modifier = Modifier.fillMaxSize())
-                1 -> DigitalTimeScreen()
-                2 -> MeditationScreen(sessions = sessions, streaks = streaks)
-                3 -> ReflectionScreen(
+                WellnessTab.HEALTH -> HealthScreen(viewModel = healthViewModel, modifier = Modifier.fillMaxSize())
+                WellnessTab.TIME -> DigitalTimeScreen()
+                WellnessTab.ZEN -> MeditationScreen(sessions = sessions, streaks = streaks)
+                WellnessTab.REFLECT -> ReflectionScreen(
                     summaries = summaries,
                     settingsManager = settingsManager,
                     isGenerating = isGenerating,
