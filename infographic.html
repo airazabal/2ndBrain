@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2ndBrain — Infographic</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d0f14;
+    --surface:   #151820;
+    --card:      #1c2030;
+    --border:    #252a3a;
+    --primary:   #6c8aff;
+    --accent:    #a78bfa;
+    --teal:      #2dd4bf;
+    --green:     #4ade80;
+    --amber:     #fbbf24;
+    --rose:      #f87171;
+    --text:      #e8eaf6;
+    --muted:     #7880a0;
+    --r:         16px;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    width: 1080px;
+    margin: 0 auto;
+    padding: 48px 40px 64px;
+  }
+
+  /* ── HERO ─────────────────────────────────────────── */
+  .hero {
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    margin-bottom: 48px;
+  }
+  .hero-brain {
+    width: 96px; height: 96px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    border-radius: 28px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 48px;
+    flex-shrink: 0;
+    box-shadow: 0 0 40px rgba(108,138,255,.35);
+  }
+  .hero-text h1 {
+    font-size: 52px; font-weight: 900; letter-spacing: -1.5px;
+    background: linear-gradient(90deg, #fff 30%, var(--accent));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    line-height: 1.05;
+  }
+  .hero-text p {
+    margin-top: 10px; font-size: 17px; color: var(--muted); max-width: 620px;
+    line-height: 1.6;
+  }
+  .badge {
+    display: inline-block; margin-top: 14px;
+    padding: 4px 14px; border-radius: 99px;
+    background: rgba(108,138,255,.15); border: 1px solid rgba(108,138,255,.3);
+    font-size: 12px; font-weight: 600; color: var(--primary);
+    letter-spacing: .5px; text-transform: uppercase;
+  }
+
+  /* ── DIVIDER ──────────────────────────────────────── */
+  .divider {
+    height: 1px; background: var(--border); margin: 0 0 40px;
+  }
+
+  /* ── SECTION LABEL ────────────────────────────────── */
+  .section-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 16px;
+  }
+
+  /* ── PIPELINE (data sources) ──────────────────────── */
+  .pipeline {
+    display: flex; align-items: center; gap: 0;
+    margin-bottom: 48px; overflow: hidden;
+  }
+  .pipeline-item {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 18px 14px 16px;
+    text-align: center;
+    position: relative;
+  }
+  .pipeline-item:first-child { border-radius: var(--r) 0 0 var(--r); }
+  .pipeline-item:last-child  { border-radius: 0 var(--r) var(--r) 0; }
+  .pipeline-item + .pipeline-item::before {
+    content: '▶';
+    position: absolute; left: -10px; top: 50%;
+    transform: translateY(-50%);
+    color: var(--border); font-size: 14px; z-index: 1;
+    background: var(--bg); padding: 2px 0;
+  }
+  .pipeline-item .pi-icon { font-size: 26px; margin-bottom: 6px; }
+  .pipeline-item .pi-label { font-size: 12px; font-weight: 600; color: var(--text); }
+  .pipeline-item .pi-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ── FEATURE GRID ─────────────────────────────────── */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+  .feat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 22px 20px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .feat::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    border-radius: var(--r) var(--r) 0 0;
+  }
+  .feat.blue::before   { background: linear-gradient(90deg, var(--primary), var(--accent)); }
+  .feat.teal::before   { background: linear-gradient(90deg, var(--teal), #22d3ee); }
+  .feat.green::before  { background: linear-gradient(90deg, var(--green), #86efac); }
+  .feat.amber::before  { background: linear-gradient(90deg, var(--amber), #fde68a); }
+  .feat.rose::before   { background: linear-gradient(90deg, var(--rose), #fca5a5); }
+  .feat.purple::before { background: linear-gradient(90deg, #c084fc, var(--accent)); }
+
+  .feat-icon { font-size: 28px; margin-bottom: 10px; }
+  .feat-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .feat-body  { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .feat-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .pill {
+    padding: 3px 10px; border-radius: 99px;
+    font-size: 11px; font-weight: 600;
+    background: rgba(255,255,255,.06); color: var(--muted);
+    border: 1px solid var(--border);
+  }
+
+  /* ── AI SECTION ───────────────────────────────────── */
+  .ai-row {
+    display: grid; grid-template-columns: 1.4fr 1fr;
+    gap: 16px; margin-bottom: 48px;
+  }
+  .ai-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 24px 24px 22px;
+  }
+  .ai-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 10px; }
+  .ai-card p  { font-size: 13px; color: var(--muted); line-height: 1.65; }
+
+  .model-row { display: flex; gap: 12px; margin-top: 16px; }
+  .model-chip {
+    flex: 1; padding: 12px 14px; border-radius: 12px;
+    border: 1px solid var(--border); background: rgba(255,255,255,.03);
+    text-align: center;
+  }
+  .model-chip .mc-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .model-chip .mc-name  { font-size: 13px; font-weight: 700; }
+  .model-chip.on  .mc-name { color: var(--green); }
+  .model-chip.cloud .mc-name { color: var(--primary); }
+
+  .briefing-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .bl-item {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 10px 12px; border-radius: 10px;
+    background: rgba(255,255,255,.03); border: 1px solid var(--border);
+  }
+  .bl-time { font-size: 11px; color: var(--muted); white-space: nowrap; margin-top: 1px; }
+  .bl-text { font-size: 12.5px; line-height: 1.45; }
+
+  /* ── BOTTOM ROW ───────────────────────────────────── */
+  .bottom-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--r); padding: 22px 20px;
+  }
+  .stat-card .sc-icon { font-size: 24px; margin-bottom: 10px; }
+  .stat-card .sc-num  { font-size: 36px; font-weight: 800; line-height: 1;
+                        background: linear-gradient(90deg, #fff, var(--accent));
+                        -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .stat-card .sc-label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .stat-card .sc-sub   { font-size: 11.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; opacity: .75; }
+
+  /* ── PRIVACY BANNER ───────────────────────────────── */
+  .privacy-banner {
+    margin-top: 40px;
+    background: linear-gradient(135deg, rgba(108,138,255,.08), rgba(167,139,250,.08));
+    border: 1px solid rgba(108,138,255,.25);
+    border-radius: var(--r); padding: 20px 28px;
+    display: flex; align-items: center; gap: 20px;
+  }
+  .privacy-banner .pb-icon { font-size: 36px; flex-shrink: 0; }
+  .privacy-banner .pb-text h4 { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+  .privacy-banner .pb-text p  { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+  /* ── FOOTER ───────────────────────────────────────── */
+  .footer {
+    margin-top: 32px; text-align: center;
+    font-size: 12px; color: var(--muted); opacity: .5;
+  }
+</style>
+</head>
+<body>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-brain">🧠</div>
+  <div class="hero-text">
+    <h1>2ndBrain</h1>
+    <p>A personal intelligence cockpit for Android — capturing your digital life, tracking your physical wellness, and using AI to surface what actually matters.</p>
+    <span class="badge">Private · On-Device · AI-Powered</span>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- DATA PIPELINE -->
+<div class="section-label">Data Sources → Brain</div>
+<div class="pipeline">
+  <div class="pipeline-item">
+    <div class="pi-icon">📨</div>
+    <div class="pi-label">Notifications</div>
+    <div class="pi-sub">Gmail · Calendar · Todoist</div>
+  </div>
+  <div class="pipeline-item">
+    <div class="pi-icon">📋</div>
+    <div class="pi-label">Clipboard</div>
+    <div class="pi-sub">Real-time capture</div>
+  </div>
+  <div class="pipeline-item">
+    <div class="pi-icon">⌚</div>
+    <div class="pi-label">Smartwatch</div>
+    <div class="pi-sub">Health Connect / Zepp</div>
+  </div>
+  <div class="pipeline-item">
+    <div class="pi-icon">📱</div>
+    <div class="pi-label">Screen Time</div>
+    <div class="pi-sub">Per-app usage stats</div>
+  </div>
+  <div class="pipeline-item">
+    <div class="pi-icon">🧘</div>
+    <div class="pi-label">Meditation</div>
+    <div class="pi-sub">Zendence sessions</div>
+  </div>
+  <div class="pipeline-item">
+    <div class="pi-icon">📓</div>
+    <div class="pi-label">Obsidian</div>
+    <div class="pi-sub">Vault notes &amp; agenda</div>
+  </div>
+</div>
+
+<!-- FEATURE GRID -->
+<div class="section-label">Core Features</div>
+<div class="feature-grid">
+
+  <div class="feat blue">
+    <div class="feat-icon">📡</div>
+    <div class="feat-title">Smart Feed</div>
+    <div class="feat-body">Captures and groups high-signal notifications by app, day, and topic. Auto-tags each item with smart folders — Work, Health, Finance, Social, Reference — and highlights key values like totals and steps.</div>
+    <div class="feat-pills">
+      <span class="pill">#Work</span><span class="pill">#Finance</span><span class="pill">#Health</span><span class="pill">Deep Links</span>
+    </div>
+  </div>
+
+  <div class="feat teal">
+    <div class="feat-icon">❤️</div>
+    <div class="feat-title">Physical Wellness</div>
+    <div class="feat-body">Reads steps, sleep, and heart rate from Health Connect. Shows a day / week / month breakdown with wearable-presence detection and sleep fallback for early-morning gaps.</div>
+    <div class="feat-pills">
+      <span class="pill">Steps</span><span class="pill">Sleep</span><span class="pill">Heart Rate</span><span class="pill">HC Sync</span>
+    </div>
+  </div>
+
+  <div class="feat green">
+    <div class="feat-icon">✅</div>
+    <div class="feat-title">Habits &amp; Alarms</div>
+    <div class="feat-body">SQLite-backed habit engine with exact-alarm reminders, boot-rescheduling, and one-tap completion from the notification shade or watch. Visual 7-day streak rings on the home screen.</div>
+    <div class="feat-pills">
+      <span class="pill">Streaks</span><span class="pill">Alarms</span><span class="pill">Undo</span>
+    </div>
+  </div>
+
+  <div class="feat amber">
+    <div class="feat-icon">⏱️</div>
+    <div class="feat-title">Digital Time</div>
+    <div class="feat-body">Per-app screen-time dashboard across today, week, and month. Correlates social media distraction against productive tool usage. Syncs across devices over P2P — no router needed.</div>
+    <div class="feat-pills">
+      <span class="pill">Today</span><span class="pill">Week</span><span class="pill">P2P Sync</span>
+    </div>
+  </div>
+
+  <div class="feat rose">
+    <div class="feat-icon">🧘</div>
+    <div class="feat-title">Zen (Meditation)</div>
+    <div class="feat-body">Full session history from Zendence via content provider. Tracks current &amp; longest streak, contributes +20 pts to your Sense of Day Score, and syncs sessions to your tablet over Nearby Connections.</div>
+    <div class="feat-pills">
+      <span class="pill">Streaks</span><span class="pill">Score</span><span class="pill">P2P Sync</span>
+    </div>
+  </div>
+
+  <div class="feat purple">
+    <div class="feat-icon">📓</div>
+    <div class="feat-title">Obsidian Vault</div>
+    <div class="feat-body">Browse your Obsidian vault in-app, deep-link to edit, and quick-capture timestamped notes. Daily notes and agenda files flow into the home timeline for a unified view of your day.</div>
+    <div class="feat-pills">
+      <span class="pill">Vault Browse</span><span class="pill">Quick Capture</span><span class="pill">Timeline</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- AI SECTION -->
+<div class="section-label">AI Intelligence</div>
+<div class="ai-row">
+  <div class="ai-card">
+    <h3>🤖 Co-Pilot &amp; Reflections</h3>
+    <p>Two inference modes adapt to query complexity. Short or offline queries run locally on-device; complex briefings and weekly correlations route to Gemini cloud models with automatic fallback.</p>
+    <div class="model-row">
+      <div class="model-chip on">
+        <div class="mc-label">On-Device</div>
+        <div class="mc-name">Qwen 0.6B</div>
+      </div>
+      <div class="model-chip cloud">
+        <div class="mc-label">Cloud (fallback chain)</div>
+        <div class="mc-name">Gemini 2.5 Flash → 1.5 Flash → 1.5 Pro</div>
+      </div>
+    </div>
+  </div>
+  <div class="ai-card">
+    <h3>📅 Daily Briefings</h3>
+    <div class="briefing-list">
+      <div class="bl-item">
+        <span class="bl-time">4–11 AM</span>
+        <span class="bl-text"><strong>Morning Brief</strong> — upcoming meetings, unfinished tasks, game plan</span>
+      </div>
+      <div class="bl-item">
+        <span class="bl-time">Evening</span>
+        <span class="bl-text"><strong>Day Reflection</strong> — intended vs actual screen time, distraction gaps</span>
+      </div>
+      <div class="bl-item">
+        <span class="bl-time">Weekly</span>
+        <span class="bl-text"><strong>Correlation Report</strong> — sleep × habits × focus × wellness trends</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM STATS + SYNC -->
+<div class="section-label">Architecture Highlights</div>
+<div class="bottom-row">
+  <div class="stat-card">
+    <div class="sc-icon">🔄</div>
+    <div class="sc-num">P2P</div>
+    <div class="sc-label">Device Sync</div>
+    <div class="sc-sub">Google Nearby Connections syncs screen time &amp; sessions between phone and tablet — no Wi-Fi or internet required. Background sync every 15 min via WorkManager.</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-icon">🗄️</div>
+    <div class="sc-num">100%</div>
+    <div class="sc-label">Local Storage</div>
+    <div class="sc-sub">All data lives in an on-device Room database. 5 entities, 17 schema versions, strict migrations — your data never leaves your device unless you choose to sync.</div>
+  </div>
+  <div class="stat-card">
+    <div class="sc-icon">⚡</div>
+    <div class="sc-num">3</div>
+    <div class="sc-label">Background Workers</div>
+    <div class="sc-sub">UsageSyncWorker (4 h), P2pSyncWorker (15 min), ReflectionWorker (6 h) — scheduled via WorkManager, running silently in the background 24/7.</div>
+  </div>
+</div>
+
+<!-- PRIVACY BANNER -->
+<div class="privacy-banner">
+  <div class="pb-icon">🔒</div>
+  <div class="pb-text">
+    <h4>Private by Design</h4>
+    <p>2ndBrain stores everything locally in an encrypted Room database on your device. API keys are secured with Android EncryptedSharedPreferences. P2P sync uses direct Bluetooth/Wi-Fi Direct — your personal data never passes through a cloud server.</p>
+  </div>
+</div>
+
+<div class="footer">2ndBrain · Android · Jetpack Compose · Gemini AI · Health Connect · Google Nearby Connections</div>
+
+</body>
+</html>
