@@ -122,24 +122,36 @@ class HealthAgent(
     private suspend fun fetchHealthMetrics(): HealthMetrics {
         return try {
             if (healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()) {
-                healthConnectManager.fetchHealthMetricsToday()
-            } else {
-                val today = dateFormat.format(Date())
-                var metrics = healthDao.getSnapshotForDate(today)?.toHealthMetrics() ?: HealthMetrics()
-                if (metrics.sleepMinutes < 120) {
-                    val cal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
-                    val yesterday = dateFormat.format(cal.time)
-                    val prev = healthDao.getSnapshotForDate(yesterday)
-                    if (prev != null && prev.sleepMinutes > metrics.sleepMinutes) {
-                        metrics = metrics.copy(sleepMinutes = prev.sleepMinutes)
-                    }
+                val metrics = healthConnectManager.fetchHealthMetricsToday()
+                // Only treat HC as authoritative when it has wearable data (sleep or HR).
+                // Steps can come from the tablet's own accelerometer, not the watch.
+                // Mirrors HealthViewModel's hasWearableData = any { hasSleep || hasHeart }.
+                if (metrics.sleepMinutes > 0 || metrics.avgHeartRate > 0) {
+                    metrics
+                } else {
+                    fetchMetricsFromDb()
                 }
-                metrics
+            } else {
+                fetchMetricsFromDb()
             }
         } catch (e: Exception) {
             Log.e("HealthAgent", "fetchHealthMetrics failed", e)
             HealthMetrics()
         }
+    }
+
+    private suspend fun fetchMetricsFromDb(): HealthMetrics {
+        val today = dateFormat.format(Date())
+        var metrics = healthDao.getSnapshotForDate(today)?.toHealthMetrics() ?: HealthMetrics()
+        if (metrics.sleepMinutes < 120) {
+            val cal = java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, -1) }
+            val yesterday = dateFormat.format(cal.time)
+            val prev = healthDao.getSnapshotForDate(yesterday)
+            if (prev != null && prev.sleepMinutes > metrics.sleepMinutes) {
+                metrics = metrics.copy(sleepMinutes = prev.sleepMinutes)
+            }
+        }
+        return metrics
     }
 
     private suspend fun fetchHabits(): HabitsContext {
