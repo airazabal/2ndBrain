@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
         digitalTimeManager.schedulePeriodicSync()
         nearbySyncManager.schedulePeriodicP2pSync()
         com.alex.a2ndbrain.core.sync.CloudSyncWorker.schedule(this)
+        com.alex.a2ndbrain.core.usage.DistractionAlertWorker.schedule(this)
 
         enableEdgeToEdge()
         setContent {
