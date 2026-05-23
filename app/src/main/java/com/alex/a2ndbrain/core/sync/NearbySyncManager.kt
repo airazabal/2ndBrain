@@ -11,8 +11,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import com.alex.a2ndbrain.ConflictSeverity
 import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.TimelineConflict
-import com.alex.a2ndbrain.core.health.HealthConnectManager
-import com.alex.a2ndbrain.core.health.HealthDao
+import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.health.HealthSnapshotEntity
 import com.alex.a2ndbrain.core.memory.HabitEntity
 import com.alex.a2ndbrain.core.memory.HabitsDao
@@ -38,8 +37,7 @@ class NearbySyncManager(
     private val usageRepository: UsageRepository,
     private val scope: CoroutineScope,
     private val meditationRepository: com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository,
-    private val healthConnectManager: HealthConnectManager,
-    private val healthDao: HealthDao,
+    private val healthRepository: HealthRepository,
     private val habitsDao: HabitsDao
 ) {
     private val _meditationSyncTrigger = MutableSharedFlow<Unit>(replay = 0)
@@ -401,7 +399,7 @@ class NearbySyncManager(
                 // Fetch health snapshots if Health Connect is available on this device
                 val healthJsonArray = JSONArray()
                 try {
-                    val snapshots = healthConnectManager.fetchDailySnapshotsForSync(7)
+                    val snapshots = healthRepository.getSnapshotsForSync(7)
                     snapshots.forEach { snapshot ->
                         val json = JSONObject()
                         json.put("date", snapshot.date)
@@ -596,7 +594,7 @@ class NearbySyncManager(
             try {
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)
-                    healthDao.insertSnapshot(
+                    healthRepository.saveSnapshot(
                         HealthSnapshotEntity(
                             date         = obj.getString("date"),
                             deviceId     = obj.getString("deviceId"),

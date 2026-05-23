@@ -8,8 +8,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
-import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.health.HealthMetrics
+import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -19,16 +19,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
 import java.util.*
 
 class ReflectionViewModel(
     private val memoryRepository: MemoryRepository,
     private val usageRepository: UsageRepository,
     private val reflectionManager: ReflectionManager,
-    private val healthConnectManager: HealthConnectManager,
+    private val healthRepository: HealthRepository,
     private val settingsManager: CaptureSettingsManager,
     private val applicationContext: Context
 ) : ViewModel() {
@@ -64,21 +61,9 @@ class ReflectionViewModel(
     fun loadWeeklyHealthTrends() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                if (healthConnectManager.hasPermissions()) {
-                    val zoneId = ZoneId.systemDefault()
-                    val localToday = LocalDate.now()
-                    val tempTrends = mutableListOf<Pair<String, HealthMetrics>>()
-                    for (i in 6 downTo 0) {
-                        val date = localToday.minusDays(i.toLong())
-                        val startInstant = date.atStartOfDay(zoneId).toInstant()
-                        val endInstant = if (i == 0) Instant.now() else date.plusDays(1).atStartOfDay(zoneId).toInstant()
-                        val dailyMetrics = healthConnectManager.fetchHealthMetricsForRange(startInstant, endInstant)
-                        tempTrends.add(date.toString() to dailyMetrics)
-                    }
-                    _weeklyHealthTrends.value = tempTrends
-                }
+                _weeklyHealthTrends.value = healthRepository.getWeeklyTrends()
             } catch (e: Exception) {
-                android.util.Log.e("2ndBrain", "Failed to load weekly health metrics inside ReflectionViewModel", e)
+                android.util.Log.e("ReflectionViewModel", "loadWeeklyHealthTrends failed", e)
             }
         }
     }

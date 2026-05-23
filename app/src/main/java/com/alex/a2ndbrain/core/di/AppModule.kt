@@ -8,6 +8,7 @@ import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.reflection.GeminiAgent
 import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.health.HealthDao
+import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
@@ -47,12 +48,13 @@ val appModule = module {
     single { ReflectionManager(androidContext(), get(), get(), get(), get(), get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
+    single { HealthRepository(get(), get()) }
     single { ZendenceMeditationRepository(androidContext()) }
-    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get()) }
+    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get()) }
 
     // Agent layer (Phase 1-3 migration)
     single { MemoryAgent(get()) }
-    single { HealthAgent(get(), get(), get(), androidContext(), get()) }
+    single { HealthAgent(get(), get(), get()) }
     single { ReflectionAgent() }
     single { ModelPicker(androidContext()) }
     single { ModelRouter(get(), get(), get()) }
@@ -62,8 +64,8 @@ val appModule = module {
 
     // ViewModels
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), get(), androidContext(), get(), get(), get()) }
-    viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), androidContext(), get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get()) }

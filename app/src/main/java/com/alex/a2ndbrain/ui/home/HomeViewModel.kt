@@ -9,9 +9,8 @@ import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.TimelineConflict
 import com.alex.a2ndbrain.TimelineEvent
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
-import com.alex.a2ndbrain.core.health.HealthConnectManager
-import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.health.HealthMetrics
+import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.memory.HabitCompletionEntity
 import com.alex.a2ndbrain.core.memory.HabitEntity
 import com.alex.a2ndbrain.core.memory.HabitsDao
@@ -37,13 +36,13 @@ class HomeViewModel(
     private val usageRepository: UsageRepository,
     private val settingsManager: CaptureSettingsManager,
     private val reflectionManager: ReflectionManager,
-    val healthConnectManager: HealthConnectManager,
     private val habitsDao: HabitsDao,
     private val applicationContext: Context,
     private val nearbySyncManager: NearbySyncManager,
     private val zendenceMeditationRepository: ZendenceMeditationRepository,
-    private val healthDao: HealthDao
+    private val healthRepository: HealthRepository
 ) : ViewModel() {
+    val healthConnectManager get() = healthRepository.healthConnectManager
 
     val summaries = memoryRepository.getAllSummariesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
@@ -825,44 +824,25 @@ class HomeViewModel(
     fun checkHealthPermissionsAndSync() {
         refreshMonitoredApps()
         viewModelScope.launch(Dispatchers.IO) {
-            val granted = healthConnectManager.hasPermissions()
-            if (granted) {
-                val metrics = healthConnectManager.fetchHealthMetricsToday()
-                // A wearable (Zepp/watch) always provides sleep and/or HR.
-                // If both are zero this device has HC permissions but no paired watch
-                // (e.g. a tablet with HC enabled). Fall through to the synced DB path
-                // so we display the phone's data instead of the tablet's own sensors.
-                if (metrics.sleepMinutes > 0 || metrics.avgHeartRate > 0) {
-                    _healthPermissionsGranted.value = true
-                    _healthMetricsToday.value = metrics
-                    nearbySyncManager.ensureScanning()
-                    return@launch
-                }
+            val hcMetrics = healthRepository.getHCMetricsIfWearable()
+            if (hcMetrics != null) {
+                _healthPermissionsGranted.value = true
+                _healthMetricsToday.value = hcMetrics
+                nearbySyncManager.ensureScanning()
+                return@launch
             }
             _healthPermissionsGranted.value = false
-            loadSyncedHealthSnapshot()
             nearbySyncManager.requestImmediateSync()
+            loadSyncedHealthSnapshot()
         }
     }
 
     private suspend fun loadSyncedHealthSnapshot() {
-        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val today = fmt.format(Date())
-        val snapshot = healthDao.getSnapshotForDate(today) ?: return
-        var metrics = snapshot.toHealthMetrics()
-        // Mirror the phone's sleep fallback: if today's synced snapshot has partial sleep
-        // (watch upload not yet complete), use yesterday's snapshot sleep value instead.
-        if (metrics.sleepMinutes < 120) {
-            val yesterday = fmt.format(
-                Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }.time
-            )
-            val prev = healthDao.getSnapshotForDate(yesterday)
-            if (prev != null && prev.sleepMinutes > metrics.sleepMinutes) {
-                metrics = metrics.copy(sleepMinutes = prev.sleepMinutes)
-            }
+        val metrics = healthRepository.getTodayMetrics()
+        if (metrics.steps > 0 || metrics.sleepMinutes > 0 || metrics.avgHeartRate > 0) {
+            _healthMetricsToday.value = metrics
+            _healthPermissionsGranted.value = true
         }
-        _healthMetricsToday.value = metrics
-        _healthPermissionsGranted.value = true
     }
 
     init {
