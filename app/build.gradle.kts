@@ -1,11 +1,44 @@
 import java.util.Properties
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import groovy.json.JsonSlurper
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+}
+
+// Read Firebase config from google-services.json (not committed to git).
+// Symlink: ln -sf ~/DriveSyncFiles/2ndBrain/google-services.json app/google-services.json
+data class FirebaseConfig(
+    val appId: String = "",
+    val apiKey: String = "",
+    val projectId: String = "",
+    val webClientId: String = ""
+)
+val firebaseConfig: FirebaseConfig = run {
+    val f = file("google-services.json")
+    if (!f.exists()) return@run FirebaseConfig()
+    try {
+        @Suppress("UNCHECKED_CAST")
+        val json = JsonSlurper().parseText(f.readText()) as Map<String, Any>
+        val projectInfo = json["project_info"] as Map<String, Any>
+        val clients = json["client"] as List<Map<String, Any>>
+        val client = clients.first()
+        val clientInfo = client["client_info"] as Map<String, Any>
+        val apiKeys = client["api_key"] as List<Map<String, Any>>
+        val oauthClients = (client["oauth_client"] as? List<Map<String, Any>>) ?: emptyList()
+        val appId = clientInfo["mobilesdk_app_id"] as String
+        val apiKey = (apiKeys.firstOrNull()?.get("current_key") as? String) ?: ""
+        val projectId = projectInfo["project_id"] as String
+        val webClientId = oauthClients.firstOrNull { (it["client_type"] as? Int) == 3 }
+            ?.get("client_id") as? String ?: ""
+        FirebaseConfig(appId, apiKey, projectId, webClientId)
+    } catch (e: Exception) {
+        println("Warning: could not parse google-services.json — Firebase will be disabled: $e")
+        FirebaseConfig()
+    }
 }
 
 val versionPropsFile = file("version.properties")
@@ -66,6 +99,12 @@ dependencies {
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
 
+    // Firebase (requires app/google-services.json — see ~/DriveSyncFiles/2ndBrain/README.md)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.android.gms:play-services-auth:21.3.0")
+
     // Koin
     implementation(libs.koin.android)
     implementation(libs.koin.androidx.compose)
@@ -95,6 +134,10 @@ android {
         
         val geminiModel = project.findProperty("gemini.model")?.toString() ?: "gemini-1.5-flash"
         buildConfigField("String", "GEMINI_MODEL", "\"$geminiModel\"")
+        buildConfigField("String", "FIREBASE_APP_ID",      "\"${firebaseConfig.appId}\"")
+        buildConfigField("String", "FIREBASE_API_KEY",     "\"${firebaseConfig.apiKey}\"")
+        buildConfigField("String", "FIREBASE_PROJECT_ID",  "\"${firebaseConfig.projectId}\"")
+        buildConfigField("String", "FIREBASE_WEB_CLIENT_ID", "\"${firebaseConfig.webClientId}\"")
     }
 
     buildTypes {

@@ -13,7 +13,9 @@ import java.util.Locale
 
 class HealthRepository(
     val healthConnectManager: HealthConnectManager,
-    private val healthDao: HealthDao
+    private val healthDao: HealthDao,
+    // Injected after CloudHealthSyncManager is created; null until Firebase is configured.
+    var cloudSync: com.alex.a2ndbrain.core.sync.CloudHealthSyncManager? = null
 ) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -133,6 +135,19 @@ class HealthRepository(
             val prev = healthDao.getSnapshotForDate(yesterday)
             if (prev != null && prev.sleepMinutes > metrics.sleepMinutes) {
                 metrics = metrics.copy(sleepMinutes = prev.sleepMinutes)
+            }
+        }
+        // 4th fallback: pull from Firestore when DB has no sleep data (P2P hasn't synced yet)
+        if (metrics.sleepMinutes == 0) {
+            val cloud = cloudSync ?: return metrics
+            try {
+                val pulled = cloud.pullTodaySnapshot()
+                if (pulled != null && pulled.sleepMinutes > 0) {
+                    healthDao.insertSnapshot(pulled)
+                    return pulled.toHealthMetrics()
+                }
+            } catch (e: Exception) {
+                Log.e("HealthRepository", "Firestore fallback failed", e)
             }
         }
         return metrics

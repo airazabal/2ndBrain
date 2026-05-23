@@ -9,6 +9,7 @@ import com.alex.a2ndbrain.core.reflection.GeminiAgent
 import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.health.HealthRepository
+import com.alex.a2ndbrain.core.sync.CloudHealthSyncManager
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
@@ -49,6 +50,12 @@ val appModule = module {
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
     single { HealthRepository(get(), get()) }
+    // Wire cloud sync back into the repository after both are created (breaks circular dep)
+    single {
+        CloudHealthSyncManager(androidContext(), get<HealthRepository>()).also {
+            get<HealthRepository>().cloudSync = it
+        }
+    }
     single { ZendenceMeditationRepository(androidContext()) }
     single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get()) }
 

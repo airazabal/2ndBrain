@@ -54,6 +54,8 @@ class MainActivity : ComponentActivity() {
     private val reflectionPicker: ReflectionManager by inject()
     private val digitalTimeManager: DigitalTimeManager by inject()
     private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager by inject()
+    // Eagerly instantiated so it wires cloudSync into HealthRepository before first health read
+    private val cloudHealthSyncManager: com.alex.a2ndbrain.core.sync.CloudHealthSyncManager by inject()
 
     override fun onStart() {
         super.onStart()
@@ -91,9 +93,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        com.alex.a2ndbrain.core.sync.FirebaseInitializer.init(this)
         reflectionPicker.schedulePeriodicReflection()
         digitalTimeManager.schedulePeriodicSync()
         nearbySyncManager.schedulePeriodicP2pSync()
+        com.alex.a2ndbrain.core.sync.CloudSyncWorker.schedule(this)
 
         enableEdgeToEdge()
         setContent {
