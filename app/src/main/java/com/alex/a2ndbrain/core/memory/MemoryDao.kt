@@ -39,6 +39,9 @@ interface MemoryDao {
     @Query("SELECT * FROM daily_summaries ORDER BY timestamp DESC")
     fun getAllSummaries(): Flow<List<DailySummaryEntity>>
 
+    @Query("SELECT * FROM daily_summaries ORDER BY timestamp DESC LIMIT 1")
+    suspend fun getLatestSummary(): DailySummaryEntity?
+
     @Query("DELETE FROM daily_summaries")
     suspend fun deleteAllSummaries()
 

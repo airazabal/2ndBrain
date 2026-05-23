@@ -78,6 +78,16 @@
         </activity-alias>
 
         <!-- Habit Alarms & Broadcast Receivers -->
+        <!-- Proactive unlock nudge -->
+        <receiver
+            android:name=".core.nudge.UnlockNudgeReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.USER_PRESENT" />
+            </intent-filter>
+        </receiver>
+
         <!-- Home screen widget -->
         <receiver
             android:name=".ui.widget.BrainWidgetReceiver"
