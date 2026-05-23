@@ -1,7 +1,7 @@
 # 2ndBrain 🧠
 2ndBrain is a personal productivity cockpit for Android. It captures high-signal data from your daily digital life—notifications, clipboard snippets, smartwatch logs, app usage, and meditation sessions—into a private local store. It then leverages advanced AI to provide proactive advice, daily briefings, and insights into your routine.
 
-📊 **[View App Infographic](infographic.html)** — visual overview of features, data pipeline, and architecture.
+![2ndBrain Infographic](infographic.png)
 
 ## ✨ Key Features
 
