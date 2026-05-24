@@ -569,6 +569,12 @@ class MainActivity : ComponentActivity() {
                                                     val consolidatedUsage by homeViewModel.consolidatedUsage.collectAsStateWithLifecycle()
                                                     val summaries by homeViewModel.summaries.collectAsStateWithLifecycle()
                                                     val homeSummaryConfig by homeViewModel.homeSummaryConfig.collectAsStateWithLifecycle()
+                                                    val lastRefreshedAt by homeViewModel.lastRefreshedAt.collectAsStateWithLifecycle()
+                                                    val refreshIntervalMinutes by homeViewModel.refreshIntervalMinutes.collectAsStateWithLifecycle()
+                                                    val unreadEmailCount by homeViewModel.unreadEmailCount.collectAsStateWithLifecycle()
+                                                    val unreadMessageCount by homeViewModel.unreadMessageCount.collectAsStateWithLifecycle()
+                                                    val meetingsTodayCount by homeViewModel.meetingsTodayCount.collectAsStateWithLifecycle()
+                                                    val overdueHabitsCount by homeViewModel.overdueHabitsCount.collectAsStateWithLifecycle()
 
                                                     LaunchedEffect(Unit) {
                                                         homeViewModel.checkHealthPermissionsAndSync()
@@ -640,7 +646,16 @@ class MainActivity : ComponentActivity() {
                                                         },
                                                         homeSummaryConfig = homeSummaryConfig,
                                                         lastDetailsExpanded = homeViewModel.lastDetailsExpanded,
-                                                        onSaveDetailsExpanded = { homeViewModel.saveLastDetailsExpanded(it) }
+                                                        onSaveDetailsExpanded = { homeViewModel.saveLastDetailsExpanded(it) },
+                                                        lastRefreshedAt = lastRefreshedAt,
+                                                        refreshIntervalMinutes = refreshIntervalMinutes,
+                                                        unreadEmailCount = unreadEmailCount,
+                                                        unreadMessageCount = unreadMessageCount,
+                                                        meetingsTodayCount = meetingsTodayCount,
+                                                        overdueHabitsCount = overdueHabitsCount,
+                                                        onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
+                                                        onDeleteHabit = { homeViewModel.deleteHabit(it) },
+                                                        onUpdateHabit = { habit, name, time -> homeViewModel.updateHabit(habit, name, time) }
                                                     )
                                                 }
 

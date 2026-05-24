@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -83,6 +84,7 @@ import java.util.Date
 
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     memories: List<MemoryEntity>,
@@ -120,12 +122,24 @@ fun HomeScreen(
     homeSummaryConfig: HomeSummaryConfig = HomeSummaryConfig(),
     lastDetailsExpanded: Boolean = false,
     onSaveDetailsExpanded: (Boolean) -> Unit = {},
+    lastRefreshedAt: Long = System.currentTimeMillis(),
+    refreshIntervalMinutes: Int = 30,
+    unreadEmailCount: Int = 0,
+    unreadMessageCount: Int = 0,
+    meetingsTodayCount: Int = 0,
+    overdueHabitsCount: Int = 0,
+    onRefreshIntervalChange: (Int) -> Unit = {},
+    onDeleteHabit: (String) -> Unit = {},
+    onUpdateHabit: (com.alex.a2ndbrain.core.memory.HabitEntity, String, String) -> Unit = { _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val ttsManager = remember { TtsManager(context) }
     val isSpeaking by ttsManager.isSpeaking.collectAsState()
 
+    var showOverdueSheet by remember { mutableStateOf(false) }
+    var showHabitsSheet by remember { mutableStateOf(false) }
+    var showMeetingsSheet by remember { mutableStateOf(false) }
     var showQuickAddDialog by remember { mutableStateOf(false) }
     var isTimelineExpanded by remember { mutableStateOf(true) }
     var expandedTimelineEventId by remember { mutableStateOf<String?>(null) }
@@ -171,912 +185,68 @@ fun HomeScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        // Smart summary card — always visible
+        // Dashboard header — greeting + stat cards
         item {
-            val currentMins = java.util.Calendar.getInstance().let {
-                it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE)
-            }
-            val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-            SmartSummaryCard(
-                senseOfDayScore      = senseOfDayScore,
-                senseOfDayContext    = senseOfDayContext,
-                config               = homeSummaryConfig,
-                topConflict          = timelineConflicts.maxByOrNull { if (it.severity == ConflictSeverity.ALERT) 1 else 0 },
-                completedHabitCount  = completedHabitIds.size,
-                totalHabitCount      = activeHabits.count { it.isActive },
-                nextEvent            = todayTimelineEvents.firstOrNull { it.minutesFromMidnight >= currentMins }
-                                        ?: todayTimelineEvents.firstOrNull(),
-                healthMetrics        = healthMetrics,
-                healthAvailable      = healthPermissionGranted,
-                meditatedToday       = meditationSessions.any {
-                    java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                        .format(java.util.Date(it.timestamp)) == todayStr
-                },
-                meditationWeekStreak = meditationStreaks.currentWeekStreak,
-                showDetails          = showDetails,
-                onToggleDetails      = {
-                    val next = !showDetails
-                    showDetails = next
-                    if (homeSummaryConfig.defaultMode == HomeDefaultMode.REMEMBER_LAST) {
-                        onSaveDetailsExpanded(next)
-                    }
-                },
-                onDeepDiveConflict   = onDeepDiveCoPilotPrompt
+            DashboardHeader(
+                lastRefreshedAt       = lastRefreshedAt,
+                refreshIntervalMinutes = refreshIntervalMinutes,
+                onRefreshIntervalChange = onRefreshIntervalChange,
+                overdueCount          = overdueHabitsCount,
+                unreadEmailCount      = unreadEmailCount,
+                meetingsCount         = meetingsTodayCount,
+                unreadMessageCount    = unreadMessageCount,
+                completedHabits       = completedHabitIds.size,
+                totalHabits           = activeHabits.count { it.isActive },
+                steps                 = healthMetrics.steps, // Long
+                sleepMinutes          = healthMetrics.sleepMinutes,
+                avgHeartRate          = healthMetrics.avgHeartRate,
+                onOverdueClick        = { showOverdueSheet = true },
+                onEmailClick          = { onNavigateToTab(AppTab.FEED) },
+                onMeetingsClick       = { showMeetingsSheet = true },
+                onMessagesClick       = { onNavigateToTab(AppTab.FEED) },
+                onHabitsClick         = { showHabitsSheet = true },
+                onHealthClick         = { onNavigateToTab(AppTab.WELLNESS) }
             )
         }
 
-        if (healthPermissionGranted && healthConnectAvailable) {
-            item {
-                HealthStripCard(
-                    healthMetrics = healthMetrics,
-                    onClick = { onNavigateToTab(AppTab.WELLNESS) }
-                )
-            }
-        }
-
-        // All detail sections — hidden until the user taps "Show all details"
+        // Needs Attention Now section
         item {
-            AnimatedVisibility(
-                visible = showDetails,
-                enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
-                exit  = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(24.dp)) {
-
-        // Daily Wellness & Habits Control Cockpit (Recommendation A & C)
-        /* detail-section-start */
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { onNavigateToTab(AppTab.SETTINGS) }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(PastelBlue),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ListAlt,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Daily Routine Cockpit",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Manage Habits",
-                            tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    val ringColor = remember(senseOfDayScore) { Color.hsv(senseOfDayScore.toFloat() * 1.3f, 0.75f, 0.9f) }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(20.dp)
-                    ) {
-                        // Custom HSL Sense of Day Score Ring with radial glow
-                        Box(
-                            modifier = Modifier
-                                .size(100.dp)
-                                .drawBehind {
-                                    drawCircle(
-                                        brush = Brush.radialGradient(
-                                            colors = listOf(ringColor.copy(alpha = 0.22f), Color.Transparent),
-                                            center = center,
-                                            radius = size.width / 1.4f
-                                        ),
-                                        radius = size.width / 1.4f
-                                    )
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                drawCircle(
-                                    color = Color.LightGray.copy(alpha = 0.2f),
-                                    style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round)
-                                )
-                                // Dynamic HSV color representation (Green/Cyan for balanced days)
-                                val sweepAngle = (senseOfDayScore.toFloat() / 100f) * 360f
-                                drawArc(
-                                    color = ringColor,
-                                    startAngle = -90f,
-                                    sweepAngle = sweepAngle,
-                                    useCenter = false,
-                                    style = Stroke(width = 8.dp.toPx(), cap = StrokeCap.Round)
-                                )
-                            }
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "$senseOfDayScore%",
-                                    style = MaterialTheme.typography.headlineMedium,
-                                    fontWeight = FontWeight.Black,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = "Sense of Day",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.outline
-                                )
-                            }
-                        }
-
-                        // Habit checklist list
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            activeHabits.filter { it.isActive }.forEach { habit ->
-                                val isCompleted = completedHabitIds.contains(habit.id)
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { onToggleHabit(habit.id) }
-                                        .padding(vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    val isPendingMedication = !isCompleted && habit.isMedication
-                                    Icon(
-                                        imageVector = if (isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                        contentDescription = null,
-                                        tint = if (isCompleted) PastelGreen else if (isPendingMedication) Color.Red else MaterialTheme.colorScheme.outline,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column(
-                                        modifier = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.Center
-                                    ) {
-                                        // Time on top
-                                        Text(
-                                            text = habit.timeString,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isPendingMedication) Color.Red else MaterialTheme.colorScheme.primary
-                                        )
-                                        
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        
-                                        // Horizontal basicMarquee scrollable text widget under
-                                        Text(
-                                            text = habit.name,
-                                            style = MaterialTheme.typography.bodyMedium.copy(
-                                                color = if (isPendingMedication) Color.Red else MaterialTheme.colorScheme.onSurface
-                                            ),
-                                            fontWeight = if (isCompleted) FontWeight.Bold else FontWeight.Normal,
-                                            maxLines = 1,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .basicMarquee()
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Adaptive AI Alignment Context Box
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = ringColor.copy(alpha = 0.06f)
-                        ),
-                        border = BorderStroke(1.dp, ringColor.copy(alpha = 0.16f)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Text(
-                                text = "AI ALIGNMENT",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = ringColor,
-                                modifier = Modifier
-                                    .border(BorderStroke(1.dp, ringColor.copy(alpha = 0.35f)), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                            Text(
-                                text = senseOfDayContext,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-
-
-                    // Historical Wellness Streaks Dashboard (Phase 2, Step 3)
-                    if (pastWeekHabitCompletions.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.LightGray.copy(alpha = 0.2f)))
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        Text(
-                            text = "Weekly Completion History",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            pastWeekHabitCompletions.forEach { (dayLabel, completionRate) ->
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier.size(36.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Canvas(modifier = Modifier.fillMaxSize()) {
-                                            drawCircle(
-                                                color = Color.LightGray.copy(alpha = 0.15f),
-                                                style = Stroke(width = 3.dp.toPx())
-                                            )
-                                            drawArc(
-                                                color = if (completionRate >= 1.0f) PastelGreen else if (completionRate > 0f) PastelBlue else Color.LightGray.copy(alpha = 0.4f),
-                                                startAngle = -90f,
-                                                sweepAngle = completionRate * 360f,
-                                                useCenter = false,
-                                                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-                                            )
-                                        }
-                                        Text(
-                                            text = "${(completionRate * 100).toInt()}%",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontSize = 8.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                    Text(
-                                        text = dayLabel,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }  // end Column
-    }  // end AnimatedVisibility
-}  // end detail item
-
-        if (showDetails && timelineConflicts.isNotEmpty()) {
-            item {
-                ActiveConflictsSection(
-                    conflicts = timelineConflicts,
-                    inlineCopilotResponses = inlineCopilotResponses,
-                    inlineCopilotLoading = inlineCopilotLoading,
-                    onDismissConflict = onDismissConflict,
-                    onDeepDive = onDeepDiveCoPilotPrompt,
-                    onResolveInline = onResolveInline
-                )
-            }
-        }
-
-        // Today's Calendar & Schedule Timeline (Recommendation B)
-        if (showDetails) item {
-            val chevronRotation by animateFloatAsState(
-                targetValue = if (isTimelineExpanded) 180f else 0f,
-                animationSpec = tween(durationMillis = 300),
-                label = "timelineChevron"
+            NeedsAttentionCard(
+                activeHabits    = activeHabits,
+                completedHabitIds = completedHabitIds,
+                meetingsToday   = todayTimelineEvents.filter { it.sourcePackage == "calendar" },
+                unreadEmailCount = unreadEmailCount,
+                onHabitClick    = { showOverdueSheet = true },
+                onMeetingsClick = { showMeetingsSheet = true },
+                onEmailClick    = { onNavigateToTab(AppTab.FEED) }
             )
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-                shape = RoundedCornerShape(28.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(20.dp)) {
-                    // Clickable Header to Expand/Collapse
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { isTimelineExpanded = !isTimelineExpanded }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(PastelYellow),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccessTime,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp),
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Upcoming Schedule & Timeline",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            val totalEvents = todayTimelineEvents.size + tomorrowTimelineEvents.size
-                            Text(
-                                text = when {
-                                    totalEvents == 0 -> "No events scheduled"
-                                    tomorrowTimelineEvents.isEmpty() -> "${todayTimelineEvents.size} events today"
-                                    todayTimelineEvents.isEmpty() -> "${tomorrowTimelineEvents.size} events tomorrow"
-                                    else -> "${todayTimelineEvents.size} today · ${tomorrowTimelineEvents.size} tomorrow"
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
-
-                        // Expand/Collapse Chevron
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Expand or Collapse",
-                            modifier = Modifier
-                                .rotate(chevronRotation)
-                                .size(24.dp),
-                            tint = MaterialTheme.colorScheme.outline
-                        )
-                    }
-
-                    AnimatedVisibility(visible = isTimelineExpanded) {
-                        Column {
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Action Toolbar for Timeline
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 12.dp),
-                                horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Speaking soundwaves
-                                if (isSpeaking) {
-                                    SpeakingSoundwave(
-                                        isSpeaking = true,
-                                        modifier = Modifier.padding(horizontal = 8.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                }
-
-                                // Refresh button
-                                IconButton(
-                                    onClick = { onRefreshHealth() },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Refresh,
-                                        contentDescription = "Refresh Timeline",
-                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-
-                                // Voice Briefing button
-                                IconButton(
-                                    onClick = {
-                                        if (isSpeaking) {
-                                            ttsManager.stop()
-                                        } else {
-                                            val briefText = buildString {
-                                                append("Here is your proactive schedule briefing. ")
-                                                if (todayTimelineEvents.isEmpty()) {
-                                                    append("You have no events scheduled for today.")
-                                                } else {
-                                                    append("You have ${todayTimelineEvents.size} events today. ")
-                                                    todayTimelineEvents.forEach { event ->
-                                                        append("At ${event.time}, ${event.title}. ")
-                                                    }
-                                                }
-                                                if (tomorrowTimelineEvents.isNotEmpty()) {
-                                                    append("Tomorrow you have ${tomorrowTimelineEvents.size} events. ")
-                                                    tomorrowTimelineEvents.forEach { event ->
-                                                        append("At ${event.time}, ${event.title}. ")
-                                                    }
-                                                }
-                                                if (timelineConflicts.isNotEmpty()) {
-                                                    append("However, I noticed ${timelineConflicts.size} proactive warnings. ")
-                                                    timelineConflicts.forEach { conflict ->
-                                                        append(conflict.description + " ")
-                                                    }
-                                                    append("Please address these when you have a moment.")
-                                                }
-                                            }
-                                            ttsManager.speak(briefText, "timeline_briefing")
-                                        }
-                                    },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isSpeaking) Icons.Default.VolumeMute else Icons.Default.VolumeUp,
-                                        contentDescription = "Voice Briefing",
-                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-
-                                // Quick Add button
-                                IconButton(
-                                    onClick = { showQuickAddDialog = true },
-                                    modifier = Modifier.size(36.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = "Add Agenda Event",
-                                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                            }
-
-                            if (todayTimelineEvents.isEmpty() && tomorrowTimelineEvents.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .background(
-                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f),
-                                            shape = RoundedCornerShape(16.dp)
-                                        )
-                                        .padding(24.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = "No upcoming appointments found. Calendar events, routine habits, and parsed Obsidian logs will synchronize here automatically.",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                    )
-                                }
-                            } else {
-                                // TODAY section
-                                Text(
-                                    text = "Today",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(vertical = 6.dp)
-                                )
-                                if (todayTimelineEvents.isEmpty()) {
-                                    Text(
-                                        "No events captured yet for today.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline,
-                                        modifier = Modifier.padding(bottom = 8.dp)
-                                    )
-                                }
-                            }
-                            if (todayTimelineEvents.isNotEmpty()) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .horizontalScroll(rememberScrollState())
-                                        .padding(vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                ) {
-                                    val infiniteTransition = rememberInfiniteTransition(label = "timePulse")
-                                    val pulseScale by infiniteTransition.animateFloat(
-                                        initialValue = 6f,
-                                        targetValue = 12f,
-                                        animationSpec = infiniteRepeatable(
-                                            animation = tween(1000, easing = FastOutSlowInEasing),
-                                            repeatMode = RepeatMode.Reverse
-                                        ),
-                                        label = "pulse"
-                                    )
-
-                                    todayTimelineEvents.forEachIndexed { index, event ->
-                                        val conflict = timelineConflicts.find { it.relatedEventIds.contains(event.id) }
-                                        val isConflicting = conflict != null
-                                        
-                                        // Colors mapping based on event category
-                                        val (startColor, endColor, dotColor) = when {
-                                            isConflicting ->
-                                                Triple(Color(0xFFFFCDD2), Color(0xFFEF9A9A), Color(0xFFD32F2F))
-                                            event.appName.contains("Calendar", ignoreCase = true) || event.sourcePackage == "calendar" -> 
-                                                Triple(Color(0xFFE3F2FD), Color(0xFFBBDEFB), Color(0xFF1E88E5))
-                                            event.appName.contains("Obsidian", ignoreCase = true) || event.sourcePackage == "obsidian" -> 
-                                                Triple(Color(0xFFE0F2F1), Color(0xFFB2DFDB), Color(0xFF00897B))
-                                            event.appName.contains("Routines", ignoreCase = true) || event.sourcePackage == "habit" -> 
-                                                Triple(Color(0xFFFFF3E0), Color(0xFFFFE0B2), Color(0xFFF4511E))
-                                            event.sourcePackage == "manual" -> 
-                                                Triple(Color(0xFFF3E5F5), Color(0xFFE1BEE7), Color(0xFF8E24AA))
-                                            else -> // Notification / Gmail / Messages / Slack etc.
-                                                Triple(Color(0xFFF5F5F5), Color(0xFFE0E0E0), Color(0xFF9E9E9E))
-                                        }
-                                        
-                                        val isExpanded = expandedTimelineEventId == event.id
-
-                                        Column(
-                                            modifier = Modifier
-                                                .width(280.dp)
-                                                .padding(vertical = 4.dp),
-                                            horizontalAlignment = Alignment.Start
-                                        ) {
-                                            // Horizontal Connector Line & Node
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier.size(24.dp),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Canvas(modifier = Modifier.fillMaxSize()) {
-                                                        val isFirst = index == 0
-                                                        val isLast = index == todayTimelineEvents.size - 1
-                                                        
-                                                        // Draw connection line
-                                                        val startX = if (isFirst) size.width / 2 else 0f
-                                                        val endX = if (isLast) size.width / 2 else size.width
-                                                        drawLine(
-                                                            color = Color.LightGray.copy(alpha = 0.5f),
-                                                            start = androidx.compose.ui.geometry.Offset(startX, size.height / 2),
-                                                            end = androidx.compose.ui.geometry.Offset(endX, size.height / 2),
-                                                            strokeWidth = 3.dp.toPx()
-                                                        )
-                                                        
-                                                        // Draw category point
-                                                        drawCircle(
-                                                            color = dotColor,
-                                                            radius = 5.dp.toPx(),
-                                                            center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
-                                                        )
-                                                    }
-
-                                                    // Pulsing active node
-                                                    if ((event.sourcePackage == "habit" && !completedHabitIds.contains(event.id)) || isConflicting) {
-                                                        Canvas(modifier = Modifier.fillMaxSize()) {
-                                                            drawCircle(
-                                                                color = dotColor.copy(alpha = 0.3f),
-                                                                radius = pulseScale.dp.toPx(),
-                                                                center = androidx.compose.ui.geometry.Offset(size.width / 2, size.height / 2)
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                                
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                
-                                                Text(
-                                                    text = event.time,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
-                                                )
-                                            }
-
-                                            Spacer(modifier = Modifier.height(8.dp))
-
-                                            // Category HSL Card
-                                            Card(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable { expandedTimelineEventId = if (isExpanded) null else event.id },
-                                                shape = RoundedCornerShape(16.dp),
-                                                elevation = CardDefaults.cardElevation(defaultElevation = if (isExpanded || isConflicting) 4.dp else 2.dp),
-                                                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                                                border = if (isConflicting) BorderStroke(1.5.dp, Color(0xFFD32F2F).copy(alpha = 0.6f)) else null
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .background(
-                                                            Brush.verticalGradient(listOf(startColor, endColor))
-                                                        )
-                                                        .padding(14.dp)
-                                                ) {
-                                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                                        Column(modifier = Modifier.weight(1f)) {
-                                                            Text(
-                                                                text = event.title,
-                                                                style = MaterialTheme.typography.bodyMedium,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = Color.Black.copy(alpha = 0.8f)
-                                                            )
-                                                            Spacer(modifier = Modifier.height(2.dp))
-                                                            Text(
-                                                                text = if (isExpanded) event.description else event.description.take(45) + if (event.description.length > 45) "..." else "",
-                                                                style = MaterialTheme.typography.bodySmall,
-                                                                color = Color.Black.copy(alpha = 0.6f)
-                                                            )
-                                                        }
-                                                        
-                                                        Spacer(modifier = Modifier.width(8.dp))
-                                                        
-                                                        // If manual insert, support deleting
-                                                        if (event.sourcePackage == "manual") {
-                                                            IconButton(
-                                                                onClick = { onDeleteManualEvent(event.id) }
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector = Icons.Default.Delete,
-                                                                    contentDescription = "Delete Event",
-                                                                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                                                    modifier = Modifier.size(20.dp)
-                                                                )
-                                                            }
-                                                        } else {
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .clip(RoundedCornerShape(6.dp))
-                                                                    .background(Color.White.copy(alpha = 0.4f))
-                                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                                                            ) {
-                                                                Text(
-                                                                    text = event.appName,
-                                                                    style = MaterialTheme.typography.labelSmall,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    color = Color.Black.copy(alpha = 0.8f)
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                    
-                                                    AnimatedVisibility(visible = isExpanded) {
-                                                        Column {
-                                                            Spacer(modifier = Modifier.height(12.dp))
-                                                            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Color.Black.copy(alpha = 0.1f)))
-                                                            Spacer(modifier = Modifier.height(8.dp))
-                                                            
-                                                            if (isConflicting && conflict != null) {
-                                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                                    Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = Color(0xFFD32F2F), modifier = Modifier.size(16.dp))
-                                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                                    Text(text = conflict.title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F))
-                                                                }
-                                                                Spacer(modifier = Modifier.height(4.dp))
-                                                                Text(text = conflict.description, style = MaterialTheme.typography.bodySmall, color = Color.Black.copy(alpha = 0.7f))
-                                                                Spacer(modifier = Modifier.height(8.dp))
-                                                                
-                                                                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                                                    Button(
-                                                                        onClick = { onResolveInline(event.id, conflict.deepDivePrompt) },
-                                                                        enabled = !inlineCopilotLoading.contains(event.id),
-                                                                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.5f), contentColor = Color(0xFFD32F2F)),
-                                                                        shape = RoundedCornerShape(8.dp),
-                                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                                                        modifier = Modifier.height(32.dp)
-                                                                    ) {
-                                                                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                                        Spacer(modifier = Modifier.width(4.dp))
-                                                                        Text("RESOLVE CONFLICT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                                                    }
-                                                                }
-                                                            } else {
-                                                                // No conflict, just standard action
-                                                                val askPrompt = """
-                                                                    Analyze my memories, notes, and habits for today's event: "${event.title}" scheduled at ${event.time} (${event.appName}). Please provide a cohesive context correlation summary to help me prepare.
-                                                                """.trimIndent()
-                                                                
-                                                                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                                                    Button(
-                                                                        onClick = { onResolveInline(event.id, askPrompt) },
-                                                                        enabled = !inlineCopilotLoading.contains(event.id),
-                                                                        colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.5f), contentColor = Color.Black.copy(alpha = 0.7f)),
-                                                                        shape = RoundedCornerShape(8.dp),
-                                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                                                                        modifier = Modifier.height(32.dp)
-                                                                    ) {
-                                                                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(14.dp))
-                                                                        Spacer(modifier = Modifier.width(4.dp))
-                                                                        Text("ASK CO-PILOT", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                                                    }
-                                                                }
-                                                            }
- 
-                                                            // Inline AI response container
-                                                            val inlineResponse = inlineCopilotResponses[event.id]
-                                                            val isLoading = inlineCopilotLoading.contains(event.id)
- 
-                                                            if (isLoading) {
-                                                                Spacer(modifier = Modifier.height(12.dp))
-                                                                Box(
-                                                                    modifier = Modifier
-                                                                        .fillMaxWidth()
-                                                                        .padding(8.dp),
-                                                                    contentAlignment = Alignment.Center
-                                                                ) {
-                                                                    CircularProgressIndicator(
-                                                                        modifier = Modifier.size(24.dp),
-                                                                        color = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary,
-                                                                        strokeWidth = 2.5.dp
-                                                                    )
-                                                                }
-                                                            }
- 
-                                                            if (inlineResponse != null) {
-                                                                Spacer(modifier = Modifier.height(12.dp))
-                                                                Card(
-                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                    colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.6f)),
-                                                                    shape = RoundedCornerShape(12.dp)
-                                                                ) {
-                                                                    Column(modifier = Modifier.padding(12.dp)) {
-                                                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                                                            Icon(
-                                                                                imageVector = Icons.Default.AutoAwesome,
-                                                                                contentDescription = null,
-                                                                                tint = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary,
-                                                                                modifier = Modifier.size(16.dp)
-                                                                            )
-                                                                            Spacer(modifier = Modifier.width(6.dp))
-                                                                            Text(
-                                                                                text = "Co-Pilot Strategy",
-                                                                                style = MaterialTheme.typography.labelMedium,
-                                                                                fontWeight = FontWeight.Bold,
-                                                                                color = if (isConflicting) Color(0xFFD32F2F) else MaterialTheme.colorScheme.primary
-                                                                            )
-                                                                        }
-                                                                        Spacer(modifier = Modifier.height(6.dp))
-                                                                        Text(
-                                                                            text = inlineResponse,
-                                                                            style = MaterialTheme.typography.bodySmall,
-                                                                            color = Color.Black.copy(alpha = 0.8f)
-                                                                        )
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // TOMORROW section
-                            if (todayTimelineEvents.isNotEmpty() || tomorrowTimelineEvents.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(16.dp))
-                                val tomorrowLabel = run {
-                                    val cal = java.util.Calendar.getInstance().apply {
-                                        add(java.util.Calendar.DAY_OF_YEAR, 1)
-                                    }
-                                    "Tomorrow · " + java.text.SimpleDateFormat("EEE, MMM d", java.util.Locale.getDefault()).format(cal.time)
-                                }
-                                Text(
-                                    text = tomorrowLabel,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.secondary,
-                                    modifier = Modifier.padding(vertical = 6.dp)
-                                )
-                                if (tomorrowTimelineEvents.isEmpty()) {
-                                    Text(
-                                        "No events found for tomorrow.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.outline
-                                    )
-                                } else {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        tomorrowTimelineEvents.forEach { event ->
-                                            val dotColor = when (event.sourcePackage) {
-                                                "calendar" -> Color(0xFF1E88E5)
-                                                "habit"    -> Color(0xFFF4511E)
-                                                else       -> Color(0xFF9E9E9E)
-                                            }
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(RoundedCornerShape(10.dp))
-                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(8.dp)
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(dotColor)
-                                                )
-                                                Spacer(modifier = Modifier.width(10.dp))
-                                                Text(
-                                                    text = event.time,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.outline,
-                                                    modifier = Modifier.width(60.dp)
-                                                )
-                                                Text(
-                                                    text = event.title,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    fontWeight = FontWeight.Medium,
-                                                    modifier = Modifier.weight(1f)
-                                                )
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(dotColor.copy(alpha = 0.15f))
-                                                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                                                ) {
-                                                    Text(
-                                                        text = event.appName,
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = dotColor
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
         }
-
 
     }
 
-    if (showQuickAddDialog) {
-        var eventTitle by remember { mutableStateOf("") }
-        var eventTime by remember { mutableStateOf("") }
-        
+    // ── Shared edit dialog state ─────────────────────────────────────────────
+    var editingHabit by remember { mutableStateOf<HabitEntity?>(null) }
+
+    editingHabit?.let { habit ->
+        var editName by remember(habit.id) { mutableStateOf(habit.name) }
+        var editTime by remember(habit.id) { mutableStateOf(habit.timeString) }
         AlertDialog(
-            onDismissRequest = { showQuickAddDialog = false },
-            title = { Text(text = "➕ Quick-Add Agenda Event", fontWeight = FontWeight.Bold) },
+            onDismissRequest = { editingHabit = null },
+            title = { Text("Edit Habit", fontWeight = FontWeight.Bold) },
             text = {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
-                        value = eventTitle,
-                        onValueChange = { eventTitle = it },
-                        label = { Text("Event Title") },
-                        placeholder = { Text("e.g. Gym workout") },
+                        value = editName,
+                        onValueChange = { editName = it },
+                        label = { Text("Name") },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
-                        value = eventTime,
-                        onValueChange = { eventTime = it },
-                        label = { Text("Scheduled Time") },
-                        placeholder = { Text("e.g. 7:00 PM") },
+                        value = editTime,
+                        onValueChange = { editTime = it },
+                        label = { Text("Time (HH:MM, 24h)") },
+                        placeholder = { Text("e.g. 08:00") },
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -1085,22 +255,316 @@ fun HomeScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        if (eventTitle.isNotBlank() && eventTime.isNotBlank()) {
-                            onAddManualEvent(eventTitle.trim(), eventTime.trim())
-                            showQuickAddDialog = false
+                        if (editName.isNotBlank() && editTime.isNotBlank()) {
+                            onUpdateHabit(habit, editName, editTime)
+                            editingHabit = null
                         }
                     },
                     shape = RoundedCornerShape(12.dp)
-                ) {
-                    Text("Add to Timeline")
-                }
+                ) { Text("Save") }
             },
             dismissButton = {
-                TextButton(onClick = { showQuickAddDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { editingHabit = null }) { Text("Cancel") }
             }
         )
+    }
+
+    // ── Overdue Habits Sheet ──────────────────────────────────────────────────
+    if (showOverdueSheet) {
+        val cal = java.util.Calendar.getInstance()
+        val currentMins = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+        val overdueHabits = activeHabits.filter { habit ->
+            val parts = habit.timeString.split(":")
+            val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
+            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+            habit.isActive && (h * 60 + m) < currentMins && habit.id !in completedHabitIds
+        }
+        ModalBottomSheet(onDismissRequest = { showOverdueSheet = false }) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+                Text("Overdue Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text("${overdueHabits.size} habit(s) past their scheduled time",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Spacer(Modifier.height(16.dp))
+                if (overdueHabits.isEmpty()) {
+                    Text("All caught up! No overdue habits.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                } else {
+                    overdueHabits.forEach { habit ->
+                        HabitSheetRow(
+                            habit = habit,
+                            isCompleted = habit.id in completedHabitIds,
+                            showOverdueBadge = true,
+                            onToggle = { onToggleHabit(habit.id) },
+                            onDelete = { onDeleteHabit(habit.id); showOverdueSheet = false },
+                            onEdit = { editingHabit = it }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
+                }
+            }
+        }
+    }
+
+    // ── All Habits Sheet ──────────────────────────────────────────────────────
+    if (showHabitsSheet) {
+        ModalBottomSheet(onDismissRequest = { showHabitsSheet = false }) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+                Text("Today's Habits", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text("${completedHabitIds.size} / ${activeHabits.count { it.isActive }} completed",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Spacer(Modifier.height(16.dp))
+                if (activeHabits.isEmpty()) {
+                    Text("No habits configured. Add habits in Settings.",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                } else {
+                    activeHabits.filter { it.isActive }.sortedBy { habit ->
+                        val parts = habit.timeString.split(":")
+                        (parts.getOrNull(0)?.toIntOrNull() ?: 8) * 60 + (parts.getOrNull(1)?.toIntOrNull() ?: 0)
+                    }.forEach { habit ->
+                        val cal2 = java.util.Calendar.getInstance()
+                        val currentMins2 = cal2.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal2.get(java.util.Calendar.MINUTE)
+                        val parts = habit.timeString.split(":")
+                        val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
+                        val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                        val isOverdue = (h * 60 + m) < currentMins2 && habit.id !in completedHabitIds
+                        HabitSheetRow(
+                            habit = habit,
+                            isCompleted = habit.id in completedHabitIds,
+                            showOverdueBadge = isOverdue,
+                            onToggle = { onToggleHabit(habit.id) },
+                            onDelete = { onDeleteHabit(habit.id) },
+                            onEdit = { editingHabit = it }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
+                }
+            }
+        }
+    }
+
+    // ── Meetings Sheet ────────────────────────────────────────────────────────
+    if (showMeetingsSheet) {
+        val meetings = todayTimelineEvents.filter { it.sourcePackage == "calendar" }
+        ModalBottomSheet(onDismissRequest = { showMeetingsSheet = false }) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+                Text("Today's Meetings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text("${meetings.size} calendar event(s) today",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Spacer(Modifier.height(16.dp))
+                if (meetings.isEmpty()) {
+                    Text("No calendar events today.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                } else {
+                    meetings.sortedBy { it.minutesFromMidnight }.forEach { event ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.width(52.dp)
+                            ) {
+                                Text(event.time, style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(event.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(event.appName, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                            }
+                            Icon(Icons.Default.Schedule, contentDescription = null,
+                                tint = Color(0xFF1E88E5), modifier = Modifier.size(18.dp))
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NeedsAttentionCard(
+    activeHabits: List<HabitEntity>,
+    completedHabitIds: Set<String>,
+    meetingsToday: List<com.alex.a2ndbrain.TimelineEvent>,
+    unreadEmailCount: Int,
+    onHabitClick: () -> Unit,
+    onMeetingsClick: () -> Unit,
+    onEmailClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val cal = java.util.Calendar.getInstance()
+    val currentMins = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
+
+    data class AttentionItem(
+        val label: String,
+        val detail: String,
+        val urgency: Int, // 0=urgent(red), 1=warning(amber), 2=healthy(green)
+        val onClick: () -> Unit
+    )
+
+    val items = buildList {
+        // Overdue medications → urgent/red
+        activeHabits.filter { it.isActive && it.isMedication && it.id !in completedHabitIds }.forEach { habit ->
+            val parts = habit.timeString.split(":")
+            val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
+            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+            if ((h * 60 + m) < currentMins) {
+                add(AttentionItem("${habit.name} — OVERDUE.", "Medication scheduled for ${habit.timeString}, not yet taken.", 0, onHabitClick))
+            }
+        }
+        // Overdue non-medication habits → warning/amber
+        activeHabits.filter { it.isActive && !it.isMedication && it.id !in completedHabitIds }.forEach { habit ->
+            val parts = habit.timeString.split(":")
+            val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
+            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+            if ((h * 60 + m) < currentMins) {
+                add(AttentionItem("${habit.name} — past due.", "Scheduled for ${habit.timeString}. Mark done or reschedule.", 1, onHabitClick))
+            }
+        }
+        // Meetings today → amber
+        if (meetingsToday.isNotEmpty()) {
+            val upcoming = meetingsToday.filter { it.minutesFromMidnight > currentMins }
+            if (upcoming.isNotEmpty()) {
+                val next = upcoming.first()
+                add(AttentionItem("${upcoming.size} meeting(s) today.", "Next: ${next.title} at ${next.time}.", 1, onMeetingsClick))
+            }
+        }
+        // Unread email → amber if >5
+        if (unreadEmailCount > 5) {
+            add(AttentionItem("$unreadEmailCount unread emails.", "Tap to review your inbox.", 1, onEmailClick))
+        }
+        // All caught up → green
+        if (isEmpty()) {
+            add(AttentionItem("All clear!", "No overdue actions or urgent items right now.", 2) {})
+        }
+    }
+
+    val hasUrgent = items.any { it.urgency == 0 }
+    val bgColor = when {
+        hasUrgent -> Color(0xFFEF5350).copy(alpha = 0.08f)
+        items.all { it.urgency == 2 } -> Color(0xFF66BB6A).copy(alpha = 0.08f)
+        else -> Color(0xFFFF9800).copy(alpha = 0.08f)
+    }
+    val borderColor = when {
+        hasUrgent -> Color(0xFFEF5350).copy(alpha = 0.25f)
+        items.all { it.urgency == 2 } -> Color(0xFF66BB6A).copy(alpha = 0.25f)
+        else -> Color(0xFFFF9800).copy(alpha = 0.25f)
+    }
+    val titleColor = when {
+        hasUrgent -> Color(0xFFD32F2F)
+        items.all { it.urgency == 2 } -> Color(0xFF388E3C)
+        else -> Color(0xFFE65100)
+    }
+
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = bgColor),
+        border = BorderStroke(1.dp, borderColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.NotificationsActive, contentDescription = null,
+                    tint = titleColor, modifier = Modifier.size(18.dp))
+                Text(
+                    text = if (items.all { it.urgency == 2 }) "All Clear" else "Needs Your Attention Now",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = titleColor
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            items.forEach { item ->
+                val itemColor = when (item.urgency) {
+                    0 -> Color(0xFFD32F2F)
+                    1 -> Color(0xFFE65100)
+                    else -> Color(0xFF388E3C)
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
+                        .clickable { item.onClick() },
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(itemColor)
+                    )
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        Text(
+                            text = item.label,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = itemColor
+                        )
+                        if (item.detail.isNotBlank()) {
+                            Text(
+                                text = item.detail,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+                            )
+                        }
+                    }
+                }
+                if (item != items.last()) Spacer(Modifier.height(4.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun HabitSheetRow(
+    habit: HabitEntity,
+    isCompleted: Boolean,
+    showOverdueBadge: Boolean,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit,
+    onEdit: (HabitEntity) -> Unit = {}
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = isCompleted, onCheckedChange = { onToggle() })
+        Column(modifier = Modifier.weight(1f)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(habit.name, style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isCompleted) FontWeight.Normal else FontWeight.SemiBold,
+                    color = if (isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            else MaterialTheme.colorScheme.onSurface)
+                if (showOverdueBadge && !isCompleted) {
+                    Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                        color = Color(0xFFEF5350).copy(alpha = 0.15f)) {
+                        Text("past due", modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                            fontSize = 9.sp, color = Color(0xFFEF5350), fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            Text(habit.timeString, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+        }
+        IconButton(onClick = { onEdit(habit) }, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Edit, contentDescription = "Edit",
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
+        }
+        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Default.Delete, contentDescription = "Delete",
+                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
+        }
     }
 }
 

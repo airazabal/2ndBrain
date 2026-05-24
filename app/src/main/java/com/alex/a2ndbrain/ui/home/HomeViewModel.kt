@@ -46,6 +46,17 @@ class HomeViewModel(
 ) : ViewModel() {
     val healthConnectManager get() = healthRepository.healthConnectManager
 
+    private val _lastRefreshedAt = MutableStateFlow(System.currentTimeMillis())
+    val lastRefreshedAt: StateFlow<Long> = _lastRefreshedAt.asStateFlow()
+
+    private val _refreshIntervalMinutes = MutableStateFlow(settingsManager.getRefreshIntervalMinutes())
+    val refreshIntervalMinutes: StateFlow<Int> = _refreshIntervalMinutes.asStateFlow()
+
+    fun setRefreshInterval(minutes: Int) {
+        settingsManager.setRefreshIntervalMinutes(minutes)
+        _refreshIntervalMinutes.value = minutes
+    }
+
     val summaries = memoryRepository.getAllSummariesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
@@ -70,6 +81,24 @@ class HomeViewModel(
 
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val unreadEmailCount: StateFlow<Int> = allMemoriesForHome.map { memories ->
+        val startOfToday = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        memories.count { it.source == "notification" && it.timestamp >= startOfToday &&
+            !it.isRead && emailPackages.any { pkg -> it.packageName?.contains(pkg) == true } }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+    val unreadMessageCount: StateFlow<Int> = allMemoriesForHome.map { memories ->
+        val startOfToday = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        memories.count { it.source == "notification" && it.timestamp >= startOfToday &&
+            messagingPackages.any { pkg -> it.packageName?.contains(pkg) == true } }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val _meditationSessions = MutableStateFlow<List<MeditationSession>>(emptyList())
     val meditationSessions: StateFlow<List<MeditationSession>> = _meditationSessions.asStateFlow()
@@ -116,6 +145,18 @@ class HomeViewModel(
     val completedHabitIdsToday: StateFlow<Set<String>> = habitsDao.getCompletionsForDate(getTodayDateString())
         .map { completions -> completions.map { it.habitId }.toSet() }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptySet())
+
+    val overdueHabitsCount: StateFlow<Int> = combine(activeHabitsToday, completedHabitIdsToday) { habits, completed ->
+        val cal = Calendar.getInstance()
+        val currentMins = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+        habits.count { habit ->
+            if (!habit.isActive) return@count false
+            val parts = habit.timeString.split(":")
+            val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
+            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+            (h * 60 + m) < currentMins && habit.id !in completed
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     val pastWeekHabitCompletions: StateFlow<List<Pair<String, Float>>> = activeHabitsToday.combine(
         flow {
@@ -466,7 +507,16 @@ class HomeViewModel(
         }
     }
 
-    companion object { private const val DAY_MS = 24 * 60 * 60 * 1000L }
+    val meetingsTodayCount: StateFlow<Int> = todayTimelineEvents.map { events ->
+        events.count { it.sourcePackage == "calendar" }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+    companion object {
+        private const val DAY_MS = 24 * 60 * 60 * 1000L
+        // Gmail package is com.google.android.gm — NOT "gmail"
+        private val emailPackages = setOf("google.android.gm", "outlook", "yahoo.mail", "protonmail", "hotmail", "thunderbird")
+        private val messagingPackages = setOf("whatsapp", "messaging", "messages", "mms", "sms", "messenger", "telegram", "signal", "viber")
+    }
 
     private val _dismissedConflictIds = MutableStateFlow<Set<String>>(emptySet())
     val dismissedConflictIds = _dismissedConflictIds.asStateFlow()
@@ -700,6 +750,18 @@ class HomeViewModel(
         }
     }
 
+    fun deleteHabit(habitId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            habitsDao.softDeleteHabit(habitId)
+        }
+    }
+
+    fun updateHabit(habit: HabitEntity, newName: String, newTime: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            habitsDao.insertHabit(habit.copy(name = newName.trim(), timeString = newTime.trim(), lastModifiedAt = System.currentTimeMillis()))
+        }
+    }
+
     fun undoHabitUncomplete(entity: HabitCompletionEntity) {
         viewModelScope.launch(Dispatchers.IO) {
             // Restore by re-inserting as not-deleted with a fresh timestamp
@@ -826,6 +888,7 @@ class HomeViewModel(
     }
 
     fun checkHealthPermissionsAndSync() {
+        _lastRefreshedAt.value = System.currentTimeMillis()
         refreshMonitoredApps()
         viewModelScope.launch(Dispatchers.IO) {
             val hcMetrics = healthRepository.getHCMetricsIfWearable()
