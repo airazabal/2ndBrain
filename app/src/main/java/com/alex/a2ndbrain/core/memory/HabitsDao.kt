@@ -11,8 +11,8 @@ interface HabitsDao {
     @Query("SELECT * FROM habits WHERE isDeleted = 0 ORDER BY createdAt ASC")
     suspend fun getAllHabitsSync(): List<HabitEntity>
 
-    @Query("SELECT * FROM habits WHERE isActive = 1 AND isDeleted = 0 ORDER BY createdAt ASC")
-    fun getActiveHabits(): Flow<List<HabitEntity>>
+    @Query("SELECT * FROM habits WHERE isActive = 1 AND isDeleted = 0 AND (repeatUntil IS NULL OR repeatUntil >= :nowMs) ORDER BY createdAt ASC")
+    fun getActiveHabits(nowMs: Long): Flow<List<HabitEntity>>
 
     // Includes soft-deleted records so tombstones propagate to peers during sync
     @Query("SELECT * FROM habits ORDER BY createdAt ASC")

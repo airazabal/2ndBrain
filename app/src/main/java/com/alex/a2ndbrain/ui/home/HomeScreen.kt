@@ -57,6 +57,10 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.VolumeMute
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Add
@@ -130,7 +134,7 @@ fun HomeScreen(
     overdueHabitsCount: Int = 0,
     onRefreshIntervalChange: (Int) -> Unit = {},
     onDeleteHabit: (String) -> Unit = {},
-    onUpdateHabit: (com.alex.a2ndbrain.core.memory.HabitEntity, String, String) -> Unit = { _, _, _ -> },
+    onUpdateHabit: (com.alex.a2ndbrain.core.memory.HabitEntity, String, String, Long?) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -230,6 +234,30 @@ fun HomeScreen(
     editingHabit?.let { habit ->
         var editName by remember(habit.id) { mutableStateOf(habit.name) }
         var editTime by remember(habit.id) { mutableStateOf(habit.timeString) }
+        var repeatIndefinitely by remember(habit.id) { mutableStateOf(habit.repeatUntil == null) }
+        var showDatePicker by remember { mutableStateOf(false) }
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = habit.repeatUntil
+                ?: (System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000)
+        )
+
+        if (showDatePicker) {
+            DatePickerDialog(
+                onDismissRequest = { showDatePicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        repeatIndefinitely = false
+                        showDatePicker = false
+                    }) { Text("OK") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                }
+            ) {
+                DatePicker(state = datePickerState)
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { editingHabit = null },
             title = { Text("Edit Habit", fontWeight = FontWeight.Bold) },
@@ -250,13 +278,72 @@ fun HomeScreen(
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    // Repeat section
+                    Text(
+                        text = "REPEAT",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.outline,
+                        letterSpacing = 0.8.sp
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { repeatIndefinitely = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = repeatIndefinitely,
+                            onClick = { repeatIndefinitely = true }
+                        )
+                        Text("Indefinitely", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { repeatIndefinitely = false; showDatePicker = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(0.dp)
+                    ) {
+                        RadioButton(
+                            selected = !repeatIndefinitely,
+                            onClick = { repeatIndefinitely = false; showDatePicker = true }
+                        )
+                        Text("Until date", style = MaterialTheme.typography.bodyMedium)
+                        if (!repeatIndefinitely) {
+                            Spacer(Modifier.width(8.dp))
+                            val selectedMs = datePickerState.selectedDateMillis
+                            val dateLabel = if (selectedMs != null)
+                                java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
+                                    .format(java.util.Date(selectedMs))
+                            else "Pick date"
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.clickable { showDatePicker = true }
+                            ) {
+                                Text(
+                                    text = dateLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (editName.isNotBlank() && editTime.isNotBlank()) {
-                            onUpdateHabit(habit, editName, editTime)
+                            val repeatUntil = if (repeatIndefinitely) null
+                                else datePickerState.selectedDateMillis
+                            onUpdateHabit(habit, editName, editTime, repeatUntil)
                             editingHabit = null
                         }
                     },
@@ -554,8 +641,16 @@ private fun HabitSheetRow(
                     }
                 }
             }
-            Text(habit.timeString, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+            val repeatLabel = if (habit.repeatUntil != null)
+                "Until " + java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
+                    .format(java.util.Date(habit.repeatUntil))
+            else null
+            Text(
+                text = if (repeatLabel != null) "${habit.timeString}  ·  $repeatLabel"
+                       else habit.timeString,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
         }
         IconButton(onClick = { onEdit(habit) }, modifier = Modifier.size(36.dp)) {
             Icon(Icons.Default.Edit, contentDescription = "Edit",

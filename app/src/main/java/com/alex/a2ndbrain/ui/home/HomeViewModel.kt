@@ -87,8 +87,11 @@ class HomeViewModel(
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        memories.count { it.source == "notification" && it.timestamp >= startOfToday &&
+        // Deduplicate by (package + subject title) so re-notified threads count once
+        memories.filter { it.source == "notification" && it.timestamp >= startOfToday &&
             !it.isRead && emailPackages.any { pkg -> it.packageName?.contains(pkg) == true } }
+            .distinctBy { "${it.packageName}-${it.title?.trim()?.lowercase()?.take(60)}" }
+            .size
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     val unreadMessageCount: StateFlow<Int> = allMemoriesForHome.map { memories ->
@@ -96,8 +99,11 @@ class HomeViewModel(
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        memories.count { it.source == "notification" && it.timestamp >= startOfToday &&
+        // Deduplicate by (package + sender/title) — one count per unique conversation today
+        memories.filter { it.source == "notification" && it.timestamp >= startOfToday &&
             messagingPackages.any { pkg -> it.packageName?.contains(pkg) == true } }
+            .distinctBy { "${it.packageName}-${it.title?.trim()}" }
+            .size
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val _meditationSessions = MutableStateFlow<List<MeditationSession>>(emptyList())
@@ -135,7 +141,7 @@ class HomeViewModel(
     val vaultNotes = _vaultNotes.asStateFlow()
 
     // Room Database Habits Engine
-    val activeHabitsToday: StateFlow<List<HabitEntity>> = habitsDao.getActiveHabits()
+    val activeHabitsToday: StateFlow<List<HabitEntity>> = habitsDao.getActiveHabits(System.currentTimeMillis())
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     private fun getTodayDateString(): String {
@@ -756,9 +762,14 @@ class HomeViewModel(
         }
     }
 
-    fun updateHabit(habit: HabitEntity, newName: String, newTime: String) {
+    fun updateHabit(habit: HabitEntity, newName: String, newTime: String, repeatUntil: Long?) {
         viewModelScope.launch(Dispatchers.IO) {
-            habitsDao.insertHabit(habit.copy(name = newName.trim(), timeString = newTime.trim(), lastModifiedAt = System.currentTimeMillis()))
+            habitsDao.insertHabit(habit.copy(
+                name = newName.trim(),
+                timeString = newTime.trim(),
+                repeatUntil = repeatUntil,
+                lastModifiedAt = System.currentTimeMillis()
+            ))
         }
     }
 

@@ -12,5 +12,6 @@ data class HabitEntity(
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
     val lastModifiedAt: Long = System.currentTimeMillis(),
-    val isDeleted: Boolean = false  // soft delete — keeps record for sync tombstone propagation
+    val isDeleted: Boolean = false,  // soft delete — keeps record for sync tombstone propagation
+    val repeatUntil: Long? = null    // null = indefinitely; epoch ms of last active day (UTC midnight)
 )

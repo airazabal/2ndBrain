@@ -59,7 +59,7 @@ class SettingsViewModel(
         _themePreference.value = theme
     }
 
-    val activeHabits: StateFlow<List<HabitEntity>> = habitsDao.getActiveHabits()
+    val activeHabits: StateFlow<List<HabitEntity>> = habitsDao.getActiveHabits(System.currentTimeMillis())
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     fun addCustomHabit(name: String, time: String, isMedication: Boolean) {
