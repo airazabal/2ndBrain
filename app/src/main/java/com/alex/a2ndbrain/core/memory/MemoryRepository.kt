@@ -25,6 +25,7 @@ class MemoryRepository(private val memoryDao: MemoryDao) {
 
     fun getAllMemoriesFlow(): Flow<List<MemoryEntity>> = memoryDao.getAllMemories()
     fun getAllSummariesFlow(): Flow<List<DailySummaryEntity>> = memoryDao.getAllSummaries()
+    suspend fun getAllSummariesSync(): List<DailySummaryEntity> = memoryDao.getAllSummariesSync()
 
     suspend fun getRecentMemoriesSync(): List<MemoryEntity> = memoryDao.getRecentMemoriesSync()
     suspend fun searchMemoriesSync(query: String): List<MemoryEntity> = memoryDao.searchMemoriesSync(query)

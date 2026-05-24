@@ -180,4 +180,10 @@ class CaptureSettingsManager(private val context: Context) {
     fun saveLastDetailsExpanded(expanded: Boolean) {
         prefs.edit().putBoolean("home_last_details_expanded", expanded).apply()
     }
+
+    fun isCalendarSyncEnabled(): Boolean = prefs.getBoolean("calendar_sync_enabled", false)
+
+    fun setCalendarSyncEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean("calendar_sync_enabled", enabled).apply()
+    }
 }

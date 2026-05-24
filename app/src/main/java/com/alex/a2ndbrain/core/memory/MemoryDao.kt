@@ -39,6 +39,9 @@ interface MemoryDao {
     @Query("SELECT * FROM daily_summaries ORDER BY timestamp DESC")
     fun getAllSummaries(): Flow<List<DailySummaryEntity>>
 
+    @Query("SELECT * FROM daily_summaries ORDER BY timestamp DESC")
+    suspend fun getAllSummariesSync(): List<DailySummaryEntity>
+
     @Query("SELECT * FROM daily_summaries WHERE summary LIKE '%' || :query || '%' ORDER BY timestamp DESC LIMIT 10")
     suspend fun searchSummaries(query: String): List<DailySummaryEntity>
 

@@ -29,6 +29,7 @@ import com.alex.a2ndbrain.core.meditation.MeditationManager
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
+import com.alex.a2ndbrain.core.calendar.CalendarWritebackManager
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
 
 class HomeViewModel(
@@ -40,7 +41,8 @@ class HomeViewModel(
     private val applicationContext: Context,
     private val nearbySyncManager: NearbySyncManager,
     private val zendenceMeditationRepository: ZendenceMeditationRepository,
-    private val healthRepository: HealthRepository
+    private val healthRepository: HealthRepository,
+    private val calendarWritebackManager: CalendarWritebackManager
 ) : ViewModel() {
     val healthConnectManager get() = healthRepository.healthConnectManager
 
@@ -691,6 +693,8 @@ class HomeViewModel(
                     HabitCompletionEntity(habitId = habitId, date = today,
                         completedAt = now, lastModifiedAt = now, isDeleted = false)
                 )
+                val habitName = habitsDao.getHabitById(habitId)?.name ?: return@launch
+                calendarWritebackManager.writeHabitCompletion(habitName)
             }
             nearbySyncManager.requestImmediateSync()
         }

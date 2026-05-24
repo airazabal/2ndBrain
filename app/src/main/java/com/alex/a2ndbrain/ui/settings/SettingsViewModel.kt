@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.memory.HabitEntity
 import com.alex.a2ndbrain.core.memory.HabitsDao
 import com.alex.a2ndbrain.core.memory.MemoryRepository
@@ -24,6 +25,7 @@ class SettingsViewModel(
     private val usageRepository: UsageRepository,
     private val settingsManager: CaptureSettingsManager,
     private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager,
+    private val healthRepository: HealthRepository,
     private val applicationContext: Context
 ) : ViewModel() {
 
@@ -99,26 +101,69 @@ class SettingsViewModel(
     suspend fun exportBackupJson(): String = withContext(Dispatchers.IO) {
         val habits = habitsDao.getAllHabitsSync()
         val monitoredApps = settingsManager.getMonitoredApps()
+        val ninetyDaysAgo = System.currentTimeMillis() - 90L * 24 * 60 * 60 * 1000
+        val memories = memoryRepository.getRecentMemories(ninetyDaysAgo)
+        val summaries = memoryRepository.getAllSummariesSync()
+        val healthSnapshots = healthRepository.getSnapshotsForSync(90)
 
         val habitsArray = org.json.JSONArray()
-        habits.forEach { habit ->
+        habits.forEach { h ->
             habitsArray.put(org.json.JSONObject().apply {
-                put("id", habit.id)
-                put("name", habit.name)
-                put("timeString", habit.timeString)
-                put("isMedication", habit.isMedication)
-                put("isActive", habit.isActive)
-                put("createdAt", habit.createdAt)
+                put("id", h.id)
+                put("name", h.name)
+                put("timeString", h.timeString)
+                put("isMedication", h.isMedication)
+                put("isActive", h.isActive)
+                put("createdAt", h.createdAt)
             })
         }
 
         val appsArray = org.json.JSONArray()
         monitoredApps.forEach { appsArray.put(it) }
 
+        val memoriesArray = org.json.JSONArray()
+        memories.forEach { m ->
+            memoriesArray.put(org.json.JSONObject().apply {
+                put("id", m.id)
+                put("source", m.source)
+                put("packageName", m.packageName ?: "")
+                put("title", m.title ?: "")
+                put("content", m.content)
+                put("tags", m.tags ?: "")
+                put("timestamp", m.timestamp)
+            })
+        }
+
+        val summariesArray = org.json.JSONArray()
+        summaries.forEach { s ->
+            summariesArray.put(org.json.JSONObject().apply {
+                put("date", s.date)
+                put("type", s.type)
+                put("summary", s.summary)
+                put("modelName", s.modelName)
+                put("timestamp", s.timestamp)
+            })
+        }
+
+        val healthArray = org.json.JSONArray()
+        healthSnapshots.forEach { snap ->
+            healthArray.put(org.json.JSONObject().apply {
+                put("date", snap.date)
+                put("steps", snap.steps)
+                put("sleepMinutes", snap.sleepMinutes)
+                put("avgHeartRate", snap.avgHeartRate)
+                put("deviceId", snap.deviceId)
+            })
+        }
+
         org.json.JSONObject().apply {
-            put("version", 1)
+            put("version", 2)
+            put("exportedAt", System.currentTimeMillis())
             put("habits", habitsArray)
             put("monitoredApps", appsArray)
+            put("memories", memoriesArray)
+            put("reflections", summariesArray)
+            put("healthSnapshots", healthArray)
         }.toString(2)
     }
 

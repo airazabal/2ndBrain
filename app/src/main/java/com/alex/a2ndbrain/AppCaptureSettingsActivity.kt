@@ -120,6 +120,16 @@ fun AppCaptureSettingsScreen(
     val context = LocalContext.current
     val packageManager = context.packageManager
     val scope = rememberCoroutineScope()
+    var calendarSyncEnabled by remember { mutableStateOf(settingsManager.isCalendarSyncEnabled()) }
+
+    val requestCalendarPermission = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            settingsManager.setCalendarSyncEnabled(true)
+            calendarSyncEnabled = true
+        }
+    }
 
     val createBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
@@ -589,7 +599,7 @@ fun AppCaptureSettingsScreen(
             Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Export your monitored apps and routines to a JSON file. Restore after a reset.",
+                        text = "Full export: habits, monitored apps, captures (90 days), reflections, and health snapshots.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -601,6 +611,48 @@ fun AppCaptureSettingsScreen(
                             Text("Restore")
                         }
                     }
+                }
+            }
+        }
+
+        // ── Calendar Sync ─────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Calendar") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Write habits to calendar", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Adds a calendar event when you complete a habit.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = calendarSyncEnabled,
+                        onCheckedChange = { enabled ->
+                            if (enabled) {
+                                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    context, android.Manifest.permission.WRITE_CALENDAR
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                if (hasPermission) {
+                                    settingsManager.setCalendarSyncEnabled(true)
+                                    calendarSyncEnabled = true
+                                } else {
+                                    requestCalendarPermission.launch(android.Manifest.permission.WRITE_CALENDAR)
+                                }
+                            } else {
+                                settingsManager.setCalendarSyncEnabled(false)
+                                calendarSyncEnabled = false
+                            }
+                        }
+                    )
                 }
             }
         }
