@@ -37,6 +37,7 @@ import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.ui.chat.CopilotViewModel
 import com.alex.a2ndbrain.ui.home.HomeScreen
 import com.alex.a2ndbrain.ui.home.HomeViewModel
+import com.alex.a2ndbrain.ui.search.SearchScreen
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.memories.MemoryViewModel
 import com.alex.a2ndbrain.ui.notes.NotesScreen
@@ -413,6 +414,9 @@ class MainActivity : ComponentActivity() {
                                         TopAppBar(
                                             title = { Text("2ndBrain") },
                                             actions = {
+                                                IconButton(onClick = { navViewModel.setTab(AppTab.SEARCH) }) {
+                                                    Icon(Icons.Default.Search, contentDescription = "Search")
+                                                }
                                                 IconButton(onClick = { navViewModel.setTab(AppTab.SETTINGS) }) {
                                                     Icon(Icons.Default.Settings, contentDescription = "Settings")
                                                 }
@@ -717,6 +721,13 @@ class MainActivity : ComponentActivity() {
                                                                 it
                                                             )
                                                         }
+                                                    )
+                                                }
+
+                                                AppTab.SEARCH -> {
+                                                    SearchScreen(
+                                                        onBack = { navViewModel.setTab(AppTab.TODAY) },
+                                                        onMemorySelected = { navViewModel.setTab(AppTab.FEED) }
                                                     )
                                                 }
                                             }

@@ -11,7 +11,8 @@ enum class AppTab(val index: Int, val label: String, val title: String) {
     WELLNESS(2, "Wellness", "Wellness"),
     COPILOT(3, "Co-pilot", "Co-pilot"),
     SETTINGS(4, "Settings", "Settings"),
-    NOTES(5, "Notes", "Notes");
+    NOTES(5, "Notes", "Notes"),
+    SEARCH(6, "Search", "Search");
 
     companion object {
         fun fromIndex(index: Int): AppTab = entries.find { it.index == index } ?: TODAY

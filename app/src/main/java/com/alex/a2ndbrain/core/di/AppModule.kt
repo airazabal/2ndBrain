@@ -78,6 +78,7 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.search.SearchViewModel(get(), get()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
