@@ -134,6 +134,7 @@ fun HomeScreen(
     overdueHabitsCount: Int = 0,
     onRefreshIntervalChange: (Int) -> Unit = {},
     onDeleteHabit: (String) -> Unit = {},
+    onAddHabit: (String, String, Boolean, Long?) -> Unit = { _, _, _, _ -> },
     onUpdateHabit: (com.alex.a2ndbrain.core.memory.HabitEntity, String, String, Long?) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
@@ -144,6 +145,7 @@ fun HomeScreen(
     var showOverdueSheet by remember { mutableStateOf(false) }
     var showHabitsSheet by remember { mutableStateOf(false) }
     var showMeetingsSheet by remember { mutableStateOf(false) }
+    var showAddHabitDialog by remember { mutableStateOf(false) }
     var showQuickAddDialog by remember { mutableStateOf(false) }
     var isTimelineExpanded by remember { mutableStateOf(true) }
     var expandedTimelineEventId by remember { mutableStateOf<String?>(null) }
@@ -356,6 +358,138 @@ fun HomeScreen(
         )
     }
 
+    // ── Add New Habit Dialog ──────────────────────────────────────────────────
+    if (showAddHabitDialog) {
+        var newName by remember { mutableStateOf("") }
+        var newTime by remember { mutableStateOf("") }
+        var newIsMedication by remember { mutableStateOf(false) }
+        var newRepeatIndefinitely by remember { mutableStateOf(true) }
+        var showNewDatePicker by remember { mutableStateOf(false) }
+        val newDatePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000
+        )
+
+        if (showNewDatePicker) {
+            DatePickerDialog(
+                onDismissRequest = { showNewDatePicker = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        newRepeatIndefinitely = false
+                        showNewDatePicker = false
+                    }) { Text("OK") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showNewDatePicker = false }) { Text("Cancel") }
+                }
+            ) { DatePicker(state = newDatePickerState) }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showAddHabitDialog = false },
+            title = { Text("New Habit", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Name") },
+                        placeholder = { Text("e.g. Morning run") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newTime,
+                        onValueChange = { newTime = it },
+                        label = { Text("Time (HH:MM, 24h)") },
+                        placeholder = { Text("e.g. 07:30") },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { newIsMedication = !newIsMedication }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(checked = newIsMedication, onCheckedChange = { newIsMedication = it })
+                        Text("This is a medication", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text(
+                        text = "REPEAT",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.outline,
+                        letterSpacing = 0.8.sp
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { newRepeatIndefinitely = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = newRepeatIndefinitely, onClick = { newRepeatIndefinitely = true })
+                        Text("Indefinitely", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { newRepeatIndefinitely = false; showNewDatePicker = true }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = !newRepeatIndefinitely,
+                            onClick = { newRepeatIndefinitely = false; showNewDatePicker = true }
+                        )
+                        Text("Until date", style = MaterialTheme.typography.bodyMedium)
+                        if (!newRepeatIndefinitely) {
+                            Spacer(Modifier.width(8.dp))
+                            val selectedMs = newDatePickerState.selectedDateMillis
+                            val dateLabel = if (selectedMs != null)
+                                java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
+                                    .format(java.util.Date(selectedMs))
+                            else "Pick date"
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                modifier = Modifier.clickable { showNewDatePicker = true }
+                            ) {
+                                Text(
+                                    text = dateLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newName.isNotBlank() && newTime.isNotBlank()) {
+                            val repeatUntil = if (newRepeatIndefinitely) null
+                                else newDatePickerState.selectedDateMillis
+                            onAddHabit(newName, newTime, newIsMedication, repeatUntil)
+                            showAddHabitDialog = false
+                        }
+                    },
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Add") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddHabitDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     // ── Overdue Habits Sheet ──────────────────────────────────────────────────
     if (showOverdueSheet) {
         val cal = java.util.Calendar.getInstance()
@@ -397,14 +531,29 @@ fun HomeScreen(
     if (showHabitsSheet) {
         ModalBottomSheet(onDismissRequest = { showHabitsSheet = false }) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
-                Text("Today's Habits", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text("${completedHabitIds.size} / ${activeHabits.count { it.isActive }} completed",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Today's Habits", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("${completedHabitIds.size} / ${activeHabits.count { it.isActive }} completed",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    }
+                    FilledTonalButton(
+                        onClick = { showAddHabitDialog = true },
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("New Habit")
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
                 if (activeHabits.isEmpty()) {
-                    Text("No habits configured. Add habits in Settings.",
+                    Text("No habits yet. Tap New Habit to add one.",
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 } else {
                     activeHabits.filter { it.isActive }.sortedBy { habit ->

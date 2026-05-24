@@ -762,6 +762,22 @@ class HomeViewModel(
         }
     }
 
+    fun addHabit(name: String, time: String, isMedication: Boolean, repeatUntil: Long?) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val now = System.currentTimeMillis()
+            habitsDao.insertHabit(HabitEntity(
+                id = java.util.UUID.randomUUID().toString(),
+                name = name.trim(),
+                timeString = time.trim(),
+                isMedication = isMedication,
+                isActive = true,
+                createdAt = now,
+                lastModifiedAt = now,
+                repeatUntil = repeatUntil
+            ))
+        }
+    }
+
     fun updateHabit(habit: HabitEntity, newName: String, newTime: String, repeatUntil: Long?) {
         viewModelScope.launch(Dispatchers.IO) {
             habitsDao.insertHabit(habit.copy(

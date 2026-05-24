@@ -655,6 +655,7 @@ class MainActivity : ComponentActivity() {
                                                         overdueHabitsCount = overdueHabitsCount,
                                                         onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
                                                         onDeleteHabit = { homeViewModel.deleteHabit(it) },
+                                                        onAddHabit = { name, time, isMed, repeatUntil -> homeViewModel.addHabit(name, time, isMed, repeatUntil) },
                                                         onUpdateHabit = { habit, name, time, repeatUntil -> homeViewModel.updateHabit(habit, name, time, repeatUntil) }
                                                     )
                                                 }
