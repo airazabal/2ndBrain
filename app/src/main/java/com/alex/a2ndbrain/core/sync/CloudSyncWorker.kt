@@ -25,11 +25,16 @@ class CloudSyncWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            // Push if HC is available and permissions granted (= phone/watch device).
-            // Pull if HC not available or no permissions (= tablet).
-            val canPush = healthRepository.healthConnectManager.isAvailable() &&
+            // Push only if HC is available, permissions granted, AND local snapshot has real
+            // wearable data (sleep or steps > 0). A device with HC permissions but no wearable
+            // (e.g. tablet) would otherwise overwrite valid phone data with zeroes.
+            val hcReady = healthRepository.healthConnectManager.isAvailable() &&
                 healthRepository.healthConnectManager.hasPermissions()
-            Log.d("CloudSyncWorker", "canPush=$canPush")
+            val localSnap = if (hcReady) healthRepository.getSnapshotsForSync(1).firstOrNull() else null
+            val hasWearableData = localSnap != null &&
+                (localSnap.sleepMinutes > 0 || localSnap.steps > 0 || localSnap.avgHeartRate > 0)
+            val canPush = hcReady && hasWearableData
+            Log.d("CloudSyncWorker", "hcReady=$hcReady hasWearableData=$hasWearableData canPush=$canPush")
             if (canPush) {
                 cloudHealthSyncManager.pushTodaySnapshot()
                 Log.d("CloudSyncWorker", "Push complete")
