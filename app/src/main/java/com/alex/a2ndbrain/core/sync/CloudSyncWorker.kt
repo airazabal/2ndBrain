@@ -24,17 +24,21 @@ class CloudSyncWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            // Phone (HC + wearable) → push snapshot to Firestore.
-            // Tablet (no wearable) → pull and persist locally.
-            val hcMetrics = healthRepository.getHCMetricsIfWearable()
-            if (hcMetrics != null) {
+            // Push if HC is available and permissions granted (= phone/watch device).
+            // Pull if HC not available or no permissions (= tablet).
+            val canPush = healthRepository.healthConnectManager.isAvailable() &&
+                healthRepository.healthConnectManager.hasPermissions()
+            Log.d("CloudSyncWorker", "canPush=$canPush")
+            if (canPush) {
                 cloudHealthSyncManager.pushTodaySnapshot()
-                Log.d("CloudSyncWorker", "Pushed health snapshot to Firestore")
+                Log.d("CloudSyncWorker", "Push complete")
             } else {
                 val pulled = cloudHealthSyncManager.pullTodaySnapshot()
                 if (pulled != null) {
                     healthRepository.saveSnapshot(pulled)
-                    Log.d("CloudSyncWorker", "Pulled health snapshot from Firestore")
+                    Log.d("CloudSyncWorker", "Pull complete: sleep=${pulled.sleepMinutes}min steps=${pulled.steps}")
+                } else {
+                    Log.d("CloudSyncWorker", "Pull returned null (Firestore empty or sign-in failed)")
                 }
             }
             Result.success()

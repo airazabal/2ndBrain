@@ -59,8 +59,14 @@ class CloudHealthSyncManager(
             val account = suspendCancellableCoroutine<com.google.android.gms.auth.api.signin.GoogleSignInAccount?> { cont ->
                 GoogleSignIn.getClient(context, gso).silentSignIn()
                     .addOnSuccessListener { cont.resumeWith(Result.success(it)) }
-                    .addOnFailureListener { cont.resumeWith(Result.success(null)) }
-            } ?: return@withContext false
+                    .addOnFailureListener { e ->
+                        Log.w("CloudHealthSync", "Silent sign-in failed: ${e.message}")
+                        cont.resumeWith(Result.success(null))
+                    }
+            } ?: run {
+                Log.w("CloudHealthSync", "Silent sign-in returned null account — no Google account or not previously authorized")
+                return@withContext false
+            }
             val idToken = account.idToken ?: return@withContext false
             val credential = GoogleAuthProvider.getCredential(idToken, null)
             auth.signInWithCredential(credential).await()
@@ -80,7 +86,10 @@ class CloudHealthSyncManager(
         val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return@withContext
         try {
             val snapshots = healthRepository.getSnapshotsForSync(1)
-            val snap = snapshots.firstOrNull() ?: return@withContext
+            val snap = snapshots.firstOrNull() ?: run {
+                Log.w("CloudHealthSync", "pushTodaySnapshot: no local snapshot found — skipping")
+                return@withContext
+            }
             FirebaseFirestore.getInstance()
                 .collection("users").document(uid)
                 .collection("health_snapshots").document(snap.date)
