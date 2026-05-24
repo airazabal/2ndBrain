@@ -6,6 +6,7 @@ import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -59,8 +60,25 @@ class CloudSyncWorker(
                 .build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 "cloud_health_sync",
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
+            )
+            // Also run once immediately so first push doesn't wait 30 min
+            WorkManager.getInstance(context).enqueue(
+                OneTimeWorkRequestBuilder<CloudSyncWorker>()
+                    .setConstraints(constraints)
+                    .build()
+            )
+        }
+
+        fun runNow(context: Context) {
+            val constraints = Constraints.Builder()
+                .setRequiredNetworkType(NetworkType.CONNECTED)
+                .build()
+            WorkManager.getInstance(context).enqueue(
+                OneTimeWorkRequestBuilder<CloudSyncWorker>()
+                    .setConstraints(constraints)
+                    .build()
             )
         }
     }

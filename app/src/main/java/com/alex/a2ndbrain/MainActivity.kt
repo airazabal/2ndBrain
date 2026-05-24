@@ -46,6 +46,14 @@ import com.alex.a2ndbrain.ui.theme.BrainTheme
 import com.alex.a2ndbrain.ui.wellness.WellnessScreen
 import com.alex.a2ndbrain.ui.wizard.PermissionWizardScreen
 import com.alex.a2ndbrain.ui.wizard.WizardPermission
+import androidx.lifecycle.lifecycleScope
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.GoogleAuthProvider
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
 
@@ -57,6 +65,12 @@ class MainActivity : ComponentActivity() {
     private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager by inject()
     // Eagerly instantiated so it wires cloudSync into HealthRepository before first health read
     private val cloudHealthSyncManager: com.alex.a2ndbrain.core.sync.CloudHealthSyncManager by inject()
+
+    private val googleSignInLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        handleGoogleSignInResult(result.data)
+    }
 
     override fun onStart() {
         super.onStart()
@@ -85,6 +99,32 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun triggerGoogleSignInIfNeeded() {
+        if (FirebaseApp.getApps(this).isEmpty()) return
+        if (FirebaseAuth.getInstance().currentUser != null) return
+        val webClientId = BuildConfig.FIREBASE_WEB_CLIENT_ID.takeIf { it.isNotEmpty() } ?: return
+        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(webClientId)
+            .requestEmail()
+            .build()
+        googleSignInLauncher.launch(GoogleSignIn.getClient(this, gso).signInIntent)
+    }
+
+    private fun handleGoogleSignInResult(data: Intent?) {
+        lifecycleScope.launch {
+            try {
+                val account = GoogleSignIn.getSignedInAccountFromIntent(data).await()
+                val idToken = account.idToken ?: return@launch
+                val credential = GoogleAuthProvider.getCredential(idToken, null)
+                FirebaseAuth.getInstance().signInWithCredential(credential).await()
+                android.util.Log.d("MainActivity", "Firebase sign-in successful, scheduling immediate sync")
+                com.alex.a2ndbrain.core.sync.CloudSyncWorker.runNow(this@MainActivity)
+            } catch (e: Exception) {
+                android.util.Log.w("MainActivity", "Firebase sign-in failed: ${e.message}")
+            }
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         clipboardCaptureManager.captureCurrentClipboard()
@@ -95,6 +135,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         com.alex.a2ndbrain.core.sync.FirebaseInitializer.init(this)
+        triggerGoogleSignInIfNeeded()
         reflectionPicker.schedulePeriodicReflection()
         digitalTimeManager.schedulePeriodicSync()
         nearbySyncManager.schedulePeriodicP2pSync()
