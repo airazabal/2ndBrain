@@ -50,6 +50,7 @@ import com.alex.a2ndbrain.core.reflection.TtsManager
 import com.alex.a2ndbrain.TimelineConflict
 import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.ConflictSeverity
+import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
@@ -67,8 +68,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.saveable.rememberSaveable
-import com.alex.a2ndbrain.core.capture.HomeSummaryConfig
-import com.alex.a2ndbrain.core.capture.HomeDefaultMode
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.draw.rotate
 import androidx.compose.material.icons.filled.Refresh
@@ -77,7 +76,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Spa
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.Calendar
 import java.util.Date
+import com.alex.a2ndbrain.ui.home.EmailTriageResult
 
 
 
@@ -89,15 +90,13 @@ fun HomeScreen(
     notes: List<DocumentFile>,
     consolidatedUsage: List<ConsolidatedUsage>,
     onNavigateToTab: (AppTab) -> Unit,
+    onNavigateToFeedWithFilter: (String) -> Unit = {},
     healthMetrics: com.alex.a2ndbrain.core.health.HealthMetrics = com.alex.a2ndbrain.core.health.HealthMetrics(),
     healthPermissionGranted: Boolean = false,
     healthConnectAvailable: Boolean = false,
     onConnectHealth: () -> Unit = {},
     meditationSessions: List<com.alex.a2ndbrain.core.meditation.MeditationSession> = emptyList(),
     meditationStreaks: com.alex.a2ndbrain.core.meditation.StreakResult = com.alex.a2ndbrain.core.meditation.StreakResult(0, 0, 0),
-
-    todoistTaskCount: Int = 0,
-    onTodoistClick: () -> Unit = {},
 
     senseOfDayScore: Int = 75,
     senseOfDayContext: String = "🎯 Calibrating your day...",
@@ -113,15 +112,15 @@ fun HomeScreen(
     onDeepDiveCoPilot: (TimelineEvent) -> Unit = {},
     onDeleteManualEvent: (String) -> Unit = {},
     onRefreshHealth: () -> Unit = {},
-    homeSummaryConfig: HomeSummaryConfig = HomeSummaryConfig(),
-    lastDetailsExpanded: Boolean = false,
-    onSaveDetailsExpanded: (Boolean) -> Unit = {},
     lastRefreshedAt: Long = System.currentTimeMillis(),
     refreshIntervalMinutes: Int = 30,
     unreadEmailCount: Int = 0,
     unreadMessageCount: Int = 0,
     meetingsTodayCount: Int = 0,
+    emailTriageResult: EmailTriageResult = EmailTriageResult(),
     onRefreshIntervalChange: (Int) -> Unit = {},
+    themePreference: String = "SYSTEM",
+    onThemeToggle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -133,22 +132,6 @@ fun HomeScreen(
     var showQuickAddDialog by remember { mutableStateOf(false) }
     var isTimelineExpanded by remember { mutableStateOf(true) }
     var expandedTimelineEventId by remember { mutableStateOf<String?>(null) }
-
-    val initialExpanded = remember(homeSummaryConfig.defaultMode) {
-        when (homeSummaryConfig.defaultMode) {
-            HomeDefaultMode.ALWAYS_EXPANDED -> true
-            HomeDefaultMode.SUMMARY_ONLY    -> false
-            HomeDefaultMode.REMEMBER_LAST   -> lastDetailsExpanded
-        }
-    }
-    var showDetails by rememberSaveable { mutableStateOf(initialExpanded) }
-    LaunchedEffect(homeSummaryConfig.defaultMode) {
-        when (homeSummaryConfig.defaultMode) {
-            HomeDefaultMode.ALWAYS_EXPANDED -> showDetails = true
-            HomeDefaultMode.SUMMARY_ONLY    -> showDetails = false
-            HomeDefaultMode.REMEMBER_LAST   -> showDetails = lastDetailsExpanded
-        }
-    }
 
     LaunchedEffect(Unit) {
         onRefreshHealth()
@@ -185,26 +168,44 @@ fun HomeScreen(
                 unreadEmailCount      = unreadEmailCount,
                 meetingsCount         = meetingsTodayCount,
                 unreadMessageCount    = unreadMessageCount,
-                todoistTaskCount      = todoistTaskCount,
                 steps                 = healthMetrics.steps,
                 sleepMinutes          = healthMetrics.sleepMinutes,
                 avgHeartRate          = healthMetrics.avgHeartRate,
                 onOverdueClick        = { showOverdueSheet = true },
-                onEmailClick          = { onNavigateToTab(AppTab.FEED) },
+                onEmailClick          = { onNavigateToFeedWithFilter("Gmail") },
                 onMeetingsClick       = { showMeetingsSheet = true },
-                onMessagesClick       = { onNavigateToTab(AppTab.FEED) },
-                onTodoistClick        = onTodoistClick,
-                onHealthClick         = { onNavigateToTab(AppTab.WELLNESS) }
+                onMessagesClick       = { onNavigateToFeedWithFilter("Messages") },
+                onHealthClick         = { onNavigateToTab(AppTab.WELLNESS) },
+                themePreference       = themePreference,
+                onThemeToggle         = onThemeToggle
             )
         }
 
         // Needs Attention Now section
         item {
             NeedsAttentionCard(
-                meetingsToday   = todayTimelineEvents.filter { it.sourcePackage == "calendar" },
-                unreadEmailCount = unreadEmailCount,
-                onMeetingsClick = { showMeetingsSheet = true },
-                onEmailClick    = { onNavigateToTab(AppTab.FEED) }
+                todayEvents        = todayTimelineEvents,
+                timelineConflicts  = timelineConflicts,
+                healthMetrics      = healthMetrics,
+                unreadEmailCount   = unreadEmailCount,
+                unreadMessageCount = unreadMessageCount,
+                emailTriageResult  = emailTriageResult,
+                onTasksClick       = {
+                    val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    try { context.startActivity(intent) } catch (e: Exception) { showMeetingsSheet = true }
+                },
+                onEmailClick       = {
+                    val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_EMAIL)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    try { context.startActivity(intent) } catch (e: Exception) { onNavigateToFeedWithFilter("Gmail") }
+                },
+                onMessagesClick    = {
+                    val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    try { context.startActivity(intent) } catch (e: Exception) { onNavigateToFeedWithFilter("Messages") }
+                },
+                onHealthClick      = { onNavigateToTab(AppTab.WELLNESS) }
             )
         }
 
@@ -221,23 +222,35 @@ fun HomeScreen(
         }
     }
 
-    // ── Meetings Sheet ────────────────────────────────────────────────────────
+    // ── Tasks Sheet ──────────────────────────────────────────────────────────
     if (showMeetingsSheet) {
-        val meetings = todayTimelineEvents.filter { it.sourcePackage == "calendar" }
+        val tasks = todayTimelineEvents.filter { it.sourcePackage == "calendar" }.sortedBy { it.minutesFromMidnight }
         ModalBottomSheet(onDismissRequest = { showMeetingsSheet = false }) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
-                Text("Today's Meetings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Tasks Today", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))
-                Text("${meetings.size} calendar event(s) today",
+                Text("${tasks.size} item(s) on your schedule",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                 Spacer(Modifier.height(16.dp))
-                if (meetings.isEmpty()) {
-                    Text("No calendar events today.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                if (tasks.isEmpty()) {
+                    Text("Nothing on your schedule today.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 } else {
-                    meetings.sortedBy { it.minutesFromMidnight }.forEach { event ->
+                    tasks.forEach { event ->
+                        val isTodoist = event.appName.contains("todoist", ignoreCase = true)
+                        val targetPkg = if (isTodoist) "com.todoist" else "com.google.android.calendar"
+                        val fallbackPkg = if (!isTodoist) "com.samsung.android.calendar" else null
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val intent = context.packageManager.getLaunchIntentForPackage(targetPkg)
+                                        ?: fallbackPkg?.let { context.packageManager.getLaunchIntentForPackage(it) }
+                                    intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    intent?.let { context.startActivity(it) }
+                                    showMeetingsSheet = false
+                                }
+                                .padding(vertical = 10.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -253,8 +266,12 @@ fun HomeScreen(
                                 Text(event.appName, style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
                             }
-                            Icon(Icons.Default.Schedule, contentDescription = null,
-                                tint = Color(0xFF1E88E5), modifier = Modifier.size(18.dp))
+                            Icon(
+                                if (isTodoist) Icons.Default.CheckCircle else Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = if (isTodoist) Color(0xFFE44332) else Color(0xFF1E88E5),
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                         HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
                     }
@@ -266,15 +283,18 @@ fun HomeScreen(
 
 @Composable
 private fun NeedsAttentionCard(
-    meetingsToday: List<com.alex.a2ndbrain.TimelineEvent>,
+    todayEvents: List<TimelineEvent>,
+    timelineConflicts: List<TimelineConflict>,
+    healthMetrics: com.alex.a2ndbrain.core.health.HealthMetrics,
     unreadEmailCount: Int,
-    onMeetingsClick: () -> Unit,
+    unreadMessageCount: Int,
+    emailTriageResult: EmailTriageResult,
+    onTasksClick: () -> Unit,
     onEmailClick: () -> Unit,
+    onMessagesClick: () -> Unit,
+    onHealthClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val cal = java.util.Calendar.getInstance()
-    val currentMins = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
-
     data class AttentionItem(
         val label: String,
         val detail: String,
@@ -282,24 +302,101 @@ private fun NeedsAttentionCard(
         val onClick: () -> Unit
     )
 
-    val items = buildList {
-        // Meetings today → amber
-        if (meetingsToday.isNotEmpty()) {
-            val upcoming = meetingsToday.filter { it.minutesFromMidnight > currentMins }
-            if (upcoming.isNotEmpty()) {
-                val next = upcoming.first()
-                add(AttentionItem("${upcoming.size} meeting(s) today.", "Next: ${next.title} at ${next.time}.", 1, onMeetingsClick))
+    val now = Calendar.getInstance()
+    val currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+    val currentHour = now.get(Calendar.HOUR_OF_DAY)
+
+    val calendarEvents = todayEvents.filter { it.sourcePackage == "calendar" }
+
+    val items = buildList<AttentionItem> {
+        // ── Imminent: calendar event starting within 15 min → red ────────────
+        val imminent = calendarEvents
+            .filter { it.minutesFromMidnight in currentMinutes..(currentMinutes + 15) }
+            .minByOrNull { it.minutesFromMidnight }
+        if (imminent != null) {
+            val minsAway = imminent.minutesFromMidnight - currentMinutes
+            val label = if (minsAway <= 0) "Starting now: ${imminent.title}"
+                        else "Starting in ${minsAway}m: ${imminent.title}"
+            add(AttentionItem(label, "Tap to see your schedule.", 0, onTasksClick))
+        }
+
+        // ── Upcoming: calendar event starting in 16–60 min → amber ───────────
+        if (imminent == null) {
+            val upcoming = calendarEvents
+                .filter { it.minutesFromMidnight in (currentMinutes + 16)..(currentMinutes + 60) }
+                .minByOrNull { it.minutesFromMidnight }
+            if (upcoming != null) {
+                val minsAway = upcoming.minutesFromMidnight - currentMinutes
+                add(AttentionItem(
+                    "In ${minsAway}m: ${upcoming.title}",
+                    "Tap to see your full schedule.",
+                    1, onTasksClick
+                ))
             }
         }
-        // Unread email → amber if >5
-        if (unreadEmailCount > 5) {
-            add(AttentionItem("$unreadEmailCount unread emails.", "Tap to review your inbox.", 1, onEmailClick))
+
+        // ── Timeline conflicts → amber (WARNING) or red (ALERT) ──────────────
+        timelineConflicts.forEach { conflict ->
+            add(AttentionItem(
+                conflict.title,
+                conflict.description,
+                if (conflict.severity == ConflictSeverity.ALERT) 0 else 1,
+                onTasksClick
+            ))
         }
-        // All caught up → green
+
+        // ── Sleep deficit: shown only before noon ─────────────────────────────
+        if (currentHour < 12 && healthMetrics.sleepMinutes in 1..359) {
+            val h = healthMetrics.sleepMinutes / 60
+            val m = healthMetrics.sleepMinutes % 60
+            val detail = if (h == 0) "${m}m sleep — consider a rest break today." else "${h}h ${m}m — less than the 6h target."
+            add(AttentionItem("Short sleep last night.", detail, 1, onHealthClick))
+        }
+
+        // ── Elevated resting heart rate → amber ───────────────────────────────
+        if (healthMetrics.avgHeartRate > 100) {
+            add(AttentionItem(
+                "Elevated heart rate: ${healthMetrics.avgHeartRate} bpm avg.",
+                "Tap to check your wellness.",
+                1, onHealthClick
+            ))
+        }
+
+        // ── Low steps by late afternoon (after 17:00) → amber ────────────────
+        if (currentHour >= 17 && healthMetrics.steps in 1..2499) {
+            add(AttentionItem(
+                "Only ${healthMetrics.steps.toInt()} steps so far.",
+                "A short walk could close the gap.",
+                1, onHealthClick
+            ))
+        }
+
+        // ── Gemini email triage ───────────────────────────────────────────────
+        if (emailTriageResult.isLoading && unreadEmailCount > 0) {
+            add(AttentionItem("Scanning $unreadEmailCount email(s)…", "Gemini is checking for urgent items.", 1, onEmailClick))
+        } else {
+            emailTriageResult.critical.forEach { desc ->
+                add(AttentionItem("Email: $desc", "Tap to open inbox.", 0, onEmailClick))
+            }
+            emailTriageResult.overdue.forEach { desc ->
+                add(AttentionItem("Overdue email: $desc", "Tap to open inbox.", 1, onEmailClick))
+            }
+            // Fallback count when triage found nothing but inbox is overloaded
+            if (emailTriageResult.critical.isEmpty() && emailTriageResult.overdue.isEmpty() && unreadEmailCount > 25) {
+                add(AttentionItem("$unreadEmailCount unread emails.", "Your inbox needs attention.", 1, onEmailClick))
+            }
+        }
+
+        // ── Message overload: >10 → amber ─────────────────────────────────────
+        if (unreadMessageCount > 10) {
+            add(AttentionItem("$unreadMessageCount unread messages.", "Tap to review.", 1, onMessagesClick))
+        }
+
+        // ── All clear → green ─────────────────────────────────────────────────
         if (isEmpty()) {
             add(AttentionItem("All clear!", "No overdue actions or urgent items right now.", 2) {})
         }
-    }
+    }.distinctBy { it.label }
 
     val hasUrgent = items.any { it.urgency == 0 }
     val bgColor = when {
@@ -380,156 +477,6 @@ private fun NeedsAttentionCard(
     }
 }
 
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun SmartSummaryCard(
-    senseOfDayScore: Int,
-    senseOfDayContext: String,
-    config: HomeSummaryConfig,
-    topConflict: TimelineConflict?,
-    nextEvent: TimelineEvent?,
-    healthMetrics: com.alex.a2ndbrain.core.health.HealthMetrics,
-    healthAvailable: Boolean,
-    meditatedToday: Boolean,
-    meditationWeekStreak: Int,
-    showDetails: Boolean,
-    onToggleDetails: () -> Unit,
-    onDeepDiveConflict: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val ringColor = remember(senseOfDayScore) {
-        Color.hsv(senseOfDayScore.toFloat() * 1.3f, 0.75f, 0.9f)
-    }
-
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-
-            // ── Score ring + context text ─────────────────────────────────
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawCircle(color = Color.LightGray.copy(alpha = 0.2f), style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round))
-                        drawArc(color = ringColor, startAngle = -90f, sweepAngle = senseOfDayScore / 100f * 360f, useCenter = false, style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round))
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(text = "$senseOfDayScore%", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Sense of Day", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                    if (config.showSenseOfDayText) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(text = senseOfDayContext, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, lineHeight = 18.sp)
-                    }
-                }
-            }
-
-            // ── Top alert ─────────────────────────────────────────────────
-            if (config.showAlerts && topConflict != null) {
-                val accentColor = when (topConflict.type) {
-                    ConflictType.OVERLAP          -> Color(0xFFE53935)
-                    ConflictType.OVERDUE_HABIT    -> Color(0xFFFB8C00)
-                    ConflictType.DISTRACTION_GAP  -> Color(0xFF8E24AA)
-                }
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onDeepDiveConflict(topConflict.deepDivePrompt) },
-                    colors = CardDefaults.cardColors(containerColor = accentColor.copy(alpha = 0.08f)),
-                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.3f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = topConflict.title, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = accentColor)
-                            Text(text = topConflict.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        }
-                        Icon(imageVector = Icons.Default.ChevronRight, contentDescription = null, tint = accentColor.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-                    }
-                }
-            }
-
-            // ── Stats pills ───────────────────────────────────────────────
-            val activePills = buildList {
-                if (config.showNextEventPill) {
-                    val label = nextEvent?.let { "${it.title.take(18)} ${it.time}" } ?: "No events today"
-                    add(label to PastelYellow)
-                }
-                if (config.showStepsPill && healthAvailable) {
-                    add("${healthMetrics.steps} steps" to PastelGreen)
-                }
-                if (config.showSleepMeditationPill) {
-                    val label = when {
-                        meditatedToday -> "Meditated ✓"
-                        meditationWeekStreak > 0 -> "$meditationWeekStreak day streak"
-                        healthAvailable && healthMetrics.sleepMinutes > 0 ->
-                            "${healthMetrics.sleepMinutes / 60}h ${healthMetrics.sleepMinutes % 60}m sleep"
-                        else -> "No sleep data"
-                    }
-                    add(label to MaterialTheme.colorScheme.surfaceVariant)
-                }
-            }
-
-            if (activePills.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    activePills.forEach { (label, color) ->
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
-                                .background(color.copy(alpha = 0.18f))
-                                .border(BorderStroke(1.dp, color.copy(alpha = 0.35f)), RoundedCornerShape(20.dp))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Text(text = label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                    }
-                }
-            }
-
-            // ── Toggle button ─────────────────────────────────────────────
-            Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onToggleDetails() }
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = if (showDetails) "Show less" else "Show all details",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                    imageVector = if (showDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-    }
-}
 
 @Composable
 fun SummaryGrid(

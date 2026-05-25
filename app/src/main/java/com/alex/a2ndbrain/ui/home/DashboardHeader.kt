@@ -8,6 +8,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.WbSunny
+import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,7 +32,6 @@ fun DashboardHeader(
     unreadEmailCount: Int,
     meetingsCount: Int,
     unreadMessageCount: Int,
-    todoistTaskCount: Int = 0,
     steps: Long = 0L,
     sleepMinutes: Int = 0,
     avgHeartRate: Int = 0,
@@ -38,8 +39,9 @@ fun DashboardHeader(
     onEmailClick: () -> Unit,
     onMeetingsClick: () -> Unit,
     onMessagesClick: () -> Unit,
-    onTodoistClick: () -> Unit = {},
     onHealthClick: () -> Unit = {},
+    themePreference: String = "SYSTEM",
+    onThemeToggle: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -68,11 +70,21 @@ fun DashboardHeader(
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    text = "Last refreshed ${formatRefreshTime(lastRefreshedAt)}",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Last refreshed ${formatRefreshTime(lastRefreshedAt)}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f)
+                    )
+                    IconButton(onClick = onThemeToggle, modifier = Modifier.size(28.dp)) {
+                        Icon(
+                            imageVector = if (themePreference == "DARK") Icons.Outlined.WbSunny else Icons.Outlined.DarkMode,
+                            contentDescription = "Toggle theme",
+                            tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
                 Spacer(Modifier.height(4.dp))
                 RefreshChip(intervalMinutes = refreshIntervalMinutes, onIntervalChange = onRefreshIntervalChange)
             }
@@ -104,9 +116,9 @@ fun DashboardHeader(
                 onClick = onEmailClick
             )
             DashCard(
-                label = "MEETINGS\nTODAY",
+                label = "TASKS\nTODAY",
                 value = meetingsCount.toString(),
-                subtitle = if (meetingsCount == 0) "Calendar clear" else "on calendar",
+                subtitle = if (meetingsCount == 0) "Nothing on schedule" else "$meetingsCount on schedule",
                 accentColor = Color(0xFF1E88E5),
                 icon = Icons.Default.CalendarMonth,
                 onClick = onMeetingsClick
@@ -118,14 +130,6 @@ fun DashboardHeader(
                 accentColor = Color(0xFF26A69A),
                 icon = Icons.Default.Chat,
                 onClick = onMessagesClick
-            )
-            DashCard(
-                label = "TASKS\nTODAY",
-                value = if (todoistTaskCount > 99) "99+" else todoistTaskCount.toString(),
-                subtitle = if (todoistTaskCount == 0) "No tasks captured" else "$todoistTaskCount from Todoist",
-                accentColor = Color(0xFFE44332),
-                icon = Icons.Default.CheckCircle,
-                onClick = onTodoistClick
             )
             val sleepH = sleepMinutes / 60
             val sleepM = sleepMinutes % 60

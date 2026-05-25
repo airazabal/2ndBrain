@@ -58,6 +58,7 @@ fun MemoryScreen(
     onClearAll: () -> Unit,
     monitoredApps: Set<String> = emptySet(),
     onClearAppFilter: () -> Unit = {},
+    initialFilter: String = "All",
     vaultUri: String = "",
     onSaveVoiceNote: ((String, String) -> Unit)? = null,
     onDeepDiveCoPilot: (MemoryEntity) -> Unit = {},
@@ -68,7 +69,7 @@ fun MemoryScreen(
     val configuration = LocalConfiguration.current
     
     var isScanning by remember { mutableStateOf(false) }
-    var selectedApp by remember { mutableStateOf("All") }
+    var selectedApp by remember(initialFilter) { mutableStateOf(initialFilter) }
     var showRecordingDialog by remember { mutableStateOf(false) }
     var expandedAppGroups by remember { mutableStateOf(setOf<String>()) }
     var expandedDays by remember { mutableStateOf(setOf<String>("Today")) }
@@ -92,8 +93,8 @@ fun MemoryScreen(
             .sorted()
     }
 
-    // Reset selectedApp if it's no longer present
-    if (selectedApp != "All" && selectedApp !in availableApps) {
+    // Reset selectedApp only when memories are loaded and the app is genuinely gone
+    if (selectedApp != "All" && memories.isNotEmpty() && selectedApp !in availableApps) {
         selectedApp = "All"
     }
 
@@ -125,7 +126,7 @@ fun MemoryScreen(
             }.sortedByDescending { appGroup -> appGroup.memories.maxOf { it.primary.timestamp } }
             return DayGroup(
                 label = label, dateStart = dateStart, appGroups = appGroups,
-                memories = sorted, unreadCount = sorted.count { !it.isRead }
+                memories = sorted, unreadCount = merged.count { !it.primary.isRead }
             )
         }
 

@@ -24,8 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
-import com.alex.a2ndbrain.core.capture.HomeSummaryConfig
-import com.alex.a2ndbrain.core.capture.HomeDefaultMode
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -70,11 +68,6 @@ class AppCaptureSettingsActivity : ComponentActivity() {
                     val syncStatus by nearbySyncManager.syncStatus.collectAsState(NearbySyncManager.SyncStatus.Idle)
                     AppCaptureSettingsScreen(
                         settingsManager = settingsManager,
-                        themePreference = themePreference,
-                        onThemeChange = { newTheme ->
-                            settingsManager.saveThemePreference(newTheme)
-                            themePreference = newTheme
-                        },
                         onBack = { finish() },
                         onRestartService = {
                             val componentName = android.content.ComponentName(this, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java)
@@ -100,8 +93,6 @@ class AppCaptureSettingsActivity : ComponentActivity() {
 @Composable
 fun AppCaptureSettingsScreen(
     settingsManager: CaptureSettingsManager,
-    themePreference: String,
-    onThemeChange: (String) -> Unit,
     onBack: () -> Unit,
     onRestartService: () -> Unit,
     onUnmonitoredAppRemoved: (String) -> Unit = {},
@@ -115,17 +106,6 @@ fun AppCaptureSettingsScreen(
     val context = LocalContext.current
     val packageManager = context.packageManager
     val scope = rememberCoroutineScope()
-    var calendarSyncEnabled by remember { mutableStateOf(settingsManager.isCalendarSyncEnabled()) }
-
-    val requestCalendarPermission = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            settingsManager.setCalendarSyncEnabled(true)
-            calendarSyncEnabled = true
-        }
-    }
-
     val createBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -198,7 +178,6 @@ fun AppCaptureSettingsScreen(
             .sortedBy { packageManager.getApplicationLabel(it.applicationInfo ?: return@sortedBy "").toString().lowercase() }
     }
 
-    var homeSummaryConfig by remember { mutableStateOf(settingsManager.getHomeSummaryConfig()) }
     var monitorAppsExpanded by remember { mutableStateOf(false) }
     var appSearchQuery by remember { mutableStateOf("") }
     val filteredApps = if (appSearchQuery.isEmpty()) allApps else allApps.filter {
@@ -407,100 +386,6 @@ fun AppCaptureSettingsScreen(
             }
         }
 
-        // ── Home Screen ───────────────────────────────────────────────────────
-        item { SettingsSectionLabel("Home Screen") }
-        item {
-            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Default mode", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
-                    Column {
-                        HomeDefaultMode.entries.forEach { mode ->
-                            val label = when (mode) {
-                                HomeDefaultMode.SUMMARY_ONLY    -> "Summary only"
-                                HomeDefaultMode.REMEMBER_LAST   -> "Remember last state"
-                                HomeDefaultMode.ALWAYS_EXPANDED -> "Always expanded"
-                            }
-                            Row(
-                                modifier = Modifier.fillMaxWidth().clickable {
-                                    val updated = homeSummaryConfig.copy(defaultMode = mode)
-                                    homeSummaryConfig = updated
-                                    settingsManager.saveHomeSummaryConfig(updated)
-                                }.padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = homeSummaryConfig.defaultMode == mode,
-                                    onClick = {
-                                        val updated = homeSummaryConfig.copy(defaultMode = mode)
-                                        homeSummaryConfig = updated
-                                        settingsManager.saveHomeSummaryConfig(updated)
-                                    }
-                                )
-                                Text(label, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-                    Text("Summary card", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
-
-                    listOf(
-                        "Sense of Day text"       to homeSummaryConfig.showSenseOfDayText,
-                        "Alerts"                  to homeSummaryConfig.showAlerts,
-                        "Next event pill"         to homeSummaryConfig.showNextEventPill,
-                        "Steps pill"              to homeSummaryConfig.showStepsPill,
-                        "Sleep / meditation pill" to homeSummaryConfig.showSleepMeditationPill
-                    ).forEach { (label, value) ->
-                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                            Switch(
-                                checked = value,
-                                onCheckedChange = { checked ->
-                                    val updated = when (label) {
-                                        "Sense of Day text"       -> homeSummaryConfig.copy(showSenseOfDayText     = checked)
-                                        "Alerts"                  -> homeSummaryConfig.copy(showAlerts              = checked)
-                                        "Next event pill"         -> homeSummaryConfig.copy(showNextEventPill       = checked)
-                                        "Steps pill"              -> homeSummaryConfig.copy(showStepsPill           = checked)
-                                        "Sleep / meditation pill" -> homeSummaryConfig.copy(showSleepMeditationPill = checked)
-                                        else -> homeSummaryConfig
-                                    }
-                                    homeSummaryConfig = updated
-                                    settingsManager.saveHomeSummaryConfig(updated)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Appearance ────────────────────────────────────────────────────────
-        item { SettingsSectionLabel("Appearance") }
-        item {
-            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    listOf("SYSTEM" to "System", "LIGHT" to "Light", "DARK" to "Dark").forEach { (value, label) ->
-                        val isSelected = themePreference == value
-                        Button(
-                            onClick = { onThemeChange(value) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                                contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
-                            ),
-                            contentPadding = PaddingValues(vertical = 10.dp)
-                        ) {
-                            Text(label, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-
         // ── Backup & Restore ──────────────────────────────────────────────────
         item { SettingsSectionLabel("Backup & Restore") }
         item {
@@ -519,48 +404,6 @@ fun AppCaptureSettingsScreen(
                             Text("Restore")
                         }
                     }
-                }
-            }
-        }
-
-        // ── Calendar Sync ─────────────────────────────────────────────────────
-        item { SettingsSectionLabel("Calendar") }
-        item {
-            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Write habits to calendar", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            "Adds a calendar event when you complete a habit.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Switch(
-                        checked = calendarSyncEnabled,
-                        onCheckedChange = { enabled ->
-                            if (enabled) {
-                                val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                                    context, android.Manifest.permission.WRITE_CALENDAR
-                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                if (hasPermission) {
-                                    settingsManager.setCalendarSyncEnabled(true)
-                                    calendarSyncEnabled = true
-                                } else {
-                                    requestCalendarPermission.launch(android.Manifest.permission.WRITE_CALENDAR)
-                                }
-                            } else {
-                                settingsManager.setCalendarSyncEnabled(false)
-                                calendarSyncEnabled = false
-                            }
-                        }
-                    )
                 }
             }
         }

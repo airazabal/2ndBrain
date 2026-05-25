@@ -327,7 +327,6 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(resumeKey) {
                             if (resumeKey > 0) {
                                 homeViewModel.checkHealthPermissionsAndSync()
-                                homeViewModel.refreshHomeSummaryConfig()
                             }
                         }
 
@@ -351,7 +350,8 @@ class MainActivity : ComponentActivity() {
                         val navTabs = listOf(
                             Triple("Today", Icons.Default.Home, AppTab.TODAY),
                             Triple("Feed", Icons.Default.Notifications, AppTab.FEED),
-                            Triple("Wellness", Icons.Default.Favorite, AppTab.WELLNESS)
+                            Triple("Wellness", Icons.Default.Favorite, AppTab.WELLNESS),
+                            Triple("Notes", Icons.Default.Description, AppTab.NOTES)
                         )
                         val navSelectedColor = MaterialTheme.colorScheme.primary
                         val navUnselectedColor = MaterialTheme.colorScheme.secondary
@@ -475,7 +475,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 },
                                 floatingActionButton = {
-                                    if (!useRail) {
+                                    if (!useRail && currentTab != AppTab.NOTES && currentTab != AppTab.COPILOT) {
                                         FloatingActionButton(onClick = { navViewModel.setTab(AppTab.COPILOT) }) {
                                             Icon(Icons.Default.AutoAwesome, contentDescription = "Co-pilot")
                                         }
@@ -565,12 +565,12 @@ class MainActivity : ComponentActivity() {
                                                     val vaultNotes by homeViewModel.vaultNotes.collectAsStateWithLifecycle()
                                                     val consolidatedUsage by homeViewModel.consolidatedUsage.collectAsStateWithLifecycle()
                                                     val summaries by homeViewModel.summaries.collectAsStateWithLifecycle()
-                                                    val homeSummaryConfig by homeViewModel.homeSummaryConfig.collectAsStateWithLifecycle()
                                                     val lastRefreshedAt by homeViewModel.lastRefreshedAt.collectAsStateWithLifecycle()
                                                     val refreshIntervalMinutes by homeViewModel.refreshIntervalMinutes.collectAsStateWithLifecycle()
                                                     val unreadEmailCount by homeViewModel.unreadEmailCount.collectAsStateWithLifecycle()
                                                     val unreadMessageCount by homeViewModel.unreadMessageCount.collectAsStateWithLifecycle()
                                                     val meetingsTodayCount by homeViewModel.meetingsTodayCount.collectAsStateWithLifecycle()
+                                                    val emailTriageResult by homeViewModel.emailTriageResult.collectAsStateWithLifecycle()
                                                     LaunchedEffect(Unit) {
                                                         homeViewModel.checkHealthPermissionsAndSync()
                                                         homeViewModel.loadVaultNotes()
@@ -584,6 +584,7 @@ class MainActivity : ComponentActivity() {
                                                         notes = vaultNotes,
                                                         consolidatedUsage = consolidatedUsage,
                                                         onNavigateToTab = { navViewModel.setTab(it) },
+                                                        onNavigateToFeedWithFilter = { filter -> navViewModel.navigateToFeed(filter) },
                                                         healthMetrics = healthMetrics,
                                                         healthPermissionGranted = healthPermissionGranted,
                                                         healthConnectAvailable = healthConnectAvailable,
@@ -631,21 +632,25 @@ class MainActivity : ComponentActivity() {
                                                         onDeleteManualEvent = { id ->
                                                             homeViewModel.deleteManualAgendaEvent(id)
                                                         },
-                                                        homeSummaryConfig = homeSummaryConfig,
-                                                        lastDetailsExpanded = homeViewModel.lastDetailsExpanded,
-                                                        onSaveDetailsExpanded = { homeViewModel.saveLastDetailsExpanded(it) },
                                                         lastRefreshedAt = lastRefreshedAt,
                                                         refreshIntervalMinutes = refreshIntervalMinutes,
                                                         unreadEmailCount = unreadEmailCount,
                                                         unreadMessageCount = unreadMessageCount,
                                                         meetingsTodayCount = meetingsTodayCount,
-                                                        onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) }
+                                                        emailTriageResult = emailTriageResult,
+                                                        onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
+                                                        themePreference = themePreference,
+                                                        onThemeToggle = {
+                                                            val next = if (themePreference == "DARK") "LIGHT" else "DARK"
+                                                            settingsViewModel.saveThemePreference(next)
+                                                        }
                                                     )
                                                 }
 
                                                 AppTab.FEED -> {
                                                     val memories by memoryViewModel.memories.collectAsStateWithLifecycle()
                                                     val searchQuery by memoryViewModel.searchQuery.collectAsStateWithLifecycle()
+                                                    val feedFilter by navViewModel.feedFilter.collectAsStateWithLifecycle()
                                                     var feedMonitoredApps by remember { mutableStateOf(settingsManager.getMonitoredApps()) }
 
                                                     MemoryScreen(
@@ -662,6 +667,7 @@ class MainActivity : ComponentActivity() {
                                                             feedMonitoredApps = emptySet()
                                                             homeViewModel.refreshMonitoredApps()
                                                         },
+                                                        initialFilter = feedFilter,
                                                         vaultUri = settingsManager.getObsidianVaultUri(),
                                                         onSaveVoiceNote = { text, audioPath ->
                                                             memoryViewModel.saveVoiceNote(text, audioPath, settingsManager.getObsidianVaultUri())
@@ -688,19 +694,16 @@ class MainActivity : ComponentActivity() {
 
                                                 AppTab.WELLNESS -> WellnessScreen(settingsManager = settingsManager)
 
-                                                AppTab.NOTES -> NotesScreen(settingsManager = settingsManager)
+                                                AppTab.NOTES -> NotesScreen(
+                                                    settingsManager = settingsManager,
+                                                    onCopilotClick = { navViewModel.setTab(AppTab.COPILOT) }
+                                                )
 
                                                 AppTab.SETTINGS -> {
                                                     val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
                                                     val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
                                                     AppCaptureSettingsScreen(
                                                         settingsManager = settingsManager,
-                                                        themePreference = themePreference,
-                                                        onThemeChange = {
-                                                            settingsViewModel.saveThemePreference(
-                                                                it
-                                                            )
-                                                        },
                                                         onBack = {
                                                             navViewModel.setTab(AppTab.TODAY)
                                                             homeViewModel.refreshMonitoredApps()

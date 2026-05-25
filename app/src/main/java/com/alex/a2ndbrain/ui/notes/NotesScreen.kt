@@ -13,6 +13,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
@@ -38,6 +39,7 @@ import java.util.Locale
 @Composable
 fun NotesScreen(
     settingsManager: CaptureSettingsManager,
+    onCopilotClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -92,6 +94,10 @@ fun NotesScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        IconButton(onClick = onCopilotClick) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = "Co-pilot",
+                                tint = MaterialTheme.colorScheme.primary)
+                        }
                         if (folderStack.isNotEmpty()) {
                             IconButton(onClick = {
                                 val newStack = folderStack.dropLast(1)

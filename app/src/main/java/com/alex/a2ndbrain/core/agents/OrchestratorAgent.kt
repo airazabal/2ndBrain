@@ -204,7 +204,13 @@ class OrchestratorAgent(
         }
 
         if (flags.includeMemories && ctx.memories.isNotEmpty()) {
-            append("CAPTURED MEMORIES:\n")
+            val lower = userMessage.lowercase(java.util.Locale.getDefault())
+            val isFinanceQuery = listOf("money", "spend", "spent", "paid", "pay", "payment", "bank", "transaction", "cost", "price", "purchase", "budget", "expense", "shop", "bought", "dollar", "financ", "bill", "invoice", "charge", "receipt").any { lower.contains(it) }
+            val header = if (isFinanceQuery)
+                "CAPTURED MEMORIES (look for bank, payment, shopping, and financial app notifications):\n"
+            else
+                "CAPTURED MEMORIES:\n"
+            append(header)
             val limit = if (flags.isGeneral) 5 else 10
             ctx.memories.take(limit).forEach { mem ->
                 val date = java.text.SimpleDateFormat("MMM dd HH:mm", java.util.Locale.getDefault())
@@ -233,9 +239,12 @@ data class DynamicContextFlags(
         fun fromMessage(message: String): DynamicContextFlags {
             val lower = message.lowercase(java.util.Locale.getDefault())
             val health = listOf("step", "sleep", "heart", "bpm", "walk", "physical", "active", "health", "run", "fit", "calories").any { lower.contains(it) }
-            val usage = listOf("screen", "app", "usage", "youtube", "chrome", "spend", "social", "distract", "phone", "tablet", "device", "screen time", "app time", "online", "digital").any { lower.contains(it) }
+            // "spend/spent" removed — too ambiguous; finance keywords below catch money questions
+            val usage = listOf("screen time", "app time", "screen", "usage", "youtube", "chrome", "social", "distract", "phone", "tablet", "device", "online", "digital", "how long").any { lower.contains(it) }
             val meditation = listOf("meditat", "zendence", "streak", "session", "mindful", "calm", "insight", "breath", "relax", "practice", "mantra", "sit").any { lower.contains(it) }
-            val memories = listOf("notification", "clipboard", "log", "memory", "captured", "tag", "remember", "text", "copy", "message", "email", "chat").any { lower.contains(it) }
+            // Finance keywords route to memories (bank/payment notifications captured there)
+            val finance = listOf("money", "spend", "spent", "paid", "pay", "payment", "bank", "transaction", "cost", "price", "purchase", "budget", "expense", "shop", "bought", "dollar", "financ", "bill", "invoice", "charge", "receipt").any { lower.contains(it) }
+            val memories = finance || listOf("notification", "clipboard", "log", "memory", "captured", "tag", "remember", "text", "copy", "message", "email", "chat", "gmail", "slack", "whatsapp").any { lower.contains(it) }
             val general = !health && !usage && !meditation && !memories
             return DynamicContextFlags(
                 includeHealth = health || general,

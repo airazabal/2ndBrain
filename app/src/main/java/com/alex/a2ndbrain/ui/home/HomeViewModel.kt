@@ -14,10 +14,12 @@ import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
+import com.alex.a2ndbrain.core.agents.ModelRouter
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import com.alex.a2ndbrain.ConsolidatedUsage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -28,6 +30,13 @@ import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
 
+data class EmailTriageResult(
+    val isLoading: Boolean = false,
+    val critical: List<String> = emptyList(),
+    val overdue: List<String> = emptyList()
+)
+
+@OptIn(FlowPreview::class)
 class HomeViewModel(
     private val memoryRepository: MemoryRepository,
     private val usageRepository: UsageRepository,
@@ -36,7 +45,8 @@ class HomeViewModel(
     private val applicationContext: Context,
     private val nearbySyncManager: NearbySyncManager,
     private val zendenceMeditationRepository: ZendenceMeditationRepository,
-    private val healthRepository: HealthRepository
+    private val healthRepository: HealthRepository,
+    private val modelRouter: ModelRouter
 ) : ViewModel() {
     val healthConnectManager get() = healthRepository.healthConnectManager
 
@@ -104,20 +114,11 @@ class HomeViewModel(
         }.distinctBy { "${it.packageName}-${it.title?.trim()}" }.size
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
-    val todoistTaskCount: StateFlow<Int> = allMemoriesForHome.map { memories ->
-        val startOfToday = Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        memories.count { m ->
-            m.source == "notification" &&
-            m.timestamp >= startOfToday &&
-            m.packageName?.contains("todoist", ignoreCase = true) == true
-        }
-    }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
-
     private val _meditationSessions = MutableStateFlow<List<MeditationSession>>(emptyList())
     val meditationSessions: StateFlow<List<MeditationSession>> = _meditationSessions.asStateFlow()
+
+    private val _emailTriageResult = MutableStateFlow(EmailTriageResult())
+    val emailTriageResult: StateFlow<EmailTriageResult> = _emailTriageResult.asStateFlow()
 
     init {
         refreshMeditationSessions()
@@ -127,6 +128,63 @@ class HomeViewModel(
                 android.util.Log.d("HomeViewModel", "Meditation sync triggered, refreshing sessions")
                 refreshMeditationSessions()
             }
+        }
+        // Auto-triage unread emails whenever the set changes
+        viewModelScope.launch {
+            combine(allMemoriesForHome, _monitoredAppsState) { memories, monitored ->
+                val startOfToday = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                memories.filter { m ->
+                    m.source == "notification" && m.timestamp >= startOfToday && !m.isRead &&
+                    emailPackages.any { pkg -> m.packageName?.contains(pkg) == true } &&
+                    (monitored.isEmpty() || monitored.contains(m.packageName))
+                }
+            }
+            .debounce(3_000L)
+            .distinctUntilChangedBy { emails -> emails.map { it.id }.toSet() }
+            .collect { emails -> triageEmails(emails) }
+        }
+    }
+
+    private suspend fun triageEmails(emails: List<com.alex.a2ndbrain.core.memory.MemoryEntity>) {
+        if (emails.isEmpty()) {
+            _emailTriageResult.value = EmailTriageResult()
+            return
+        }
+        _emailTriageResult.value = EmailTriageResult(isLoading = true)
+        val snippets = emails.take(20).joinToString("\n") { m ->
+            val sender = (m.title ?: "Unknown").take(40)
+            val body = (m.content).take(80)
+            "- From: $sender | $body"
+        }
+        val prompt = """
+You are reviewing ${emails.size} unread email notification(s). Identify only the ones that are CRITICAL (need immediate action or response) or OVERDUE (past a deadline or time-sensitive). Ignore newsletters, promotions, automated alerts, and FYI emails.
+
+Emails:
+$snippets
+
+For each actionable email output exactly ONE line in this format (nothing else):
+CRITICAL|Brief description of what needs action
+OVERDUE|Brief description of what is overdue
+
+If no emails need attention, output exactly: NONE
+        """.trimIndent()
+        try {
+            val (response, _) = modelRouter.run(prompt, ModelRouter.Complexity.MEDIUM, timeoutMs = 20_000L)
+            val critical = mutableListOf<String>()
+            val overdue = mutableListOf<String>()
+            response.lines().forEach { line ->
+                when {
+                    line.startsWith("CRITICAL|") -> critical.add(line.removePrefix("CRITICAL|").trim())
+                    line.startsWith("OVERDUE|") -> overdue.add(line.removePrefix("OVERDUE|").trim())
+                }
+            }
+            _emailTriageResult.value = EmailTriageResult(isLoading = false, critical = critical, overdue = overdue)
+        } catch (e: Exception) {
+            android.util.Log.w("HomeViewModel", "Email triage failed", e)
+            _emailTriageResult.value = EmailTriageResult(isLoading = false)
         }
     }
 
@@ -152,19 +210,6 @@ class HomeViewModel(
 
     fun refreshMonitoredApps() {
         _monitoredAppsState.value = settingsManager.getMonitoredApps()
-    }
-
-    private val _homeSummaryConfig = MutableStateFlow(settingsManager.getHomeSummaryConfig())
-    val homeSummaryConfig = _homeSummaryConfig.asStateFlow()
-
-    val lastDetailsExpanded: Boolean get() = settingsManager.getLastDetailsExpanded()
-
-    fun saveLastDetailsExpanded(expanded: Boolean) {
-        settingsManager.saveLastDetailsExpanded(expanded)
-    }
-
-    fun refreshHomeSummaryConfig() {
-        _homeSummaryConfig.value = settingsManager.getHomeSummaryConfig()
     }
 
     private val _inlineCopilotResponses = MutableStateFlow<Map<String, String>>(emptyMap())

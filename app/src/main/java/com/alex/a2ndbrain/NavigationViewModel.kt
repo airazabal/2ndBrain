@@ -16,8 +16,17 @@ class NavigationViewModel : ViewModel() {
     private val _presetCopilotQuery = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val presetCopilotQuery = _presetCopilotQuery.asSharedFlow()
 
+    private val _feedFilter = MutableStateFlow("All")
+    val feedFilter = _feedFilter.asStateFlow()
+
     fun setTab(tab: AppTab) {
+        if (tab != AppTab.FEED) _feedFilter.value = "All"
         _currentTab.value = tab
+    }
+
+    fun navigateToFeed(filter: String = "All") {
+        _feedFilter.value = filter
+        _currentTab.value = AppTab.FEED
     }
 
     fun triggerCopilotQuery(query: String) {
