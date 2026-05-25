@@ -70,7 +70,7 @@ class BrainWidget : GlanceAppWidget() {
                 ) {
                     StatCell(modifier = GlanceModifier.defaultWeight(), label = "Sense of Day", value = "$score", unit = "/100")
                     StatCell(modifier = GlanceModifier.defaultWeight(), label = "Steps", value = formatSteps(steps), unit = "")
-                    StatCell(modifier = GlanceModifier.defaultWeight(), label = "Habits", value = habitsText, unit = "")
+                    StatCell(modifier = GlanceModifier.defaultWeight(), label = "Tasks", value = habitsText, unit = "")
                 }
             }
         }

@@ -169,14 +169,14 @@ class ReflectionManager(
             }
             coroutineScope {
                 val memoriesDeferred = async { memoryAgent.retrieveSince(startCal.timeInMillis) }
-                val healthTripleDeferred = async { healthAgent.fetchAll() }
+                val healthPairDeferred = async { healthAgent.fetchAll() }
                 val weeklyTrendsDeferred = async { healthAgent.fetchWeeklyTrends() }
                 val usageDeferred = async {
                     try { usageRepository.getUsageStatsForTodaySync() } catch (e: Exception) { emptyList() }
                 }
 
                 val memories = memoriesDeferred.await()
-                val (healthCtx, habitsCtx, meditationCtx) = healthTripleDeferred.await()
+                val (healthCtx, meditationCtx) = healthPairDeferred.await()
                 val weeklyTrends = weeklyTrendsDeferred.await()
                 val usage = usageDeferred.await()
 
@@ -184,7 +184,6 @@ class ReflectionManager(
                     memories = memories,
                     health = healthCtx.copy(weeklyTrends = weeklyTrends),
                     usageStats = usage,
-                    habits = habitsCtx,
                     meditation = meditationCtx
                 )
             }
@@ -237,20 +236,19 @@ class ReflectionManager(
 
         return coroutineScope {
             val memoriesDeferred = async { memoryAgent.retrieveSince(searchStart) }
-            val healthTripleDeferred = async { healthAgent.fetchAll() }
+            val healthPairDeferred = async { healthAgent.fetchAll() }
             val usageDeferred = async {
                 try { usageRepository.getUsageStatsForTodaySync() } catch (e: Exception) { emptyList() }
             }
 
             val memories = memoriesDeferred.await()
-            val (healthCtx, habitsCtx, meditationCtx) = healthTripleDeferred.await()
+            val (healthCtx, meditationCtx) = healthPairDeferred.await()
             val usage = usageDeferred.await()
 
             BrainContext(
                 memories = memories,
                 health = healthCtx,
                 usageStats = usage,
-                habits = habitsCtx,
                 meditation = meditationCtx
             )
         }

@@ -7,10 +7,9 @@ import androidx.room.RoomDatabase
 import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.health.HealthSnapshotEntity
 
-@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class, HabitEntity::class, HabitCompletionEntity::class, HealthSnapshotEntity::class], version = 18, exportSchema = true)
+@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class, HealthSnapshotEntity::class], version = 19, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
-    abstract fun habitsDao(): HabitsDao
     abstract fun healthDao(): HealthDao
 
     companion object {

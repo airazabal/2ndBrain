@@ -62,7 +62,6 @@ fun ReflectionScreen(
     onDeleteSummary: (Long) -> Unit,
     weeklyUsageStats: List<UsageStatEntity>,
     weeklyHealthTrends: List<Pair<String, HealthMetrics>>,
-    pastWeekHabitCompletions: List<Pair<String, Float>>,
     isGeneratingWeeklyInsight: Boolean,
     onGenerateWeeklyInsight: () -> Unit,
     modifier: Modifier = Modifier
@@ -753,55 +752,6 @@ fun ReflectionScreen(
                 }
             }
 
-            // Habits compliance Card
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Habits Checklist Compliance", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        if (pastWeekHabitCompletions.isEmpty()) {
-                            Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                                Text("Add habits to see compliance checklists", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
-                            }
-                        } else {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.Bottom
-                            ) {
-                                pastWeekHabitCompletions.forEach { (label, pct) ->
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Text("${(pct * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                        Box(
-                                            modifier = Modifier
-                                                .width(24.dp)
-                                                .height(80.dp)
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .fillMaxHeight(pct)
-                                                    .align(Alignment.BottomCenter)
-                                                    .background(Brush.verticalGradient(listOf(PastelGreen, PastelGreenText)))
-                                            )
-                                        }
-                                        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
 
             // Screen time Card
             item {

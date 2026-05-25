@@ -30,8 +30,7 @@ fun DashboardHeader(
     unreadEmailCount: Int,
     meetingsCount: Int,
     unreadMessageCount: Int,
-    completedHabits: Int,
-    totalHabits: Int,
+    todoistTaskCount: Int = 0,
     steps: Long = 0L,
     sleepMinutes: Int = 0,
     avgHeartRate: Int = 0,
@@ -39,7 +38,7 @@ fun DashboardHeader(
     onEmailClick: () -> Unit,
     onMeetingsClick: () -> Unit,
     onMessagesClick: () -> Unit,
-    onHabitsClick: () -> Unit,
+    onTodoistClick: () -> Unit = {},
     onHealthClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -121,12 +120,12 @@ fun DashboardHeader(
                 onClick = onMessagesClick
             )
             DashCard(
-                label = "HABITS\nTODAY",
-                value = "$completedHabits / $totalHabits",
-                subtitle = if (completedHabits >= totalHabits && totalHabits > 0) "All done!" else "${totalHabits - completedHabits} remaining",
-                accentColor = Color(0xFF66BB6A),
+                label = "TASKS\nTODAY",
+                value = if (todoistTaskCount > 99) "99+" else todoistTaskCount.toString(),
+                subtitle = if (todoistTaskCount == 0) "No tasks captured" else "$todoistTaskCount from Todoist",
+                accentColor = Color(0xFFE44332),
                 icon = Icons.Default.CheckCircle,
-                onClick = onHabitsClick
+                onClick = onTodoistClick
             )
             val sleepH = sleepMinutes / 60
             val sleepM = sleepMinutes % 60

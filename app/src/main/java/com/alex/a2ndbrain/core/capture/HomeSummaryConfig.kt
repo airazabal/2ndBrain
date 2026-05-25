@@ -2,7 +2,6 @@ package com.alex.a2ndbrain.core.capture
 
 data class HomeSummaryConfig(
     val defaultMode: HomeDefaultMode = HomeDefaultMode.SUMMARY_ONLY,
-    val showHabitPill: Boolean = true,
     val showNextEventPill: Boolean = true,
     val showStepsPill: Boolean = true,
     val showSleepMeditationPill: Boolean = true,

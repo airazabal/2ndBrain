@@ -184,23 +184,6 @@ class ReflectionAgent {
             append("\n")
         }
 
-        // ── Habits progress ───────────────────────────────────────────────
-        if (ctx.habits.activeHabits.isNotEmpty()) {
-            when (type) {
-                ReflectionType.WEEKLY_CORRELATION -> {
-                    // Weekly builds its own habits section in the dedicated weekly prompt
-                }
-                else -> {
-                    append("DAILY ROUTINES PROGRESS:\n")
-                    ctx.habits.activeHabits.forEach { habit ->
-                        val status = if (ctx.habits.completedHabitIds.contains(habit.id)) "✓ Done" else "✗ Missed"
-                        append("- ${habit.name} (${habit.timeString}): $status\n")
-                    }
-                    append("\n")
-                }
-            }
-        }
-
         // ── Meditation ────────────────────────────────────────────────────
         if (ctx.meditation.sessions.isNotEmpty()) {
             val streaks = ctx.meditation.streaks

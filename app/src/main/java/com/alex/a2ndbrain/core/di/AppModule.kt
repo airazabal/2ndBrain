@@ -34,7 +34,6 @@ val appModule = module {
     // Database and Dao
     single { AppDatabase.getDatabase(androidContext()) }
     single { get<AppDatabase>().memoryDao() }
-    single { get<AppDatabase>().habitsDao() }
     single<HealthDao> { get<AppDatabase>().healthDao() }
 
     // Repositories
@@ -57,11 +56,11 @@ val appModule = module {
         }
     }
     single { ZendenceMeditationRepository(androidContext()) }
-    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get()) }
+    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get()) }
 
     // Agent layer (Phase 1-3 migration)
     single { MemoryAgent(get()) }
-    single { HealthAgent(get(), get(), get()) }
+    single { HealthAgent(get(), get()) }
     single { ReflectionAgent() }
     single { ModelPicker(androidContext()) }
     single { ModelRouter(get(), get(), get()) }
@@ -70,16 +69,15 @@ val appModule = module {
     factory { SessionMemory() }
 
     // ViewModels
-    single { com.alex.a2ndbrain.core.calendar.CalendarWritebackManager(androidContext(), get()) }
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), androidContext(), get(), get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get()) }
-    viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.search.SearchViewModel(get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.search.SearchViewModel(get()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }

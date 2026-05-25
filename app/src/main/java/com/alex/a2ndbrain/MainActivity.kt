@@ -358,18 +358,6 @@ class MainActivity : ComponentActivity() {
                         val navIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
 
                         val snackbarHostState = remember { SnackbarHostState() }
-                        LaunchedEffect(homeViewModel) {
-                            homeViewModel.habitUncompleted.collect { entity ->
-                                val result = snackbarHostState.showSnackbar(
-                                    message = "Habit unchecked",
-                                    actionLabel = "Undo",
-                                    duration = SnackbarDuration.Short
-                                )
-                                if (result == SnackbarResult.ActionPerformed) {
-                                    homeViewModel.undoHabitUncomplete(entity)
-                                }
-                            }
-                        }
 
                         if (showWizard) {
                             PermissionWizardScreen(
@@ -398,7 +386,7 @@ class MainActivity : ComponentActivity() {
                                         icon = Icons.Default.NotificationsActive,
                                         iconTint = androidx.compose.ui.graphics.Color(0xFFF4511E),
                                         title = "Push Notifications",
-                                        description = "Required to deliver habit reminders and medication alarms.",
+                                        description = "Required to deliver push notifications.",
                                         isRequired = true,
                                         isGranted = hasPostNotifications,
                                         actionLabel = "Grant",
@@ -563,9 +551,6 @@ class MainActivity : ComponentActivity() {
                                                     val healthConnectAvailable =
                                                         homeViewModel.healthConnectManager.isAvailable()
 
-                                                    val activeHabits by homeViewModel.activeHabitsToday.collectAsStateWithLifecycle()
-                                                    val completedHabitIds by homeViewModel.completedHabitIdsToday.collectAsStateWithLifecycle()
-                                                    val pastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
                                                     val senseOfDayScore by homeViewModel.senseOfDayScore.collectAsStateWithLifecycle()
                                                     val senseOfDayContext by homeViewModel.senseOfDayContext.collectAsStateWithLifecycle()
                                                     val todayTimelineEvents by homeViewModel.todayTimelineEvents.collectAsStateWithLifecycle()
@@ -586,8 +571,6 @@ class MainActivity : ComponentActivity() {
                                                     val unreadEmailCount by homeViewModel.unreadEmailCount.collectAsStateWithLifecycle()
                                                     val unreadMessageCount by homeViewModel.unreadMessageCount.collectAsStateWithLifecycle()
                                                     val meetingsTodayCount by homeViewModel.meetingsTodayCount.collectAsStateWithLifecycle()
-                                                    val overdueHabitsCount by homeViewModel.overdueHabitsCount.collectAsStateWithLifecycle()
-
                                                     LaunchedEffect(Unit) {
                                                         homeViewModel.checkHealthPermissionsAndSync()
                                                         homeViewModel.loadVaultNotes()
@@ -609,14 +592,6 @@ class MainActivity : ComponentActivity() {
                                                                 homeViewModel.healthConnectManager.permissions
                                                             )
                                                         },
-                                                        activeHabits = activeHabits,
-                                                        completedHabitIds = completedHabitIds,
-                                                        onToggleHabit = { id ->
-                                                            homeViewModel.toggleHabitCompletion(
-                                                                id
-                                                            )
-                                                        },
-                                                        pastWeekHabitCompletions = pastWeekHabitCompletions,
                                                         senseOfDayScore = senseOfDayScore,
                                                         senseOfDayContext = senseOfDayContext,
                                                         todayTimelineEvents = todayTimelineEvents,
@@ -664,11 +639,7 @@ class MainActivity : ComponentActivity() {
                                                         unreadEmailCount = unreadEmailCount,
                                                         unreadMessageCount = unreadMessageCount,
                                                         meetingsTodayCount = meetingsTodayCount,
-                                                        overdueHabitsCount = overdueHabitsCount,
-                                                        onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
-                                                        onDeleteHabit = { homeViewModel.deleteHabit(it) },
-                                                        onAddHabit = { name, time, isMed, repeatUntil -> homeViewModel.addHabit(name, time, isMed, repeatUntil) },
-                                                        onUpdateHabit = { habit, name, time, repeatUntil -> homeViewModel.updateHabit(habit, name, time, repeatUntil) }
+                                                        onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) }
                                                     )
                                                 }
 
@@ -720,7 +691,6 @@ class MainActivity : ComponentActivity() {
                                                 AppTab.NOTES -> NotesScreen(settingsManager = settingsManager)
 
                                                 AppTab.SETTINGS -> {
-                                                    val activeHabits by settingsViewModel.activeHabits.collectAsStateWithLifecycle()
                                                     val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
                                                     val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
                                                     AppCaptureSettingsScreen(
@@ -750,24 +720,6 @@ class MainActivity : ComponentActivity() {
                                                                 componentName,
                                                                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                                                                 PackageManager.DONT_KILL_APP
-                                                            )
-                                                        },
-                                                        activeHabits = activeHabits,
-                                                        onAddCustomHabit = { name, time, isMed ->
-                                                            settingsViewModel.addCustomHabit(
-                                                                name,
-                                                                time,
-                                                                isMed
-                                                            )
-                                                        },
-                                                        onDeleteHabit = { id ->
-                                                            settingsViewModel.deleteHabit(
-                                                                id
-                                                            )
-                                                        },
-                                                        onToggleHabitActive = { id ->
-                                                            settingsViewModel.toggleHabitActive(
-                                                                id
                                                             )
                                                         },
                                                         onUnmonitoredAppRemoved = {

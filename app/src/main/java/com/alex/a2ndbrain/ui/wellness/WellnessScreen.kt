@@ -36,8 +36,6 @@ fun WellnessScreen(
     val weeklyHealthTrends by reflectionViewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
     val isGenerating by reflectionViewModel.isGeneratingReflection.collectAsStateWithLifecycle()
     val isGeneratingWeekly by reflectionViewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
-    val pastWeekHabitCompletions by homeViewModel.pastWeekHabitCompletions.collectAsStateWithLifecycle()
-
     LaunchedEffect(Unit) {
         launch { healthViewModel.refresh() }
         launch { reflectionViewModel.loadWeeklyHealthTrends() }
@@ -71,7 +69,6 @@ fun WellnessScreen(
                     onDeleteSummary = { id -> reflectionViewModel.deleteSummary(id) },
                     weeklyUsageStats = weeklyUsageStats,
                     weeklyHealthTrends = weeklyHealthTrends,
-                    pastWeekHabitCompletions = pastWeekHabitCompletions,
                     isGeneratingWeeklyInsight = isGeneratingWeekly,
                     onGenerateWeeklyInsight = { reflectionViewModel.generateWeeklyInsight() }
                 )

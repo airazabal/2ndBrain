@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
-import com.alex.a2ndbrain.core.memory.HabitEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import org.koin.androidx.compose.koinViewModel
 import java.text.SimpleDateFormat
@@ -162,13 +161,6 @@ private fun SearchResultsList(
             }
         }
 
-        if (results.habits.isNotEmpty()) {
-            item { SectionHeader("Habits (${results.habits.size})") }
-            items(results.habits, key = { it.id }) { habit ->
-                HabitResultItem(habit = habit, query = query)
-                HorizontalDivider(thickness = 0.5.dp, modifier = Modifier.padding(start = 16.dp))
-            }
-        }
     }
 }
 
@@ -239,21 +231,6 @@ private fun SummaryResultItem(summary: DailySummaryEntity, query: String) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 3
-        )
-    }
-}
-
-@Composable
-private fun HabitResultItem(habit: HabitEntity, query: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = highlightText(habit.name, query),
-            style = MaterialTheme.typography.bodyMedium
         )
     }
 }

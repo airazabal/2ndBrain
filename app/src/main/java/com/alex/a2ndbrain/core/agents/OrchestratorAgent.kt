@@ -44,16 +44,16 @@ class OrchestratorAgent(
         flags: DynamicContextFlags? = null
     ): BrainContext = withContext(Dispatchers.IO) {
         val needsMemory = flags == null || flags.includeMemories
-        val needsHealth = flags == null || flags.includeHealth || flags.includeHabits || flags.includeMeditation
+        val needsHealth = flags == null || flags.includeHealth || flags.includeMeditation
         val needsUsage  = flags == null || flags.includeUsage
 
         coroutineScope {
             val memoriesDeferred = async {
                 if (needsMemory) memoryAgent.retrieve(query) else emptyList()
             }
-            val healthTripleDeferred = async {
+            val healthPairDeferred = async {
                 if (needsHealth) healthAgent.fetchAll()
-                else Triple(HealthContext(), HabitsContext(), MeditationContext())
+                else Pair(HealthContext(), MeditationContext())
             }
             val usageDeferred = async {
                 if (needsUsage) {
@@ -63,14 +63,13 @@ class OrchestratorAgent(
             }
 
             val memories = memoriesDeferred.await()
-            val (healthCtx, habitsCtx, meditationCtx) = healthTripleDeferred.await()
+            val (healthCtx, meditationCtx) = healthPairDeferred.await()
             val usage = usageDeferred.await()
 
             BrainContext(
                 memories = memories,
                 health = healthCtx,
                 usageStats = usage,
-                habits = habitsCtx,
                 meditation = meditationCtx
             )
         }
@@ -172,15 +171,6 @@ class OrchestratorAgent(
             append("- Heart rate: ${m.minHeartRate}–${m.maxHeartRate} BPM (avg ${m.avgHeartRate})\n\n")
         }
 
-        if (flags.includeHabits && ctx.habits.activeHabits.isNotEmpty()) {
-            append("DAILY HABITS TODAY:\n")
-            ctx.habits.activeHabits.forEach { habit ->
-                val status = if (ctx.habits.completedHabitIds.contains(habit.id)) "✓ Done" else "○ Pending"
-                append("- [$status] ${habit.name} (${habit.timeString})\n")
-            }
-            append("\n")
-        }
-
         if (flags.includeUsage && ctx.usageStats.isNotEmpty()) {
             val activeStats = ctx.usageStats.filter { it.totalTimeVisibleMs / 60_000L > 0 }
             if (activeStats.isNotEmpty()) {
@@ -234,7 +224,6 @@ class OrchestratorAgent(
  */
 data class DynamicContextFlags(
     val includeHealth: Boolean,
-    val includeHabits: Boolean,
     val includeUsage: Boolean,
     val includeMeditation: Boolean,
     val includeMemories: Boolean,
@@ -244,14 +233,12 @@ data class DynamicContextFlags(
         fun fromMessage(message: String): DynamicContextFlags {
             val lower = message.lowercase(java.util.Locale.getDefault())
             val health = listOf("step", "sleep", "heart", "bpm", "walk", "physical", "active", "health", "run", "fit", "calories").any { lower.contains(it) }
-            val habits = listOf("habit", "routine", "alarm", "medication", "medicine", "pill", "checklist", "todo", "task").any { lower.contains(it) }
             val usage = listOf("screen", "app", "usage", "youtube", "chrome", "spend", "social", "distract", "phone", "tablet", "device", "screen time", "app time", "online", "digital").any { lower.contains(it) }
             val meditation = listOf("meditat", "zendence", "streak", "session", "mindful", "calm", "insight", "breath", "relax", "practice", "mantra", "sit").any { lower.contains(it) }
             val memories = listOf("notification", "clipboard", "log", "memory", "captured", "tag", "remember", "text", "copy", "message", "email", "chat").any { lower.contains(it) }
-            val general = !health && !habits && !usage && !meditation && !memories
+            val general = !health && !usage && !meditation && !memories
             return DynamicContextFlags(
                 includeHealth = health || general,
-                includeHabits = habits || general,
                 includeUsage = usage || general,
                 includeMeditation = meditation || general,
                 includeMemories = memories || general,

@@ -12,7 +12,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.alex.a2ndbrain.core.memory.HabitsDao
+import com.alex.a2ndbrain.core.memory.MemoryDao
 import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
@@ -32,7 +32,7 @@ class WidgetUpdateWorker(
 ) : CoroutineWorker(context, params), KoinComponent {
 
     private val healthRepository: HealthRepository by inject()
-    private val habitsDao: HabitsDao by inject()
+    private val memoryDao: MemoryDao by inject()
     private val usageRepository: UsageRepository by inject()
     private val meditationRepository: ZendenceMeditationRepository by inject()
 
@@ -44,11 +44,13 @@ class WidgetUpdateWorker(
             val health = healthRepository.getTodayMetrics()
             val steps = health.steps.toInt()
 
-            val allHabits = habitsDao.getAllHabitsSync()
-            val completedIds = habitsDao.getCompletionsForDateSync(today).map { it.habitId }.toSet()
-            val active = allHabits.size.coerceAtLeast(1)
-            val completed = completedIds.size
-            val habitsRatio = completed.toFloat() / active.toFloat()
+            // Count Todoist notifications captured today
+            val startOfToday = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            val todoistCount = memoryDao.getMemoriesByPackageSync("com.todoist")
+                .count { it.timestamp >= startOfToday }
 
             val usageStats = usageRepository.getUsageStatsForTodaySync()
             var totalFocusMs = 0L
@@ -73,10 +75,10 @@ class WidgetUpdateWorker(
             val meditated = sessions.any { dateFormat.format(Date(it.timestamp)) == today }
 
             val stepsRatio = (steps.toFloat() / 10_000f).coerceIn(0f, 1f)
-            val score = ((habitsRatio * 25f) + (stepsRatio * 25f) + (focusRatio * 30f) + (if (meditated) 20f else 0f))
+            val score = ((stepsRatio * 25f) + (focusRatio * 55f) + (if (meditated) 20f else 0f))
                 .toInt().coerceIn(10, 100)
 
-            val habitsText = "$completed/$active"
+            val tasksText = if (todoistCount > 99) "99+" else "$todoistCount"
 
             val manager = GlanceAppWidgetManager(context)
             val glanceIds = manager.getGlanceIds(BrainWidget::class.java)
@@ -84,7 +86,7 @@ class WidgetUpdateWorker(
                 updateAppWidgetState(context, glanceId) { prefs: MutablePreferences ->
                     prefs[BrainWidget.PREF_SCORE] = score
                     prefs[BrainWidget.PREF_STEPS] = steps
-                    prefs[BrainWidget.PREF_HABITS] = habitsText
+                    prefs[BrainWidget.PREF_HABITS] = tasksText
                 }
                 BrainWidget().update(context, glanceId)
             }

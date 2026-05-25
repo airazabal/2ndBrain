@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.capture.HomeSummaryConfig
 import com.alex.a2ndbrain.core.capture.HomeDefaultMode
-import com.alex.a2ndbrain.core.memory.HabitEntity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -105,10 +104,6 @@ fun AppCaptureSettingsScreen(
     onThemeChange: (String) -> Unit,
     onBack: () -> Unit,
     onRestartService: () -> Unit,
-    activeHabits: List<HabitEntity> = emptyList(),
-    onAddCustomHabit: (String, String, Boolean) -> Unit = { _, _, _ -> },
-    onDeleteHabit: (String) -> Unit = {},
-    onToggleHabitActive: (String) -> Unit = {},
     onUnmonitoredAppRemoved: (String) -> Unit = {},
     syncStatus: NearbySyncManager.SyncStatus = NearbySyncManager.SyncStatus.Idle,
     onStartSync: (Boolean) -> Unit = {},
@@ -412,91 +407,6 @@ fun AppCaptureSettingsScreen(
             }
         }
 
-        // ── Daily Routines ────────────────────────────────────────────────────
-        item { SettingsSectionLabel("Daily Routines & Medications") }
-        item {
-            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (activeHabits.isEmpty()) {
-                        Text(
-                            text = "No routines configured yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
-                    } else {
-                        activeHabits.forEach { habit ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (habit.isMedication) "💊" else "🏃",
-                                    modifier = Modifier.padding(end = 10.dp),
-                                    fontSize = 18.sp
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(habit.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text("${habit.timeString}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
-                                }
-                                Switch(checked = habit.isActive, onCheckedChange = { onToggleHabitActive(habit.id) })
-                                if (habit.id != "default_meds" && habit.id != "default_walk" && habit.id != "default_reflection") {
-                                    IconButton(onClick = { onDeleteHabit(habit.id) }, modifier = Modifier.size(36.dp)) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
-                                    }
-                                }
-                            }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Add Routine", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.outline)
-
-                    var newHabitName by remember { mutableStateOf("") }
-                    var newHabitTime by remember { mutableStateOf("") }
-                    var newHabitIsMedication by remember { mutableStateOf(false) }
-                    var validationError by remember { mutableStateOf<String?>(null) }
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = newHabitName,
-                            onValueChange = { newHabitName = it },
-                            label = { Text("Name") },
-                            modifier = Modifier.weight(1.5f),
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyMedium
-                        )
-                        OutlinedTextField(
-                            value = newHabitTime,
-                            onValueChange = { newHabitTime = it },
-                            label = { Text("Time") },
-                            modifier = Modifier.weight(1f),
-                            singleLine = true,
-                            placeholder = { Text("HH:mm") },
-                            textStyle = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                    if (validationError != null) {
-                        Text(validationError!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
-                    }
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Checkbox(checked = newHabitIsMedication, onCheckedChange = { newHabitIsMedication = it })
-                            Text("Medication", style = MaterialTheme.typography.bodyMedium)
-                        }
-                        Button(onClick = {
-                            if (newHabitName.isBlank()) { validationError = "Enter a name."; return@Button }
-                            if (!newHabitTime.matches(Regex("^([01]?[0-9]|2[0-3]):[0-5][0-9]$"))) { validationError = "Use HH:mm format."; return@Button }
-                            validationError = null
-                            onAddCustomHabit(newHabitName.trim(), newHabitTime.trim(), newHabitIsMedication)
-                            newHabitName = ""; newHabitTime = ""; newHabitIsMedication = false
-                        }) { Text("Add") }
-                    }
-                }
-            }
-        }
-
         // ── Home Screen ───────────────────────────────────────────────────────
         item { SettingsSectionLabel("Home Screen") }
         item {
@@ -537,7 +447,6 @@ fun AppCaptureSettingsScreen(
                     listOf(
                         "Sense of Day text"       to homeSummaryConfig.showSenseOfDayText,
                         "Alerts"                  to homeSummaryConfig.showAlerts,
-                        "Habits progress pill"    to homeSummaryConfig.showHabitPill,
                         "Next event pill"         to homeSummaryConfig.showNextEventPill,
                         "Steps pill"              to homeSummaryConfig.showStepsPill,
                         "Sleep / meditation pill" to homeSummaryConfig.showSleepMeditationPill
@@ -550,7 +459,6 @@ fun AppCaptureSettingsScreen(
                                     val updated = when (label) {
                                         "Sense of Day text"       -> homeSummaryConfig.copy(showSenseOfDayText     = checked)
                                         "Alerts"                  -> homeSummaryConfig.copy(showAlerts              = checked)
-                                        "Habits progress pill"    -> homeSummaryConfig.copy(showHabitPill           = checked)
                                         "Next event pill"         -> homeSummaryConfig.copy(showNextEventPill       = checked)
                                         "Steps pill"              -> homeSummaryConfig.copy(showStepsPill           = checked)
                                         "Sleep / meditation pill" -> homeSummaryConfig.copy(showSleepMeditationPill = checked)
@@ -599,7 +507,7 @@ fun AppCaptureSettingsScreen(
             Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Full export: habits, monitored apps, captures (90 days), reflections, and health snapshots.",
+                        text = "Full export: monitored apps, captures (90 days), reflections, and health snapshots.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

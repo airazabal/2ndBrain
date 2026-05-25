@@ -11,9 +11,6 @@ import com.alex.a2ndbrain.TimelineEvent
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.health.HealthMetrics
 import com.alex.a2ndbrain.core.health.HealthRepository
-import com.alex.a2ndbrain.core.memory.HabitCompletionEntity
-import com.alex.a2ndbrain.core.memory.HabitEntity
-import com.alex.a2ndbrain.core.memory.HabitsDao
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -29,7 +26,6 @@ import com.alex.a2ndbrain.core.meditation.MeditationManager
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
-import com.alex.a2ndbrain.core.calendar.CalendarWritebackManager
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
 
 class HomeViewModel(
@@ -37,12 +33,10 @@ class HomeViewModel(
     private val usageRepository: UsageRepository,
     private val settingsManager: CaptureSettingsManager,
     private val reflectionManager: ReflectionManager,
-    private val habitsDao: HabitsDao,
     private val applicationContext: Context,
     private val nearbySyncManager: NearbySyncManager,
     private val zendenceMeditationRepository: ZendenceMeditationRepository,
-    private val healthRepository: HealthRepository,
-    private val calendarWritebackManager: CalendarWritebackManager
+    private val healthRepository: HealthRepository
 ) : ViewModel() {
     val healthConnectManager get() = healthRepository.healthConnectManager
 
@@ -110,6 +104,18 @@ class HomeViewModel(
         }.distinctBy { "${it.packageName}-${it.title?.trim()}" }.size
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
+    val todoistTaskCount: StateFlow<Int> = allMemoriesForHome.map { memories ->
+        val startOfToday = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        memories.count { m ->
+            m.source == "notification" &&
+            m.timestamp >= startOfToday &&
+            m.packageName?.contains("todoist", ignoreCase = true) == true
+        }
+    }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
     private val _meditationSessions = MutableStateFlow<List<MeditationSession>>(emptyList())
     val meditationSessions: StateFlow<List<MeditationSession>> = _meditationSessions.asStateFlow()
 
@@ -144,62 +150,6 @@ class HomeViewModel(
     private val _vaultNotes = MutableStateFlow<List<DocumentFile>>(emptyList())
     val vaultNotes = _vaultNotes.asStateFlow()
 
-    // Room Database Habits Engine
-    val activeHabitsToday: StateFlow<List<HabitEntity>> = habitsDao.getActiveHabits(System.currentTimeMillis())
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    private fun getTodayDateString(): String {
-        return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-    }
-
-    val completedHabitIdsToday: StateFlow<Set<String>> = habitsDao.getCompletionsForDate(getTodayDateString())
-        .map { completions -> completions.map { it.habitId }.toSet() }
-        .stateIn(viewModelScope, SharingStarted.Lazily, emptySet())
-
-    val overdueHabitsCount: StateFlow<Int> = combine(activeHabitsToday, completedHabitIdsToday) { habits, completed ->
-        val cal = Calendar.getInstance()
-        val currentMins = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-        habits.count { habit ->
-            if (!habit.isActive) return@count false
-            val parts = habit.timeString.split(":")
-            val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
-            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            (h * 60 + m) < currentMins && habit.id !in completed
-        }
-    }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
-
-    val pastWeekHabitCompletions: StateFlow<List<Pair<String, Float>>> = activeHabitsToday.combine(
-        flow {
-            val cal = Calendar.getInstance()
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-            val today = dateFormat.format(cal.time)
-            cal.add(Calendar.DAY_OF_YEAR, -6)
-            val startDate = dateFormat.format(cal.time)
-            emitAll(habitsDao.getCompletionsInRange(startDate, today))
-        }
-    ) { activeHabits, completions ->
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val dayLabelFormat = SimpleDateFormat("E", Locale.getDefault()) // "Mon", "Tue"
-        
-        val activeCount = activeHabits.size.coerceAtLeast(1)
-        val completionsByDate = completions.groupBy { it.date }
-        
-        val last7Days = mutableListOf<Pair<String, Float>>()
-        for (i in 6 downTo 0) {
-            val loopCal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -i) }
-            val dateStr = dateFormat.format(loopCal.time)
-            val label = dayLabelFormat.format(loopCal.time).take(1).uppercase() // E.g., "M", "T"
-            
-            val completedForDate = completionsByDate[dateStr]?.size ?: 0
-            val pct = completedForDate.toFloat() / activeCount.toFloat()
-            last7Days.add(label to pct.coerceIn(0f, 1f))
-        }
-        last7Days
-    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    private val _habitUncompleted = MutableSharedFlow<HabitCompletionEntity>(replay = 0)
-    val habitUncompleted = _habitUncompleted.asSharedFlow()
-
     fun refreshMonitoredApps() {
         _monitoredAppsState.value = settingsManager.getMonitoredApps()
     }
@@ -233,26 +183,24 @@ class HomeViewModel(
     private val _senseOfDayScore = MutableStateFlow(75)
     val senseOfDayScore = _senseOfDayScore.asStateFlow()
 
-    private val _senseOfDayContext = MutableStateFlow("🎯 Calibrating your day. Complete a daily routine or log a few steps to update your Sense of Day index.")
+    private val _senseOfDayContext = MutableStateFlow("Calibrating your day. Log a few steps or meditate to update your Sense of Day index.")
     val senseOfDayContext = _senseOfDayContext.asStateFlow()
 
     // Proactive Timeline & Schedule Extractor
     val todayTimelineEvents: StateFlow<List<TimelineEvent>> = combine(
         allMemoriesForHome,
         vaultNotes,
-        activeHabitsToday,
-        completedHabitIdsToday,
         monitoredAppsState
-    ) { memories, notes, habits, completedIds, monitoredApps ->
+    ) { memories, notes, monitoredApps ->
         val startOfToday = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        
+
         val timelineList = mutableListOf<TimelineEvent>()
-        
+
         // 1. Process Database Notification & Manual Memories
         // Calendar packages are excluded here — CalendarContract (section 3) is the authoritative source.
         val calendarPackageKeywords = setOf("calendar", "agenda")
@@ -287,7 +235,7 @@ class HomeViewModel(
                 val minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
                 Pair(timeStr, minutes)
             }
-            
+
             val cleanTitle = mem.title ?: if (mem.content.length > 35) mem.content.take(35) + "..." else mem.content
             val appName = when {
                 mem.packageName?.contains("calendar") == true -> "Calendar"
@@ -301,7 +249,7 @@ class HomeViewModel(
                 mem.packageName?.contains("agenda") == true -> "manual"
                 else -> "system"
             }
-            
+
             TimelineEvent(
                 id = mem.id.toString(),
                 time = timeStr,
@@ -313,7 +261,7 @@ class HomeViewModel(
             )
         }
         timelineList.addAll(databaseEvents)
-        
+
         // 2. Process Obsidian Vault Notes
         val isObsidianMonitored = monitoredApps.isEmpty() || monitoredApps.contains("md.obsidian")
         if (isObsidianMonitored) {
@@ -348,36 +296,10 @@ class HomeViewModel(
                 }
             }
         }
-        
+
         // 3. Read today's events directly from Android Calendar Provider (Google accounts only)
         timelineList.addAll(queryGoogleCalendarEvents(startOfToday, startOfToday + DAY_MS))
 
-        // 4. Process Scheduled Habits today
-        val habitEvents = habits.map { habit ->
-            val timeParts = habit.timeString.split(":")
-            val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: 8
-            val min = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
-            val totalMinutes = hour * 60 + min
-            
-            val displayHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
-            val displayAmpm = if (hour >= 12) "PM" else "AM"
-            val timeStr = "$displayHour:${min.toString().padStart(2, '0')} $displayAmpm"
-            
-            val isCompleted = completedIds.contains(habit.id)
-            val statusText = if (isCompleted) "✓ Completed" else "⏰ Scheduled"
-            
-            TimelineEvent(
-                id = habit.id,
-                time = timeStr,
-                title = habit.name,
-                description = "Daily Routine Habit (${if (habit.isMedication) "Medication" else "Habit"})\nStatus: $statusText",
-                appName = "Routines",
-                sourcePackage = "habit",
-                minutesFromMidnight = totalMinutes
-            )
-        }
-        timelineList.addAll(habitEvents)
-        
         val cleanRegex = Regex("[^a-z0-9 ]")
 
         // Normalize all titles once — avoids recompiling the regex O(n²) times
@@ -413,12 +335,12 @@ class HomeViewModel(
                 acceptedTitlesByMinute.getOrPut(minute) { mutableListOf() }.add(norm)
             }
         }
-        
+
         uniqueEvents.sortedBy { it.minutesFromMidnight }
     }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val tomorrowTimelineEvents: StateFlow<List<TimelineEvent>> = activeHabitsToday
-        .map { habits ->
+    val tomorrowTimelineEvents: StateFlow<List<TimelineEvent>> = allMemoriesForHome
+        .map { _ ->
             val tomorrowStart = Calendar.getInstance().apply {
                 add(Calendar.DAY_OF_YEAR, 1)
                 set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
@@ -426,22 +348,6 @@ class HomeViewModel(
             }.timeInMillis
             val events = mutableListOf<TimelineEvent>()
             events.addAll(queryGoogleCalendarEvents(tomorrowStart, tomorrowStart + DAY_MS))
-            habits.forEach { habit ->
-                val parts = habit.timeString.split(":")
-                val hour = parts.getOrNull(0)?.toIntOrNull() ?: 8
-                val min  = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                val dispHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
-                val ampm = if (hour >= 12) "PM" else "AM"
-                events.add(TimelineEvent(
-                    id = "tmrw_habit_${habit.id}",
-                    time = "$dispHour:${min.toString().padStart(2, '0')} $ampm",
-                    title = habit.name,
-                    description = "Daily Routine (${if (habit.isMedication) "Medication" else "Habit"})\nStatus: ⏰ Scheduled",
-                    appName = "Routines",
-                    sourcePackage = "habit",
-                    minutesFromMidnight = hour * 60 + min
-                ))
-            }
             events.sortedBy { it.minutesFromMidnight }
         }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
@@ -593,10 +499,8 @@ class HomeViewModel(
     // Raw local conflicts (no dismiss filter) — pushed to NearbySyncManager for peer sync
     private val _localComputedConflicts: StateFlow<List<TimelineConflict>> = combine(
         todayTimelineEvents,
-        activeHabitsToday,
-        completedHabitIdsToday,
         usageStats
-    ) { events, habits, completedIds, usage ->
+    ) { events, usage ->
         val conflicts = mutableListOf<TimelineConflict>()
 
         // 1. Overlap Detection (only explicit calendar and manual events within 45 mins)
@@ -620,30 +524,7 @@ class HomeViewModel(
             }
         }
 
-        // 2. Overdue Habit/Meds
-        val currentMinutes = Calendar.getInstance().let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
-        habits.forEach { habit ->
-            if (habit.isMedication && !completedIds.contains(habit.id)) {
-                val timeParts = habit.timeString.split(":")
-                val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: 8
-                val min  = timeParts.getOrNull(1)?.toIntOrNull() ?: 0
-                if (currentMinutes > hour * 60 + min + 30) {
-                    conflicts.add(
-                        TimelineConflict(
-                            id = "overdue_${habit.id}",
-                            type = ConflictType.OVERDUE_HABIT,
-                            severity = ConflictSeverity.ALERT,
-                            title = "Medication Overdue",
-                            description = "Your medication '${habit.name}' was scheduled for ${habit.timeString} and is pending.",
-                            deepDivePrompt = "I missed my scheduled medication '${habit.name}' which was due at ${habit.timeString}. Can you help me quickly review my schedule so I can take it now and log it?",
-                            relatedEventIds = listOf(habit.id)
-                        )
-                    )
-                }
-            }
-        }
-
-        // 3. Distraction Gap Detection
+        // 2. Distraction Gap Detection
         val hasWorkEvent = events.any {
             val t = it.title.lowercase()
             t.contains("meeting") || t.contains("work") || t.contains("review") || t.contains("sync") || t.contains("call")
@@ -698,12 +579,12 @@ class HomeViewModel(
             val hourStr = match1.groupValues[1]
             val minStr = match1.groupValues[2]
             val ampm = match1.groupValues[3]
-            
+
             var hour = hourStr.toIntOrNull() ?: return null
             val min = minStr.toIntOrNull() ?: return null
-            
+
             var parsedTimeStr = "$hour:${min.toString().padStart(2, '0')}"
-            
+
             if (ampm.isNotBlank()) {
                 val suffix = ampm.uppercase()
                 parsedTimeStr += " $suffix"
@@ -718,7 +599,7 @@ class HomeViewModel(
             val cleanDisplayStr = "$displayHour:${min.toString().padStart(2, '0')} $displayAmpm"
             return Pair(cleanDisplayStr, totalMinutes)
         }
-        
+
         val regex2 = Regex("(?:\\b|@|at\\s+)(\\d{1,2})\\s*(AM|PM|am|pm)\\b")
         val match2 = regex2.find(line)
         if (match2 != null) {
@@ -739,8 +620,6 @@ class HomeViewModel(
         }
 
         // regex3: 4-digit military time without colon, requires explicit "at" or "@" prefix
-        // to avoid false positives with other 4-digit numbers.
-        // Matches: "at 1430", "@0830 standup", "Review at 2300"
         val regex3 = Regex("(?:@|at\\s+)([01]\\d|2[0-3])([0-5]\\d)\\b")
         val match3 = regex3.find(line)
         if (match3 != null) {
@@ -797,69 +676,6 @@ class HomeViewModel(
         }
     }
 
-    fun toggleHabitCompletion(habitId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val today = getTodayDateString()
-            val existing = habitsDao.getCompletionByKey(habitId, today)
-            val now = System.currentTimeMillis()
-            if (existing != null && !existing.isDeleted) {
-                // Soft-delete so the un-check tombstone propagates to peers
-                val uncompleted = existing.copy(isDeleted = true, lastModifiedAt = now)
-                habitsDao.insertCompletion(uncompleted)
-                _habitUncompleted.emit(existing)
-            } else {
-                habitsDao.insertCompletion(
-                    HabitCompletionEntity(habitId = habitId, date = today,
-                        completedAt = now, lastModifiedAt = now, isDeleted = false)
-                )
-                val habitName = habitsDao.getHabitById(habitId)?.name ?: return@launch
-                calendarWritebackManager.writeHabitCompletion(habitName)
-            }
-            nearbySyncManager.requestImmediateSync()
-        }
-    }
-
-    fun deleteHabit(habitId: String) {
-        viewModelScope.launch(Dispatchers.IO) {
-            habitsDao.softDeleteHabit(habitId)
-        }
-    }
-
-    fun addHabit(name: String, time: String, isMedication: Boolean, repeatUntil: Long?) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val now = System.currentTimeMillis()
-            habitsDao.insertHabit(HabitEntity(
-                id = java.util.UUID.randomUUID().toString(),
-                name = name.trim(),
-                timeString = time.trim(),
-                isMedication = isMedication,
-                isActive = true,
-                createdAt = now,
-                lastModifiedAt = now,
-                repeatUntil = repeatUntil
-            ))
-        }
-    }
-
-    fun updateHabit(habit: HabitEntity, newName: String, newTime: String, repeatUntil: Long?) {
-        viewModelScope.launch(Dispatchers.IO) {
-            habitsDao.insertHabit(habit.copy(
-                name = newName.trim(),
-                timeString = newTime.trim(),
-                repeatUntil = repeatUntil,
-                lastModifiedAt = System.currentTimeMillis()
-            ))
-        }
-    }
-
-    fun undoHabitUncomplete(entity: HabitCompletionEntity) {
-        viewModelScope.launch(Dispatchers.IO) {
-            // Restore by re-inserting as not-deleted with a fresh timestamp
-            habitsDao.insertCompletion(entity.copy(isDeleted = false, lastModifiedAt = System.currentTimeMillis()))
-            nearbySyncManager.requestImmediateSync()
-        }
-    }
-
     fun resolveInlineCopilot(eventId: String, prompt: String) {
         viewModelScope.launch(Dispatchers.IO) {
             _inlineCopilotLoading.update { it + eventId }
@@ -871,13 +687,9 @@ class HomeViewModel(
 
     private fun updateSenseOfDayScore() {
         viewModelScope.launch(Dispatchers.Default) {
-            val active = activeHabitsToday.value.size.coerceAtLeast(1)
-            val completed = completedHabitIdsToday.value.size
-            val habitsRatio = completed.toFloat() / active.toFloat()
-            
             val steps = _healthMetricsToday.value.steps
             val stepsRatio = (steps.toFloat() / 10000f).coerceIn(0f, 1f)
-            
+
             var totalFocusMs = 0L
             var totalSocialMs = 0L
             usageStats.value.forEach { stat ->
@@ -894,32 +706,29 @@ class HomeViewModel(
             } else {
                 totalFocusMs.toFloat() / totalTime.toFloat()
             }
-            
+
             val meditated = meditatedToday.value
-            val calculated = (habitsRatio * 25f) + (stepsRatio * 25f) + (focusRatio * 30f) + (if (meditated) 20f else 0f)
+            val calculated = (stepsRatio * 50f) + (focusRatio * 30f) + (if (meditated) 20f else 0f)
             _senseOfDayScore.value = calculated.toInt().coerceIn(10, 100)
-            
+
             val contextText = when {
-                meditated && stepsRatio >= 0.7f && habitsRatio >= 0.7f && focusRatio >= 0.7f -> {
-                    "🧘 A masterclass in balance! Meditated, active routines completed, excellent focus, and physical energy."
+                meditated && stepsRatio >= 0.7f && focusRatio >= 0.7f -> {
+                    "A masterclass in balance! Meditated, physically active, and excellent focus."
                 }
-                stepsRatio >= 0.7f && habitsRatio >= 0.7f && focusRatio >= 0.7f -> {
-                    "🌟 A masterclass in balance today! High routine compliance, excellent focus, and physical energy."
+                stepsRatio >= 0.7f && focusRatio >= 0.7f -> {
+                    "A great day so far! High physical activity and excellent focus."
                 }
                 stepsRatio < 0.4f && focusRatio >= 0.7f -> {
-                    "🏃 Checked off focus work, but you've been stationary. Step away for a brisk 10-minute stretch!"
+                    "Checked off focus work, but you've been stationary. Step away for a brisk 10-minute stretch!"
                 }
                 focusRatio < 0.4f -> {
-                    "📱 Digital distractions are high today. Set a quick focus timer and reconnect with your space."
+                    "Digital distractions are high today. Set a quick focus timer and reconnect with your space."
                 }
-                stepsRatio >= 0.6f && habitsRatio < 0.4f -> {
-                    "💊 Physically active, but falling behind on daily routines and medications. Let's get structured!"
-                }
-                completed == 0 && steps == 0L -> {
-                    "🎯 Calibrating your day. Complete a daily routine or log a few steps to update your Sense of Day index."
+                steps == 0L -> {
+                    "Calibrating your day. Log a few steps or meditate to update your Sense of Day index."
                 }
                 else -> {
-                    "⚡ Balanced progress! Continue checking off routines and keeping a healthy physical-digital ratio."
+                    "Balanced progress! Keep a healthy physical-digital ratio."
                 }
             }
             _senseOfDayContext.value = contextText
@@ -939,9 +748,9 @@ class HomeViewModel(
             }
         }
 
-        // Recalculate score whenever habits, metrics, usages, or meditation shifts
+        // Recalculate score whenever metrics, usages, or meditation shifts
         viewModelScope.launch {
-            combine(completedHabitIdsToday, activeHabitsToday, _healthMetricsToday, usageStats, meditatedToday) { _, _, _, _, _ -> }
+            combine(_healthMetricsToday, usageStats, meditatedToday) { _, _, _ -> }
                 .collect {
                     updateSenseOfDayScore()
                 }

@@ -3,8 +3,6 @@ package com.alex.a2ndbrain.ui.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
-import com.alex.a2ndbrain.core.memory.HabitEntity
-import com.alex.a2ndbrain.core.memory.HabitsDao
 import com.alex.a2ndbrain.core.memory.MemoryDao
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import kotlinx.coroutines.Dispatchers
@@ -21,17 +19,15 @@ import kotlinx.coroutines.flow.stateIn
 data class SearchResults(
     val memories: List<MemoryEntity> = emptyList(),
     val summaries: List<DailySummaryEntity> = emptyList(),
-    val habits: List<HabitEntity> = emptyList(),
     val isLoading: Boolean = false
 ) {
-    val isEmpty get() = memories.isEmpty() && summaries.isEmpty() && habits.isEmpty()
-    val total get() = memories.size + summaries.size + habits.size
+    val isEmpty get() = memories.isEmpty() && summaries.isEmpty()
+    val total get() = memories.size + summaries.size
 }
 
 @OptIn(FlowPreview::class)
 class SearchViewModel(
-    private val memoryDao: MemoryDao,
-    private val habitsDao: HabitsDao
+    private val memoryDao: MemoryDao
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -48,9 +44,7 @@ class SearchViewModel(
                 emit(SearchResults(isLoading = true))
                 val memories = memoryDao.searchMemoriesSync(q).take(20)
                 val summaries = memoryDao.searchSummaries(q)
-                val habits = habitsDao.getAllHabitsSync()
-                    .filter { it.name.contains(q, ignoreCase = true) }
-                emit(SearchResults(memories, summaries, habits))
+                emit(SearchResults(memories, summaries))
             }.flowOn(Dispatchers.IO)
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, SearchResults())

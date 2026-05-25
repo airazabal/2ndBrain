@@ -13,8 +13,6 @@ import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.TimelineConflict
 import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.health.HealthSnapshotEntity
-import com.alex.a2ndbrain.core.memory.HabitEntity
-import com.alex.a2ndbrain.core.memory.HabitsDao
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import com.google.android.gms.nearby.Nearby
@@ -37,8 +35,7 @@ class NearbySyncManager(
     private val usageRepository: UsageRepository,
     private val scope: CoroutineScope,
     private val meditationRepository: com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository,
-    private val healthRepository: HealthRepository,
-    private val habitsDao: HabitsDao
+    private val healthRepository: HealthRepository
 ) {
     private val _meditationSyncTrigger = MutableSharedFlow<Unit>(replay = 0)
     val meditationSyncTrigger = _meditationSyncTrigger.asSharedFlow()
@@ -416,43 +413,6 @@ class NearbySyncManager(
                     Log.w("NearbySync", "Could not fetch health snapshots for sync", e)
                 }
 
-                // Serialize all habits (including soft-deleted tombstones)
-                val habitsJsonArray = JSONArray()
-                try {
-                    habitsDao.getAllHabitsForSync().forEach { habit ->
-                        val json = JSONObject()
-                        json.put("id", habit.id)
-                        json.put("name", habit.name)
-                        json.put("timeString", habit.timeString)
-                        json.put("isMedication", habit.isMedication)
-                        json.put("isActive", habit.isActive)
-                        json.put("isDeleted", habit.isDeleted)
-                        json.put("createdAt", habit.createdAt)
-                        json.put("lastModifiedAt", habit.lastModifiedAt)
-                        habitsJsonArray.put(json)
-                    }
-                } catch (e: Exception) {
-                    Log.w("NearbySync", "Could not fetch habits for sync", e)
-                }
-
-                // Serialize completions for the last 30 days (includes soft-deleted)
-                val completionsJsonArray = JSONArray()
-                try {
-                    val thirtyDaysAgo = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                        .format(Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -30) }.time)
-                    habitsDao.getAllCompletionsForSync(thirtyDaysAgo).forEach { c ->
-                        val json = JSONObject()
-                        json.put("habitId", c.habitId)
-                        json.put("date", c.date)
-                        json.put("completedAt", c.completedAt)
-                        json.put("lastModifiedAt", c.lastModifiedAt)
-                        json.put("isDeleted", c.isDeleted)
-                        completionsJsonArray.put(json)
-                    }
-                } catch (e: Exception) {
-                    Log.w("NearbySync", "Could not fetch completions for sync", e)
-                }
-
                 // Serialize current local alerts
                 val alertsJsonArray = JSONArray()
                 localConflictsForSync.forEach { conflict ->
@@ -477,14 +437,12 @@ class NearbySyncManager(
                 payloadObject.put("usage", usageJsonArray)
                 payloadObject.put("meditations", meditationJsonArray)
                 if (healthJsonArray.length() > 0) payloadObject.put("health", healthJsonArray)
-                if (habitsJsonArray.length() > 0) payloadObject.put("habits", habitsJsonArray)
-                if (completionsJsonArray.length() > 0) payloadObject.put("completions", completionsJsonArray)
                 if (alertsJsonArray.length() > 0) payloadObject.put("alerts", alertsJsonArray)
                 if (dismissedJsonArray.length() > 0) payloadObject.put("dismissedAlertIds", dismissedJsonArray)
 
                 val payloadBytes = payloadObject.toString().toByteArray()
                 connectionsClient.sendPayload(endpointId, Payload.fromBytes(payloadBytes))
-                Log.d("NearbySync", "Sent ${filteredStats.size} usage, ${localMeditations.size} meditations, ${healthJsonArray.length()} health, ${habitsJsonArray.length()} habits, ${alertsJsonArray.length()} alerts")
+                Log.d("NearbySync", "Sent ${filteredStats.size} usage, ${localMeditations.size} meditations, ${healthJsonArray.length()} health, ${alertsJsonArray.length()} alerts")
             } catch (e: Exception) {
                 Log.e("NearbySync", "Failed to send local stats", e)
             }
@@ -507,12 +465,6 @@ class NearbySyncManager(
                 if (jsonObject.has("health")) {
                     val healthArray = jsonObject.getJSONArray("health")
                     importHealthSnapshots(healthArray)
-                }
-                if (jsonObject.has("habits")) {
-                    importHabits(jsonObject.getJSONArray("habits"))
-                }
-                if (jsonObject.has("completions")) {
-                    importCompletions(jsonObject.getJSONArray("completions"))
                 }
                 if (jsonObject.has("alerts")) {
                     importRemoteAlerts(jsonObject.getJSONArray("alerts"))
@@ -611,62 +563,6 @@ class NearbySyncManager(
                 if (jsonArray.length() > 0) scope.launch { _healthSyncTrigger.emit(Unit) }
             } catch (e: Exception) {
                 Log.e("NearbySync", "Failed to import health snapshots", e)
-            }
-        }
-    }
-
-    private fun importHabits(jsonArray: JSONArray) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                var upserted = 0
-                for (i in 0 until jsonArray.length()) {
-                    val obj = jsonArray.getJSONObject(i)
-                    val incoming = HabitEntity(
-                        id             = obj.getString("id"),
-                        name           = obj.getString("name"),
-                        timeString     = obj.getString("timeString"),
-                        isMedication   = obj.getBoolean("isMedication"),
-                        isActive       = obj.getBoolean("isActive"),
-                        isDeleted      = obj.optBoolean("isDeleted", false),
-                        createdAt      = obj.getLong("createdAt"),
-                        lastModifiedAt = obj.getLong("lastModifiedAt")
-                    )
-                    val existing = habitsDao.getHabitById(incoming.id)
-                    // Accept incoming if no local record exists, or if incoming is newer
-                    if (existing == null || incoming.lastModifiedAt > existing.lastModifiedAt) {
-                        habitsDao.insertHabit(incoming)
-                        upserted++
-                    }
-                }
-                Log.d("NearbySync", "Habit sync: upserted $upserted/${jsonArray.length()}")
-            } catch (e: Exception) {
-                Log.e("NearbySync", "Failed to import habits", e)
-            }
-        }
-    }
-
-    private fun importCompletions(jsonArray: JSONArray) {
-        scope.launch(Dispatchers.IO) {
-            try {
-                var upserted = 0
-                for (i in 0 until jsonArray.length()) {
-                    val obj = jsonArray.getJSONObject(i)
-                    val incoming = com.alex.a2ndbrain.core.memory.HabitCompletionEntity(
-                        habitId        = obj.getString("habitId"),
-                        date           = obj.getString("date"),
-                        completedAt    = obj.getLong("completedAt"),
-                        lastModifiedAt = obj.getLong("lastModifiedAt"),
-                        isDeleted      = obj.optBoolean("isDeleted", false)
-                    )
-                    val existing = habitsDao.getCompletionByKey(incoming.habitId, incoming.date)
-                    if (existing == null || incoming.lastModifiedAt > existing.lastModifiedAt) {
-                        habitsDao.insertCompletion(incoming)
-                        upserted++
-                    }
-                }
-                Log.d("NearbySync", "Completion sync: upserted $upserted/${jsonArray.length()}")
-            } catch (e: Exception) {
-                Log.e("NearbySync", "Failed to import completions", e)
             }
         }
     }

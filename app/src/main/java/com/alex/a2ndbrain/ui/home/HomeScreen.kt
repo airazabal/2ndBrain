@@ -42,7 +42,6 @@ import androidx.documentfile.provider.DocumentFile
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
-import com.alex.a2ndbrain.core.memory.HabitEntity
 import com.alex.a2ndbrain.ui.theme.*
 import com.alex.a2ndbrain.ConsolidatedUsage
 import com.alex.a2ndbrain.ui.usage.UsageBarChart
@@ -57,12 +56,6 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.VolumeMute
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -102,12 +95,9 @@ fun HomeScreen(
     onConnectHealth: () -> Unit = {},
     meditationSessions: List<com.alex.a2ndbrain.core.meditation.MeditationSession> = emptyList(),
     meditationStreaks: com.alex.a2ndbrain.core.meditation.StreakResult = com.alex.a2ndbrain.core.meditation.StreakResult(0, 0, 0),
-    
-    // Dynamic Habits (Phase 2)
-    activeHabits: List<HabitEntity> = emptyList(),
-    completedHabitIds: Set<String> = emptySet(),
-    onToggleHabit: (String) -> Unit = {},
-    pastWeekHabitCompletions: List<Pair<String, Float>> = emptyList(),
+
+    todoistTaskCount: Int = 0,
+    onTodoistClick: () -> Unit = {},
 
     senseOfDayScore: Int = 75,
     senseOfDayContext: String = "🎯 Calibrating your day...",
@@ -131,11 +121,7 @@ fun HomeScreen(
     unreadEmailCount: Int = 0,
     unreadMessageCount: Int = 0,
     meetingsTodayCount: Int = 0,
-    overdueHabitsCount: Int = 0,
     onRefreshIntervalChange: (Int) -> Unit = {},
-    onDeleteHabit: (String) -> Unit = {},
-    onAddHabit: (String, String, Boolean, Long?) -> Unit = { _, _, _, _ -> },
-    onUpdateHabit: (com.alex.a2ndbrain.core.memory.HabitEntity, String, String, Long?) -> Unit = { _, _, _, _ -> },
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -143,9 +129,7 @@ fun HomeScreen(
     val isSpeaking by ttsManager.isSpeaking.collectAsState()
 
     var showOverdueSheet by remember { mutableStateOf(false) }
-    var showHabitsSheet by remember { mutableStateOf(false) }
     var showMeetingsSheet by remember { mutableStateOf(false) }
-    var showAddHabitDialog by remember { mutableStateOf(false) }
     var showQuickAddDialog by remember { mutableStateOf(false) }
     var isTimelineExpanded by remember { mutableStateOf(true) }
     var expandedTimelineEventId by remember { mutableStateOf<String?>(null) }
@@ -197,20 +181,19 @@ fun HomeScreen(
                 lastRefreshedAt       = lastRefreshedAt,
                 refreshIntervalMinutes = refreshIntervalMinutes,
                 onRefreshIntervalChange = onRefreshIntervalChange,
-                overdueCount          = overdueHabitsCount,
+                overdueCount          = 0,
                 unreadEmailCount      = unreadEmailCount,
                 meetingsCount         = meetingsTodayCount,
                 unreadMessageCount    = unreadMessageCount,
-                completedHabits       = completedHabitIds.size,
-                totalHabits           = activeHabits.count { it.isActive },
-                steps                 = healthMetrics.steps, // Long
+                todoistTaskCount      = todoistTaskCount,
+                steps                 = healthMetrics.steps,
                 sleepMinutes          = healthMetrics.sleepMinutes,
                 avgHeartRate          = healthMetrics.avgHeartRate,
                 onOverdueClick        = { showOverdueSheet = true },
                 onEmailClick          = { onNavigateToTab(AppTab.FEED) },
                 onMeetingsClick       = { showMeetingsSheet = true },
                 onMessagesClick       = { onNavigateToTab(AppTab.FEED) },
-                onHabitsClick         = { showHabitsSheet = true },
+                onTodoistClick        = onTodoistClick,
                 onHealthClick         = { onNavigateToTab(AppTab.WELLNESS) }
             )
         }
@@ -218,11 +201,8 @@ fun HomeScreen(
         // Needs Attention Now section
         item {
             NeedsAttentionCard(
-                activeHabits    = activeHabits,
-                completedHabitIds = completedHabitIds,
                 meetingsToday   = todayTimelineEvents.filter { it.sourcePackage == "calendar" },
                 unreadEmailCount = unreadEmailCount,
-                onHabitClick    = { showOverdueSheet = true },
                 onMeetingsClick = { showMeetingsSheet = true },
                 onEmailClick    = { onNavigateToTab(AppTab.FEED) }
             )
@@ -230,353 +210,13 @@ fun HomeScreen(
 
     }
 
-    // ── Shared edit dialog state ─────────────────────────────────────────────
-    var editingHabit by remember { mutableStateOf<HabitEntity?>(null) }
-
-    editingHabit?.let { habit ->
-        var editName by remember(habit.id) { mutableStateOf(habit.name) }
-        var editTime by remember(habit.id) { mutableStateOf(habit.timeString) }
-        var repeatIndefinitely by remember(habit.id) { mutableStateOf(habit.repeatUntil == null) }
-        var showDatePicker by remember { mutableStateOf(false) }
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = habit.repeatUntil
-                ?: (System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000)
-        )
-
-        if (showDatePicker) {
-            DatePickerDialog(
-                onDismissRequest = { showDatePicker = false },
-                confirmButton = {
-                    TextButton(onClick = {
-                        repeatIndefinitely = false
-                        showDatePicker = false
-                    }) { Text("OK") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
-                }
-            ) {
-                DatePicker(state = datePickerState)
-            }
-        }
-
-        AlertDialog(
-            onDismissRequest = { editingHabit = null },
-            title = { Text("Edit Habit", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = editName,
-                        onValueChange = { editName = it },
-                        label = { Text("Name") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = editTime,
-                        onValueChange = { editTime = it },
-                        label = { Text("Time (HH:MM, 24h)") },
-                        placeholder = { Text("e.g. 08:00") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    // Repeat section
-                    Text(
-                        text = "REPEAT",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.outline,
-                        letterSpacing = 0.8.sp
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { repeatIndefinitely = true }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = repeatIndefinitely,
-                            onClick = { repeatIndefinitely = true }
-                        )
-                        Text("Indefinitely", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { repeatIndefinitely = false; showDatePicker = true }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(0.dp)
-                    ) {
-                        RadioButton(
-                            selected = !repeatIndefinitely,
-                            onClick = { repeatIndefinitely = false; showDatePicker = true }
-                        )
-                        Text("Until date", style = MaterialTheme.typography.bodyMedium)
-                        if (!repeatIndefinitely) {
-                            Spacer(Modifier.width(8.dp))
-                            val selectedMs = datePickerState.selectedDateMillis
-                            val dateLabel = if (selectedMs != null)
-                                java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
-                                    .format(java.util.Date(selectedMs))
-                            else "Pick date"
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.clickable { showDatePicker = true }
-                            ) {
-                                Text(
-                                    text = dateLabel,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (editName.isNotBlank() && editTime.isNotBlank()) {
-                            val repeatUntil = if (repeatIndefinitely) null
-                                else datePickerState.selectedDateMillis
-                            onUpdateHabit(habit, editName, editTime, repeatUntil)
-                            editingHabit = null
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { editingHabit = null }) { Text("Cancel") }
-            }
-        )
-    }
-
-    // ── Add New Habit Dialog ──────────────────────────────────────────────────
-    if (showAddHabitDialog) {
-        var newName by remember { mutableStateOf("") }
-        var newTime by remember { mutableStateOf("") }
-        var newIsMedication by remember { mutableStateOf(false) }
-        var newRepeatIndefinitely by remember { mutableStateOf(true) }
-        var showNewDatePicker by remember { mutableStateOf(false) }
-        val newDatePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = System.currentTimeMillis() + 30L * 24 * 60 * 60 * 1000
-        )
-
-        if (showNewDatePicker) {
-            DatePickerDialog(
-                onDismissRequest = { showNewDatePicker = false },
-                confirmButton = {
-                    TextButton(onClick = {
-                        newRepeatIndefinitely = false
-                        showNewDatePicker = false
-                    }) { Text("OK") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showNewDatePicker = false }) { Text("Cancel") }
-                }
-            ) { DatePicker(state = newDatePickerState) }
-        }
-
-        AlertDialog(
-            onDismissRequest = { showAddHabitDialog = false },
-            title = { Text("New Habit", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("Name") },
-                        placeholder = { Text("e.g. Morning run") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = newTime,
-                        onValueChange = { newTime = it },
-                        label = { Text("Time (HH:MM, 24h)") },
-                        placeholder = { Text("e.g. 07:30") },
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { newIsMedication = !newIsMedication }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Checkbox(checked = newIsMedication, onCheckedChange = { newIsMedication = it })
-                        Text("This is a medication", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Text(
-                        text = "REPEAT",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.outline,
-                        letterSpacing = 0.8.sp
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { newRepeatIndefinitely = true }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(selected = newRepeatIndefinitely, onClick = { newRepeatIndefinitely = true })
-                        Text("Indefinitely", style = MaterialTheme.typography.bodyMedium)
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { newRepeatIndefinitely = false; showNewDatePicker = true }
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        RadioButton(
-                            selected = !newRepeatIndefinitely,
-                            onClick = { newRepeatIndefinitely = false; showNewDatePicker = true }
-                        )
-                        Text("Until date", style = MaterialTheme.typography.bodyMedium)
-                        if (!newRepeatIndefinitely) {
-                            Spacer(Modifier.width(8.dp))
-                            val selectedMs = newDatePickerState.selectedDateMillis
-                            val dateLabel = if (selectedMs != null)
-                                java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
-                                    .format(java.util.Date(selectedMs))
-                            else "Pick date"
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                modifier = Modifier.clickable { showNewDatePicker = true }
-                            ) {
-                                Text(
-                                    text = dateLabel,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (newName.isNotBlank() && newTime.isNotBlank()) {
-                            val repeatUntil = if (newRepeatIndefinitely) null
-                                else newDatePickerState.selectedDateMillis
-                            onAddHabit(newName, newTime, newIsMedication, repeatUntil)
-                            showAddHabitDialog = false
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text("Add") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddHabitDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    // ── Overdue Habits Sheet ──────────────────────────────────────────────────
+    // ── Overdue Sheet (placeholder — kept for overdueCount card) ─────────────
     if (showOverdueSheet) {
-        val cal = java.util.Calendar.getInstance()
-        val currentMins = cal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal.get(java.util.Calendar.MINUTE)
-        val overdueHabits = activeHabits.filter { habit ->
-            val parts = habit.timeString.split(":")
-            val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
-            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            habit.isActive && (h * 60 + m) < currentMins && habit.id !in completedHabitIds
-        }
         ModalBottomSheet(onDismissRequest = { showOverdueSheet = false }) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
                 Text("Overdue Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text("${overdueHabits.size} habit(s) past their scheduled time",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                Spacer(Modifier.height(16.dp))
-                if (overdueHabits.isEmpty()) {
-                    Text("All caught up! No overdue habits.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                } else {
-                    overdueHabits.forEach { habit ->
-                        HabitSheetRow(
-                            habit = habit,
-                            isCompleted = habit.id in completedHabitIds,
-                            showOverdueBadge = true,
-                            onToggle = { onToggleHabit(habit.id) },
-                            onDelete = { onDeleteHabit(habit.id); showOverdueSheet = false },
-                            onEdit = { editingHabit = it }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    }
-                }
-            }
-        }
-    }
-
-    // ── All Habits Sheet ──────────────────────────────────────────────────────
-    if (showHabitsSheet) {
-        ModalBottomSheet(onDismissRequest = { showHabitsSheet = false }) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("Today's Habits", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text("${completedHabitIds.size} / ${activeHabits.count { it.isActive }} completed",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    }
-                    FilledTonalButton(
-                        onClick = { showAddHabitDialog = true },
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("New Habit")
-                    }
-                }
-                Spacer(Modifier.height(16.dp))
-                if (activeHabits.isEmpty()) {
-                    Text("No habits yet. Tap New Habit to add one.",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                } else {
-                    activeHabits.filter { it.isActive }.sortedBy { habit ->
-                        val parts = habit.timeString.split(":")
-                        (parts.getOrNull(0)?.toIntOrNull() ?: 8) * 60 + (parts.getOrNull(1)?.toIntOrNull() ?: 0)
-                    }.forEach { habit ->
-                        val cal2 = java.util.Calendar.getInstance()
-                        val currentMins2 = cal2.get(java.util.Calendar.HOUR_OF_DAY) * 60 + cal2.get(java.util.Calendar.MINUTE)
-                        val parts = habit.timeString.split(":")
-                        val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
-                        val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
-                        val isOverdue = (h * 60 + m) < currentMins2 && habit.id !in completedHabitIds
-                        HabitSheetRow(
-                            habit = habit,
-                            isCompleted = habit.id in completedHabitIds,
-                            showOverdueBadge = isOverdue,
-                            onToggle = { onToggleHabit(habit.id) },
-                            onDelete = { onDeleteHabit(habit.id) },
-                            onEdit = { editingHabit = it }
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                    }
-                }
+                Spacer(Modifier.height(8.dp))
+                Text("No overdue items.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
             }
         }
     }
@@ -626,11 +266,8 @@ fun HomeScreen(
 
 @Composable
 private fun NeedsAttentionCard(
-    activeHabits: List<HabitEntity>,
-    completedHabitIds: Set<String>,
     meetingsToday: List<com.alex.a2ndbrain.TimelineEvent>,
     unreadEmailCount: Int,
-    onHabitClick: () -> Unit,
     onMeetingsClick: () -> Unit,
     onEmailClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -646,24 +283,6 @@ private fun NeedsAttentionCard(
     )
 
     val items = buildList {
-        // Overdue medications → urgent/red
-        activeHabits.filter { it.isActive && it.isMedication && it.id !in completedHabitIds }.forEach { habit ->
-            val parts = habit.timeString.split(":")
-            val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
-            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            if ((h * 60 + m) < currentMins) {
-                add(AttentionItem("${habit.name} — OVERDUE.", "Medication scheduled for ${habit.timeString}, not yet taken.", 0, onHabitClick))
-            }
-        }
-        // Overdue non-medication habits → warning/amber
-        activeHabits.filter { it.isActive && !it.isMedication && it.id !in completedHabitIds }.forEach { habit ->
-            val parts = habit.timeString.split(":")
-            val h = parts.getOrNull(0)?.toIntOrNull() ?: 8
-            val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
-            if ((h * 60 + m) < currentMins) {
-                add(AttentionItem("${habit.name} — past due.", "Scheduled for ${habit.timeString}. Mark done or reschedule.", 1, onHabitClick))
-            }
-        }
         // Meetings today → amber
         if (meetingsToday.isNotEmpty()) {
             val upcoming = meetingsToday.filter { it.minutesFromMidnight > currentMins }
@@ -761,56 +380,6 @@ private fun NeedsAttentionCard(
     }
 }
 
-@Composable
-private fun HabitSheetRow(
-    habit: HabitEntity,
-    isCompleted: Boolean,
-    showOverdueBadge: Boolean,
-    onToggle: () -> Unit,
-    onDelete: () -> Unit,
-    onEdit: (HabitEntity) -> Unit = {}
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Checkbox(checked = isCompleted, onCheckedChange = { onToggle() })
-        Column(modifier = Modifier.weight(1f)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(habit.name, style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = if (isCompleted) FontWeight.Normal else FontWeight.SemiBold,
-                    color = if (isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                            else MaterialTheme.colorScheme.onSurface)
-                if (showOverdueBadge && !isCompleted) {
-                    Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
-                        color = Color(0xFFEF5350).copy(alpha = 0.15f)) {
-                        Text("past due", modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                            fontSize = 9.sp, color = Color(0xFFEF5350), fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-            val repeatLabel = if (habit.repeatUntil != null)
-                "Until " + java.text.SimpleDateFormat("MMM d, yyyy", java.util.Locale.getDefault())
-                    .format(java.util.Date(habit.repeatUntil))
-            else null
-            Text(
-                text = if (repeatLabel != null) "${habit.timeString}  ·  $repeatLabel"
-                       else habit.timeString,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
-        }
-        IconButton(onClick = { onEdit(habit) }, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Default.Edit, contentDescription = "Edit",
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), modifier = Modifier.size(18.dp))
-        }
-        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Default.Delete, contentDescription = "Delete",
-                tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
-        }
-    }
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -819,8 +388,6 @@ fun SmartSummaryCard(
     senseOfDayContext: String,
     config: HomeSummaryConfig,
     topConflict: TimelineConflict?,
-    completedHabitCount: Int,
-    totalHabitCount: Int,
     nextEvent: TimelineEvent?,
     healthMetrics: com.alex.a2ndbrain.core.health.HealthMetrics,
     healthAvailable: Boolean,
@@ -895,16 +462,6 @@ fun SmartSummaryCard(
 
             // ── Stats pills ───────────────────────────────────────────────
             val activePills = buildList {
-                if (config.showHabitPill && totalHabitCount > 0) {
-                    val label = "$completedHabitCount / $totalHabitCount habits"
-                    val pillColor = when {
-                        totalHabitCount == 0           -> Color.Gray
-                        completedHabitCount == totalHabitCount -> PastelGreen
-                        completedHabitCount.toFloat() / totalHabitCount >= 0.5f -> PastelBlue
-                        else -> Color(0xFFFFCC80)
-                    }
-                    add(label to pillColor)
-                }
                 if (config.showNextEventPill) {
                     val label = nextEvent?.let { "${it.title.take(18)} ${it.time}" } ?: "No events today"
                     add(label to PastelYellow)

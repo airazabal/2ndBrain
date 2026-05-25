@@ -153,7 +153,6 @@ class CaptureSettingsManager(private val context: Context) {
                 defaultMode = HomeDefaultMode.valueOf(
                     obj.optString("defaultMode", HomeDefaultMode.SUMMARY_ONLY.name)
                 ),
-                showHabitPill          = obj.optBoolean("showHabitPill", true),
                 showNextEventPill      = obj.optBoolean("showNextEventPill", true),
                 showStepsPill          = obj.optBoolean("showStepsPill", true),
                 showSleepMeditationPill = obj.optBoolean("showSleepMeditationPill", true),
@@ -168,7 +167,6 @@ class CaptureSettingsManager(private val context: Context) {
     fun saveHomeSummaryConfig(config: HomeSummaryConfig) {
         val json = org.json.JSONObject().apply {
             put("defaultMode",            config.defaultMode.name)
-            put("showHabitPill",          config.showHabitPill)
             put("showNextEventPill",      config.showNextEventPill)
             put("showStepsPill",          config.showStepsPill)
             put("showSleepMeditationPill", config.showSleepMeditationPill)
