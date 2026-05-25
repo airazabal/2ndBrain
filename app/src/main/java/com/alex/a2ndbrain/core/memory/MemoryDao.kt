@@ -21,13 +21,13 @@ interface MemoryDao {
     @Query("SELECT * FROM memories ORDER BY timestamp DESC")
     fun getPagedMemories(): PagingSource<Int, MemoryEntity>
 
-    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%' ORDER BY timestamp DESC")
+    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' ESCAPE '\\' OR title LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY timestamp DESC")
     fun searchPagedMemories(query: String): PagingSource<Int, MemoryEntity>
 
     @Query("SELECT * FROM memories WHERE source = 'clipboard' ORDER BY timestamp DESC LIMIT 1")
     suspend fun getLastClipboardMemory(): MemoryEntity?
 
-    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%'")
+    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' ESCAPE '\\' OR title LIKE '%' || :query || '%' ESCAPE '\\'")
     fun searchMemories(query: String): Flow<List<MemoryEntity>>
 
     @Query("SELECT * FROM memories WHERE timestamp >= :startTime")
@@ -56,6 +56,9 @@ interface MemoryDao {
 
     @Query("UPDATE memories SET isRead = 1 WHERE id = :id")
     suspend fun markAsRead(id: Long)
+
+    @Query("UPDATE memories SET isRead = 1 WHERE packageName = :packageName AND title LIKE :titleLike AND isRead = 0")
+    suspend fun markAsReadByPackageAndTitleLike(packageName: String, titleLike: String)
 
     @Query("UPDATE memories SET isRead = 1 WHERE id IN (:ids)")
     suspend fun markMultipleAsRead(ids: List<Long>)
@@ -93,7 +96,7 @@ interface MemoryDao {
     @Query("SELECT * FROM memories ORDER BY timestamp DESC LIMIT 50")
     suspend fun getRecentMemoriesSync(): List<MemoryEntity>
 
-    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' OR title LIKE '%' || :query || '%' OR tags LIKE '%' || :query || '%' ORDER BY timestamp DESC LIMIT 30")
+    @Query("SELECT * FROM memories WHERE content LIKE '%' || :query || '%' ESCAPE '\\' OR title LIKE '%' || :query || '%' ESCAPE '\\' ORDER BY timestamp DESC LIMIT 30")
     suspend fun searchMemoriesSync(query: String): List<MemoryEntity>
 
     @Query("SELECT * FROM memories WHERE packageName = :packageName ORDER BY timestamp DESC")

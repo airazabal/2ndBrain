@@ -700,10 +700,9 @@ fun AppCaptureSettingsScreen(
                                     monitoredApps = all
                                 }) { Text("All", fontSize = 12.sp) }
                                 TextButton(onClick = {
-                                    monitoredApps.toList().forEach { onUnmonitoredAppRemoved(it) }
                                     settingsManager.saveMonitoredApps(emptySet())
                                     monitoredApps = emptySet()
-                                }) { Text("None", fontSize = 12.sp) }
+                                }) { Text("None (show all)", fontSize = 12.sp) }
                             }
                             filteredApps.forEach { pkg ->
                                 val appName = packageManager.getApplicationLabel(pkg.applicationInfo ?: return@forEach).toString()

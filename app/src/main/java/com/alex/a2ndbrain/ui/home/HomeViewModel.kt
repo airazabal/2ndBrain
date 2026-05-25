@@ -82,28 +82,32 @@ class HomeViewModel(
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val unreadEmailCount: StateFlow<Int> = allMemoriesForHome.map { memories ->
+    private val _monitoredAppsState = MutableStateFlow(settingsManager.getMonitoredApps())
+    val monitoredAppsState = _monitoredAppsState.asStateFlow()
+
+    val unreadEmailCount: StateFlow<Int> = combine(allMemoriesForHome, _monitoredAppsState) { memories, monitored ->
         val startOfToday = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        // Deduplicate by (package + subject title) so re-notified threads count once
-        memories.filter { it.source == "notification" && it.timestamp >= startOfToday &&
-            !it.isRead && emailPackages.any { pkg -> it.packageName?.contains(pkg) == true } }
-            .distinctBy { "${it.packageName}-${it.title?.trim()?.lowercase()?.take(60)}" }
-            .size
+        val emailMemories = memories.filter { m ->
+            m.source == "notification" && m.timestamp >= startOfToday && !m.isRead &&
+            emailPackages.any { pkg -> m.packageName?.contains(pkg) == true } &&
+            (monitored.isEmpty() || monitored.contains(m.packageName))
+        }
+        deduplicateEmailCount(emailMemories)
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
-    val unreadMessageCount: StateFlow<Int> = allMemoriesForHome.map { memories ->
+    val unreadMessageCount: StateFlow<Int> = combine(allMemoriesForHome, _monitoredAppsState) { memories, monitored ->
         val startOfToday = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        // Deduplicate by (package + sender/title) — one count per unique conversation today
-        memories.filter { it.source == "notification" && it.timestamp >= startOfToday &&
-            messagingPackages.any { pkg -> it.packageName?.contains(pkg) == true } }
-            .distinctBy { "${it.packageName}-${it.title?.trim()}" }
-            .size
+        memories.filter { m ->
+            m.source == "notification" && m.timestamp >= startOfToday &&
+            messagingPackages.any { pkg -> m.packageName?.contains(pkg) == true } &&
+            (monitored.isEmpty() || monitored.contains(m.packageName))
+        }.distinctBy { "${it.packageName}-${it.title?.trim()}" }.size
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val _meditationSessions = MutableStateFlow<List<MeditationSession>>(emptyList())
@@ -195,9 +199,6 @@ class HomeViewModel(
 
     private val _habitUncompleted = MutableSharedFlow<HabitCompletionEntity>(replay = 0)
     val habitUncompleted = _habitUncompleted.asSharedFlow()
-
-    private val _monitoredAppsState = MutableStateFlow(settingsManager.getMonitoredApps())
-    val monitoredAppsState = _monitoredAppsState.asStateFlow()
 
     fun refreshMonitoredApps() {
         _monitoredAppsState.value = settingsManager.getMonitoredApps()
@@ -522,6 +523,68 @@ class HomeViewModel(
         // Gmail package is com.google.android.gm — NOT "gmail"
         private val emailPackages = setOf("google.android.gm", "outlook", "yahoo.mail", "protonmail", "hotmail", "thunderbird")
         private val messagingPackages = setOf("whatsapp", "messaging", "messages", "mms", "sms", "messenger", "telegram", "signal", "viber")
+
+        // Mirrors MemoryScreen.deduplicateMemories — keeps card count in sync with feed's group count.
+        fun deduplicateEmailCount(memories: List<com.alex.a2ndbrain.core.memory.MemoryEntity>): Int {
+            val sorted = memories.sortedByDescending { it.timestamp }
+            val groupPrimaries = mutableListOf<com.alex.a2ndbrain.core.memory.MemoryEntity>()
+            val groupRead = mutableListOf<Boolean>()
+
+            for (item in sorted) {
+                val existingIdx = groupPrimaries.indexOfFirst { existing ->
+                    if (existing.packageName != item.packageName) return@indexOfFirst false
+                    val sim = emailSimilarity(
+                        existing.content.take(200), item.content.take(200)
+                    )
+                    val titleSim = emailSimilarity(
+                        (existing.title ?: "").take(100), (item.title ?: "").take(100)
+                    )
+                    val existingLines = existing.content.split("\n").filter { it.isNotBlank() }
+                    val itemLines = item.content.split("\n").filter { it.isNotBlank() }
+                    val lineOverlap = existingLines.isNotEmpty() && itemLines.isNotEmpty() &&
+                        (existingLines.intersect(itemLines.toSet()).size.toFloat() / itemLines.size) > 0.5f
+                    val isGmailSummary = (existing.packageName ?: "").contains("gm") &&
+                        (existing.title ?: "").contains("messages") &&
+                        (item.title ?: "").contains("messages")
+                    when {
+                        existing.content == item.content -> true
+                        sim > 0.8 && (existing.title == item.title || titleSim > 0.8) -> true
+                        existing.content.take(15) == item.content.take(15) -> true
+                        lineOverlap || isGmailSummary -> true
+                        else -> false
+                    }
+                }
+                if (existingIdx != -1) {
+                    groupRead[existingIdx] = groupRead[existingIdx] && item.isRead
+                } else {
+                    groupPrimaries.add(item)
+                    groupRead.add(item.isRead)
+                }
+            }
+            return groupRead.count { !it }
+        }
+
+        private fun emailSimilarity(s1: String, s2: String): Double {
+            if (s1 == s2) return 1.0
+            if (s1.isEmpty() || s2.isEmpty()) return 0.0
+            val maxLen = maxOf(s1.length, s2.length)
+            val dist = emailLevenshtein(s1, s2)
+            return (maxLen - dist).toDouble() / maxLen
+        }
+
+        private fun emailLevenshtein(s1: String, s2: String): Int {
+            val dp = IntArray(s2.length + 1) { it }
+            for (i in 1..s1.length) {
+                var prev = dp[0]; dp[0] = i
+                for (j in 1..s2.length) {
+                    val temp = dp[j]
+                    dp[j] = if (s1[i - 1] == s2[j - 1]) prev
+                            else minOf(dp[j] + 1, dp[j - 1] + 1, prev + 1)
+                    prev = temp
+                }
+            }
+            return dp[s2.length]
+        }
     }
 
     private val _dismissedConflictIds = MutableStateFlow<Set<String>>(emptySet())

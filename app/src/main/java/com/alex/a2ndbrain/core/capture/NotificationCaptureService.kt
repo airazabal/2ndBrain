@@ -48,6 +48,22 @@ class NotificationCaptureService : NotificationListenerService() {
         processNotification(sbn, isManual = false)
     }
 
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        val pkg = sbn.packageName ?: return
+        if (emailPackages.none { pkg.contains(it) }) return
+        val rawTitle = sbn.notification?.extras
+            ?.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim()
+            ?.takeIf { it.isNotEmpty() } ?: return
+        applicationScope.launch {
+            memoryRepository.markAsReadByPackageAndTitle(pkg, rawTitle)
+        }
+    }
+
+    private val emailPackages = setOf(
+        "google.android.gm", "outlook", "yahoo.mail",
+        "protonmail", "hotmail", "thunderbird"
+    )
+
     private fun processNotification(sbn: StatusBarNotification, isManual: Boolean) {
         val packageName = sbn.packageName
         val notification = sbn.notification ?: return
@@ -101,8 +117,9 @@ class NotificationCaptureService : NotificationListenerService() {
         
         var deepLink: String? = null
         if (packageName == "com.google.android.gm") {
-            val searchQuery = if (title.isNotEmpty()) "from:$title $finalContent" else finalContent
-            deepLink = "https://mail.google.com/mail/u/0/#search/${android.net.Uri.encode(searchQuery.take(50))}"
+            // Use subject/content text for search — display name can't be used with from: operator
+            val searchQuery = (text.ifEmpty { null } ?: finalContent.lines().firstOrNull { it.isNotBlank() } ?: title).take(60)
+            deepLink = "https://mail.google.com/mail/u/0/#search/${android.net.Uri.encode(searchQuery)}"
         } else if (packageName == "com.google.android.calendar" || packageName == "com.samsung.android.calendar") {
             deepLink = "content://com.android.calendar/time/${System.currentTimeMillis()}"
         } else if (packageName == "com.google.android.apps.maps") {

@@ -37,7 +37,7 @@ import java.util.Locale
 @Composable
 fun SearchScreen(
     onBack: () -> Unit,
-    onMemorySelected: () -> Unit,
+    onMemorySelected: (MemoryEntity) -> Unit,
     viewModel: SearchViewModel = koinViewModel()
 ) {
     val query by viewModel.query.collectAsStateWithLifecycle()
@@ -93,48 +93,63 @@ fun SearchScreen(
             results.isEmpty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("No results for \"$query\"", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            else -> SearchResultsList(query = query, results = results, onMemorySelected = onMemorySelected)
+            else -> SearchResultsList(query = query, results = results, onMemorySelected = { onMemorySelected(it) })
         }
     }
 }
 
 @Composable
 private fun SearchSuggestions(onSuggestion: (String) -> Unit) {
-    val tags = listOf("#Health", "#Work", "#Finance", "#Social", "#Reference")
-    Column(modifier = Modifier.padding(16.dp)) {
+    Box(
+        modifier = Modifier.fillMaxSize().padding(32.dp),
+        contentAlignment = Alignment.Center
+    ) {
         Text(
-            "Quick filters",
-            style = MaterialTheme.typography.labelMedium,
+            "Search emails, messages, and everything else captured today",
+            style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = 8.dp)
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
-        tags.forEach { tag ->
-            Text(
-                text = tag,
-                modifier = Modifier
-                    .clickable { onSuggestion(tag) }
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-                style = MaterialTheme.typography.bodyMedium
-            )
-            HorizontalDivider(thickness = 0.5.dp)
-        }
     }
 }
+
+// Gmail inbox bundles store multiple subjects as newline-separated content.
+// Expand them so each subject is its own tappable row that opens a targeted Gmail search.
+private fun expandGmailBundles(memories: List<MemoryEntity>, query: String): List<Pair<String, MemoryEntity>> =
+    memories.flatMap { memory ->
+        if (memory.packageName == "com.google.android.gm") {
+            val lines = memory.content.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+            if (lines.size > 1) {
+                val matching = if (query.isBlank()) lines else lines.filter { it.contains(query, ignoreCase = true) }
+                val toShow = if (matching.isEmpty()) lines.take(3) else matching
+                toShow.mapIndexed { i, subject ->
+                    "${memory.id}_$i" to memory.copy(title = subject, content = subject)
+                }
+            } else {
+                listOf("${memory.id}" to memory)
+            }
+        } else {
+            listOf("${memory.id}" to memory)
+        }
+    }
 
 @Composable
 private fun SearchResultsList(
     query: String,
     results: SearchResults,
-    onMemorySelected: () -> Unit
+    onMemorySelected: (MemoryEntity) -> Unit
 ) {
+    val flatMemories = remember(results.memories, query) {
+        expandGmailBundles(results.memories, query)
+    }
+
     LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
-        if (results.memories.isNotEmpty()) {
+        if (flatMemories.isNotEmpty()) {
             item {
-                SectionHeader("Captures (${results.memories.size})")
+                SectionHeader("Captures (${flatMemories.size})")
             }
-            items(results.memories, key = { it.id }) { memory ->
-                MemoryResultItem(memory = memory, query = query, onClick = onMemorySelected)
+            items(flatMemories, key = { it.first }) { (_, memory) ->
+                MemoryResultItem(memory = memory, query = query, onClick = { onMemorySelected(memory) })
                 HorizontalDivider(thickness = 0.5.dp, modifier = Modifier.padding(start = 16.dp))
             }
         }
@@ -183,21 +198,17 @@ private fun MemoryResultItem(memory: MemoryEntity, query: String, onClick: () ->
             )
         }
         Text(
-            text = highlightText(memory.content.take(120), query),
+            text = highlightText(contentSnippet(memory.content, query), query),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 2
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-            memory.tags?.let {
-                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-            }
-            Text(
-                formatTimestamp(memory.timestamp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(
+            formatTimestamp(memory.timestamp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
     }
 }
 
@@ -244,6 +255,26 @@ private fun HabitResultItem(habit: HabitEntity, query: String) {
             text = highlightText(habit.name, query),
             style = MaterialTheme.typography.bodyMedium
         )
+    }
+}
+
+private fun contentSnippet(content: String, query: String, window: Int = 120): String {
+    if (query.isEmpty()) return content.take(window)
+    // For multi-line content (inbox bundles, chat threads), return only the matching lines
+    val lines = content.split("\n").map { it.trim() }.filter { it.isNotBlank() }
+    if (lines.size > 1) {
+        val matchingLines = lines.filter { it.contains(query, ignoreCase = true) }
+        if (matchingLines.isNotEmpty()) return matchingLines.take(3).joinToString("\n")
+    }
+    // Single-line / paragraph: return a window centred on the first match
+    val idx = content.lowercase().indexOf(query.lowercase())
+    if (idx == -1) return content.take(window)
+    val start = (idx - 40).coerceAtLeast(0)
+    val end = (start + window).coerceAtMost(content.length)
+    return buildString {
+        if (start > 0) append("…")
+        append(content.substring(start, end))
+        if (end < content.length) append("…")
     }
 }
 

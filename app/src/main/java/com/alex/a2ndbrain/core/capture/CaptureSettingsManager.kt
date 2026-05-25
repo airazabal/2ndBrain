@@ -79,6 +79,9 @@ class CaptureSettingsManager(private val context: Context) {
         prefs.edit().putString("gemini_model", model).apply()
     }
 
+    fun getRefreshIntervalMinutes(): Int = prefs.getInt("refresh_interval_min", 30)
+    fun setRefreshIntervalMinutes(minutes: Int) { prefs.edit().putInt("refresh_interval_min", minutes).apply() }
+
     fun getObsidianVaultUri(): String {
         return prefs.getString("obsidian_vault_uri", "") ?: ""
     }

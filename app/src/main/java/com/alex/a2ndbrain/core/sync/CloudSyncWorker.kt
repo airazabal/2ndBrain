@@ -31,8 +31,10 @@ class CloudSyncWorker(
             val hcReady = healthRepository.healthConnectManager.isAvailable() &&
                 healthRepository.healthConnectManager.hasPermissions()
             val localSnap = if (hcReady) healthRepository.getSnapshotsForSync(1).firstOrNull() else null
+            // Steps alone can come from the tablet's built-in accelerometer; only sleep
+            // (and optionally HR) are reliable indicators a wearable is connected.
             val hasWearableData = localSnap != null &&
-                (localSnap.sleepMinutes > 0 || localSnap.steps > 0 || localSnap.avgHeartRate > 0)
+                (localSnap.sleepMinutes > 0 || localSnap.avgHeartRate > 0)
             val canPush = hcReady && hasWearableData
             Log.d("CloudSyncWorker", "hcReady=$hcReady hasWearableData=$hasWearableData canPush=$canPush")
             if (canPush) {

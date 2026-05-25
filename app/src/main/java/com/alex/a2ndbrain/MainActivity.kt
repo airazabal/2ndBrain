@@ -529,6 +529,18 @@ class MainActivity : ComponentActivity() {
                                             Spacer(modifier = Modifier.weight(1f))
 
                                             NavigationRailItem(
+                                                icon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+                                                label = { Text("Search") },
+                                                selected = currentTab == AppTab.SEARCH,
+                                                onClick = { navViewModel.setTab(AppTab.SEARCH) },
+                                                colors = NavigationRailItemDefaults.colors(
+                                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                                    unselectedIconColor = MaterialTheme.colorScheme.secondary,
+                                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                                                )
+                                            )
+
+                                            NavigationRailItem(
                                                 icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
                                                 label = { Text("Settings") },
                                                 selected = currentTab == AppTab.SETTINGS,
@@ -663,6 +675,7 @@ class MainActivity : ComponentActivity() {
                                                 AppTab.FEED -> {
                                                     val memories by memoryViewModel.memories.collectAsStateWithLifecycle()
                                                     val searchQuery by memoryViewModel.searchQuery.collectAsStateWithLifecycle()
+                                                    var feedMonitoredApps by remember { mutableStateOf(settingsManager.getMonitoredApps()) }
 
                                                     MemoryScreen(
                                                         memories = memories,
@@ -672,7 +685,12 @@ class MainActivity : ComponentActivity() {
                                                         onMarkAsRead = { ids -> memoryViewModel.markMultipleAsRead(ids) },
                                                         onMarkAsUnread = { ids -> memoryViewModel.markMultipleAsUnread(ids) },
                                                         onClearAll = { memoryViewModel.clearAllMemories() },
-                                                        monitoredApps = settingsManager.getMonitoredApps(),
+                                                        monitoredApps = feedMonitoredApps,
+                                                        onClearAppFilter = {
+                                                            settingsManager.saveMonitoredApps(emptySet())
+                                                            feedMonitoredApps = emptySet()
+                                                            homeViewModel.refreshMonitoredApps()
+                                                        },
                                                         vaultUri = settingsManager.getObsidianVaultUri(),
                                                         onSaveVoiceNote = { text, audioPath ->
                                                             memoryViewModel.saveVoiceNote(text, audioPath, settingsManager.getObsidianVaultUri())
@@ -784,7 +802,39 @@ class MainActivity : ComponentActivity() {
                                                 AppTab.SEARCH -> {
                                                     SearchScreen(
                                                         onBack = { navViewModel.setTab(AppTab.TODAY) },
-                                                        onMemorySelected = { navViewModel.setTab(AppTab.FEED) }
+                                                        onMemorySelected = { memory ->
+                                                            val pkg = memory.packageName ?: ""
+                                                            try {
+                                                                when {
+                                                                    pkg == "com.google.android.gm" -> {
+                                                                        val raw = (memory.content.split("\n")
+                                                                            .map { it.trim() }.firstOrNull { it.isNotBlank() }
+                                                                            ?: memory.title ?: "")
+                                                                        // Strip Gmail search operators then keep first 3 significant words.
+                                                                        // Short queries are more forgiving when notification text is truncated.
+                                                                        val query = raw
+                                                                            .replace(Regex("[&#+()\\[\\]{}|<>\"']"), " ")
+                                                                            .split(Regex("\\s+"))
+                                                                            .filter { it.length > 2 }
+                                                                            .take(3)
+                                                                            .joinToString(" ")
+                                                                            .ifBlank { raw.take(30) }
+                                                                        startActivity(android.content.Intent(
+                                                                            android.content.Intent.ACTION_VIEW,
+                                                                            android.net.Uri.parse("https://mail.google.com/mail/u/0/#search/${android.net.Uri.encode(query)}")
+                                                                        ))
+                                                                    }
+                                                                    pkg.isNotEmpty() -> {
+                                                                        val launchIntent = packageManager.getLaunchIntentForPackage(pkg)
+                                                                        if (launchIntent != null) startActivity(launchIntent)
+                                                                        else navViewModel.setTab(AppTab.FEED)
+                                                                    }
+                                                                    else -> navViewModel.setTab(AppTab.FEED)
+                                                                }
+                                                            } catch (e: Exception) {
+                                                                navViewModel.setTab(AppTab.FEED)
+                                                            }
+                                                        }
                                                     )
                                                 }
                                             }

@@ -57,6 +57,7 @@ fun MemoryScreen(
     onMarkAsUnread: (List<Long>) -> Unit = {},
     onClearAll: () -> Unit,
     monitoredApps: Set<String> = emptySet(),
+    onClearAppFilter: () -> Unit = {},
     vaultUri: String = "",
     onSaveVoiceNote: ((String, String) -> Unit)? = null,
     onDeepDiveCoPilot: (MemoryEntity) -> Unit = {},
@@ -67,7 +68,7 @@ fun MemoryScreen(
     val configuration = LocalConfiguration.current
     
     var isScanning by remember { mutableStateOf(false) }
-    var selectedTag by remember { mutableStateOf("All") }
+    var selectedApp by remember { mutableStateOf("All") }
     var showRecordingDialog by remember { mutableStateOf(false) }
     var expandedAppGroups by remember { mutableStateOf(setOf<String>()) }
     var expandedDays by remember { mutableStateOf(setOf<String>("Today")) }
@@ -83,79 +84,69 @@ fun MemoryScreen(
         }
     }
 
-    val dayGroups = remember(memories, monitoredApps, selectedTag, localReadOverrides) {
+    // All distinct app names in the full memory list — chips always show every app, not just monitored ones
+    val availableApps = remember(memories) {
+        memories
+            .map { m -> getAppName(context, m.packageName, m.source) }
+            .distinct()
+            .sorted()
+    }
+
+    // Reset selectedApp if it's no longer present
+    if (selectedApp != "All" && selectedApp !in availableApps) {
+        selectedApp = "All"
+    }
+
+    val dayGroups = remember(memories, monitoredApps, selectedApp, localReadOverrides) {
         val filtered = memories.map { memory ->
             val override = localReadOverrides[memory.id]
-            if (override != null) {
-                memory.copy(isRead = override)
-            } else {
-                memory
-            }
+            if (override != null) memory.copy(isRead = override) else memory
         }.filter { memory ->
-            val matchesApp = if (monitoredApps.isEmpty() || memory.source != "notification") true
-                             else monitoredApps.contains(memory.packageName)
-            val matchesTag = if (selectedTag == "All") true
-                             else memory.tags?.contains(selectedTag) == true
-            matchesApp && matchesTag
+            // "All" shows every captured notification; individual chips respect the monitored filter
+            val matchesMonitored = selectedApp == "All" ||
+                monitoredApps.isEmpty() ||
+                memory.source != "notification" ||
+                monitoredApps.contains(memory.packageName)
+            val matchesAppFilter = selectedApp == "All" || getAppName(context, memory.packageName, memory.source) == selectedApp
+            matchesMonitored && matchesAppFilter
         }
 
-        val startOfToday = getStartOfDay(0)
-        val startOfYesterday = getStartOfDay(1)
-        val startOfTwoDaysAgo = getStartOfDay(2)
-
-        val todayMemories = mutableListOf<MemoryEntity>()
-        val yesterdayMemories = mutableListOf<MemoryEntity>()
-        val twoDaysAgoMemories = mutableListOf<MemoryEntity>()
-
-        for (m in filtered) {
-            when {
-                m.timestamp >= startOfToday -> todayMemories.add(m)
-                m.timestamp >= startOfYesterday -> yesterdayMemories.add(m)
-                m.timestamp >= startOfTwoDaysAgo -> twoDaysAgoMemories.add(m)
-            }
-        }
+        val sdf = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
 
         fun buildDayGroup(label: String, dateStart: Long, rawMemories: List<MemoryEntity>): DayGroup {
             val sorted = rawMemories.sortedByDescending { it.timestamp }
             val merged = deduplicateMemories(sorted)
-            
-            // Group merged memories by app/source type
             val grouped = merged.groupBy { item ->
                 getAppName(context, item.primary.packageName, item.primary.source)
             }
-            
             val appGroups = grouped.map { (appName, items) ->
                 val rep = items.first().primary
-                AppGroup(
-                    appName = appName,
-                    packageName = rep.packageName,
-                    source = rep.source,
-                    memories = items
-                )
-            }.sortedByDescending { appGroup ->
-                appGroup.memories.maxOf { it.primary.timestamp }
-            }
-            
+                AppGroup(appName = appName, packageName = rep.packageName, source = rep.source, memories = items)
+            }.sortedByDescending { appGroup -> appGroup.memories.maxOf { it.primary.timestamp } }
             return DayGroup(
-                label = label,
-                dateStart = dateStart,
-                appGroups = appGroups,
-                memories = sorted,
-                unreadCount = sorted.count { !it.isRead }
+                label = label, dateStart = dateStart, appGroups = appGroups,
+                memories = sorted, unreadCount = sorted.count { !it.isRead }
             )
         }
 
+        // Bucket memories into day slots 0..6 (today = 0, yesterday = 1, …)
+        val buckets = Array(7) { mutableListOf<MemoryEntity>() }
+        val dayBoundaries = Array(7) { getStartOfDay(it) }
+
+        for (m in filtered) {
+            val slot = (0..5).firstOrNull { m.timestamp >= dayBoundaries[it] } ?: continue
+            buckets[slot].add(m)
+        }
+
         val groups = mutableListOf<DayGroup>()
-        if (todayMemories.isNotEmpty()) {
-            groups.add(buildDayGroup("Today", startOfToday, todayMemories))
-        }
-        if (yesterdayMemories.isNotEmpty()) {
-            groups.add(buildDayGroup("Yesterday", startOfYesterday, yesterdayMemories))
-        }
-        if (twoDaysAgoMemories.isNotEmpty()) {
-            val sdf = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
-            val label = sdf.format(Date(startOfTwoDaysAgo))
-            groups.add(buildDayGroup(label, startOfTwoDaysAgo, twoDaysAgoMemories))
+        buckets.forEachIndexed { i, dayMemories ->
+            if (dayMemories.isEmpty()) return@forEachIndexed
+            val label = when (i) {
+                0 -> "Today"
+                1 -> "Yesterday"
+                else -> sdf.format(Date(dayBoundaries[i]))
+            }
+            groups.add(buildDayGroup(label, dayBoundaries[i], dayMemories))
         }
         groups
     }
@@ -300,9 +291,9 @@ fun MemoryScreen(
             )
         }
 
-        // Horizontal Smart Folders Tag Chip row (Recommendation 3)
+        // Dynamic app filter chip row
         item {
-            val tags = listOf("All", "#Work", "#Health", "#Social", "#Reference", "#Finance")
+            val chips = listOf("All") + availableApps
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -310,52 +301,34 @@ fun MemoryScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 2.dp)
             ) {
-                items(tags.size) { idx ->
-                    val tag = tags[idx]
-                    val isSelected = tag == selectedTag
-
-                    val primaryColor = MaterialTheme.colorScheme.primary
-                    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
-                    val chipBgColor = if (isSelected) {
-                        when (tag) {
-                            "#Work" -> PastelRed.copy(alpha = 0.85f)
-                            "#Health" -> PastelGreen.copy(alpha = 0.85f)
-                            "#Social" -> PastelPurple.copy(alpha = 0.85f)
-                            "#Reference" -> PastelYellow.copy(alpha = 0.85f)
-                            "#Finance" -> PastelBlue.copy(alpha = 0.85f)
-                            else -> primaryColor
-                        }
-                    } else {
-                        surfaceVariantColor.copy(alpha = 0.35f)
-                    }
-
+                items(chips.size) { idx ->
+                    val chip = chips[idx]
+                    val isSelected = chip == selectedApp
+                    val primary = MaterialTheme.colorScheme.primary
+                    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
                     Surface(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .clickable { selectedTag = tag },
-                        color = chipBgColor,
+                            .clickable { selectedApp = chip },
+                        color = if (isSelected) primary else surfaceVariant.copy(alpha = 0.35f),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
-                            text = tag,
+                            text = chip,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (isSelected) {
-                                if (tag == "All") MaterialTheme.colorScheme.onPrimary else Color.White
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
                 }
                 item {
-                    val surfaceVariantColor = MaterialTheme.colorScheme.surfaceVariant
                     Surface(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
                             .clickable { onNotesSelected() },
-                        color = surfaceVariantColor.copy(alpha = 0.35f),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
@@ -365,6 +338,38 @@ fun MemoryScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
+                    }
+                }
+            }
+        }
+
+        // App filter active banner
+        if (monitoredApps.isNotEmpty()) {
+            item {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "${monitoredApps.size} app${if (monitoredApps.size == 1) "" else "s"} filtered — some notifications hidden.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(
+                            onClick = onClearAppFilter,
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text("Show all", style = MaterialTheme.typography.labelSmall)
+                        }
                     }
                 }
             }

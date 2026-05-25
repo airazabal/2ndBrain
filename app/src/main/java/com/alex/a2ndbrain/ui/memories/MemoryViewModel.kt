@@ -52,18 +52,18 @@ class MemoryViewModel(
 
     private fun pruneOldMemories() {
         viewModelScope.launch(Dispatchers.IO) {
-            val threshold = getStartOfThreeDaysAgo()
+            val threshold = getRetentionCutoff()
             memoryRepository.pruneOldMemories(threshold)
         }
     }
 
-    private fun getStartOfThreeDaysAgo(): Long {
+    private fun getRetentionCutoff(): Long {
         val cal = java.util.Calendar.getInstance()
         cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
         cal.set(java.util.Calendar.MINUTE, 0)
         cal.set(java.util.Calendar.SECOND, 0)
         cal.set(java.util.Calendar.MILLISECOND, 0)
-        cal.add(java.util.Calendar.DAY_OF_YEAR, -2)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -7)
         return cal.timeInMillis
     }
 

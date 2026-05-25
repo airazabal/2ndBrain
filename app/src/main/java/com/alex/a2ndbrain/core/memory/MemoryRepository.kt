@@ -33,6 +33,9 @@ class MemoryRepository(private val memoryDao: MemoryDao) {
     suspend fun insertMemory(memory: MemoryEntity) = memoryDao.insert(memory)
     
     suspend fun markAsRead(id: Long) = memoryDao.markAsRead(id)
+
+    suspend fun markAsReadByPackageAndTitle(packageName: String, title: String) =
+        memoryDao.markAsReadByPackageAndTitleLike(packageName, "${title.replace("%", "\\%").replace("_", "\\_")}%")
     
     suspend fun markMultipleAsRead(ids: List<Long>) = memoryDao.markMultipleAsRead(ids)
     
