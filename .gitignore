@@ -15,3 +15,8 @@
 local.properties
 /.idea/
 app/google-services.json
+
+# Local device database exports
+*_second_brain_db
+*_second_brain_db-shm
+*_second_brain_db-wal
