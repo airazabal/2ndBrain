@@ -229,7 +229,11 @@ fun HomeScreen(
 
     // ── Tasks Sheet ──────────────────────────────────────────────────────────
     if (showMeetingsSheet) {
-        val calEvents = todayTimelineEvents.filter { it.sourcePackage == "calendar" }.sortedBy { it.minutesFromMidnight }
+        val todoistTitles = todoistTasks.map { it.content.trim().lowercase() }.toSet()
+        val calEvents = todayTimelineEvents
+            .filter { it.sourcePackage == "calendar" }
+            .filter { it.title.trim().lowercase() !in todoistTitles }
+            .sortedBy { it.minutesFromMidnight }
         val totalCount = todoistTasks.size + calEvents.size
         ModalBottomSheet(onDismissRequest = { showMeetingsSheet = false }) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
