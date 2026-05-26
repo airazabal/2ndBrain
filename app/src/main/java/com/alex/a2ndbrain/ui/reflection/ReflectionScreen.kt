@@ -95,6 +95,7 @@ fun ReflectionScreen(
     
     var geminiApiKey by remember { mutableStateOf(settingsManager.getGeminiApiKey()) }
     var geminiModel by remember { mutableStateOf(settingsManager.getGeminiModel()) }
+    var todoistApiToken by remember { mutableStateOf(settingsManager.getTodoistApiToken()) }
 
     var showAddCustomModelDialog by remember { mutableStateOf(false) }
     var customModelName by remember { mutableStateOf("") }
@@ -512,6 +513,32 @@ fun ReflectionScreen(
                                     singleLine = true
                                 )
                             }
+                        }
+                    }
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.2f)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Todoist", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                "Get your API token from todoist.com → Settings → Integrations → Developer",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = todoistApiToken,
+                                onValueChange = { todoistApiToken = it; settingsManager.saveTodoistApiToken(it) },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("API Token") },
+                                placeholder = { Text("Paste your Todoist API token here") },
+                                singleLine = true,
+                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                            )
                         }
                     }
                 }

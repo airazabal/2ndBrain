@@ -79,6 +79,7 @@ import java.util.Locale
 import java.util.Calendar
 import java.util.Date
 import com.alex.a2ndbrain.ui.home.EmailTriageResult
+import com.alex.a2ndbrain.core.todoist.TodoistTask
 
 
 
@@ -118,6 +119,10 @@ fun HomeScreen(
     unreadMessageCount: Int = 0,
     meetingsTodayCount: Int = 0,
     emailTriageResult: EmailTriageResult = EmailTriageResult(),
+    todoistTasks: List<TodoistTask> = emptyList(),
+    todoistLoading: Boolean = false,
+    onCompleteTodoistTask: (String) -> Unit = {},
+    onRefreshTodoistTasks: () -> Unit = {},
     onRefreshIntervalChange: (Int) -> Unit = {},
     themePreference: String = "SYSTEM",
     onThemeToggle: () -> Unit = {},
@@ -224,28 +229,112 @@ fun HomeScreen(
 
     // ── Tasks Sheet ──────────────────────────────────────────────────────────
     if (showMeetingsSheet) {
-        val tasks = todayTimelineEvents.filter { it.sourcePackage == "calendar" }.sortedBy { it.minutesFromMidnight }
+        val calEvents = todayTimelineEvents.filter { it.sourcePackage == "calendar" }.sortedBy { it.minutesFromMidnight }
+        val totalCount = todoistTasks.size + calEvents.size
         ModalBottomSheet(onDismissRequest = { showMeetingsSheet = false }) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
-                Text("Tasks Today", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text("${tasks.size} item(s) on your schedule",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Tasks Today", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (totalCount == 0) "Nothing on schedule" else "$totalCount item(s)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                    IconButton(onClick = { onRefreshTodoistTasks() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh tasks",
+                            tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
                 Spacer(Modifier.height(16.dp))
-                if (tasks.isEmpty()) {
-                    Text("Nothing on your schedule today.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                } else {
-                    tasks.forEach { event ->
-                        val isTodoist = event.appName.contains("todoist", ignoreCase = true)
-                        val targetPkg = if (isTodoist) "com.todoist" else "com.google.android.calendar"
-                        val fallbackPkg = if (!isTodoist) "com.samsung.android.calendar" else null
+
+                // ── Todoist tasks ────────────────────────────────────────────
+                if (todoistLoading) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text("Loading Todoist tasks…", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                    }
+                } else if (todoistTasks.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null,
+                            tint = Color(0xFFE44332), modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("TODOIST", style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold, color = Color(0xFFE44332),
+                            letterSpacing = 0.8.sp)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    todoistTasks.forEach { task ->
+                        val priorityColor = when (task.priority) {
+                            4 -> Color(0xFFE53935)
+                            3 -> Color(0xFFFF8F00)
+                            2 -> Color(0xFF1E88E5)
+                            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = { onCompleteTodoistTask(task.id) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.RadioButtonUnchecked,
+                                    contentDescription = "Complete task",
+                                    tint = priorityColor,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(task.content, style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold)
+                                if (task.description.isNotBlank()) {
+                                    Text(task.description, style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                // ── Calendar events ──────────────────────────────────────────
+                if (calEvents.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Schedule, contentDescription = null,
+                            tint = Color(0xFF1E88E5), modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("CALENDAR", style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold, color = Color(0xFF1E88E5),
+                            letterSpacing = 0.8.sp)
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    calEvents.forEach { event ->
+                        val targetPkg = "com.google.android.calendar"
+                        val fallbackPkg = "com.samsung.android.calendar"
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     val intent = context.packageManager.getLaunchIntentForPackage(targetPkg)
-                                        ?: fallbackPkg?.let { context.packageManager.getLaunchIntentForPackage(it) }
+                                        ?: context.packageManager.getLaunchIntentForPackage(fallbackPkg)
                                     intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                     intent?.let { context.startActivity(it) }
                                     showMeetingsSheet = false
@@ -254,27 +343,22 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.width(52.dp)
-                            ) {
-                                Text(event.time, style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                            }
+                            Text(event.time, style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.width(52.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(event.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 Text(event.appName, style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
                             }
-                            Icon(
-                                if (isTodoist) Icons.Default.CheckCircle else Icons.Default.Schedule,
-                                contentDescription = null,
-                                tint = if (isTodoist) Color(0xFFE44332) else Color(0xFF1E88E5),
-                                modifier = Modifier.size(18.dp)
-                            )
                         }
                         HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
                     }
+                }
+
+                if (totalCount == 0 && !todoistLoading) {
+                    Text("Nothing on your schedule today.",
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 }
             }
         }

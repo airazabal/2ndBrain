@@ -571,6 +571,8 @@ class MainActivity : ComponentActivity() {
                                                     val unreadMessageCount by homeViewModel.unreadMessageCount.collectAsStateWithLifecycle()
                                                     val meetingsTodayCount by homeViewModel.meetingsTodayCount.collectAsStateWithLifecycle()
                                                     val emailTriageResult by homeViewModel.emailTriageResult.collectAsStateWithLifecycle()
+                                                    val todoistTasks by homeViewModel.todoistTasks.collectAsStateWithLifecycle()
+                                                    val todoistLoading by homeViewModel.todoistLoading.collectAsStateWithLifecycle()
                                                     LaunchedEffect(Unit) {
                                                         homeViewModel.checkHealthPermissionsAndSync()
                                                         homeViewModel.loadVaultNotes()
@@ -638,6 +640,10 @@ class MainActivity : ComponentActivity() {
                                                         unreadMessageCount = unreadMessageCount,
                                                         meetingsTodayCount = meetingsTodayCount,
                                                         emailTriageResult = emailTriageResult,
+                                                        todoistTasks = todoistTasks,
+                                                        todoistLoading = todoistLoading,
+                                                        onCompleteTodoistTask = { id -> homeViewModel.completeTodoistTask(id) },
+                                                        onRefreshTodoistTasks = { homeViewModel.refreshTodoistTasks() },
                                                         onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
                                                         themePreference = themePreference,
                                                         onThemeToggle = {

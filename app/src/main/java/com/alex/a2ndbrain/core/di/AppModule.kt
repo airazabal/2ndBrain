@@ -29,6 +29,7 @@ import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
 
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
+import com.alex.a2ndbrain.core.todoist.TodoistRepository
 
 val appModule = module {
     // Database and Dao
@@ -56,6 +57,7 @@ val appModule = module {
         }
     }
     single { ZendenceMeditationRepository(androidContext()) }
+    single { TodoistRepository(get()) }
     single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get()) }
 
     // Agent layer (Phase 1-3 migration)
@@ -70,7 +72,7 @@ val appModule = module {
 
     // ViewModels
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get(), get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get(), get(), get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }

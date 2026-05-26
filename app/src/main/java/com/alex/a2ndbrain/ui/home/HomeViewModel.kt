@@ -29,6 +29,8 @@ import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
+import com.alex.a2ndbrain.core.todoist.TodoistRepository
+import com.alex.a2ndbrain.core.todoist.TodoistTask
 
 data class EmailTriageResult(
     val isLoading: Boolean = false,
@@ -46,7 +48,8 @@ class HomeViewModel(
     private val nearbySyncManager: NearbySyncManager,
     private val zendenceMeditationRepository: ZendenceMeditationRepository,
     private val healthRepository: HealthRepository,
-    private val modelRouter: ModelRouter
+    private val modelRouter: ModelRouter,
+    private val todoistRepository: TodoistRepository
 ) : ViewModel() {
     val healthConnectManager get() = healthRepository.healthConnectManager
 
@@ -85,6 +88,34 @@ class HomeViewModel(
 
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    // ── Todoist ──────────────────────────────────────────────────────────────
+    private val _todoistTasks = MutableStateFlow<List<TodoistTask>>(emptyList())
+    val todoistTasks: StateFlow<List<TodoistTask>> = _todoistTasks.asStateFlow()
+
+    private val _todoistLoading = MutableStateFlow(false)
+    val todoistLoading: StateFlow<Boolean> = _todoistLoading.asStateFlow()
+
+    init {
+        refreshTodoistTasks()
+    }
+
+    fun refreshTodoistTasks() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _todoistLoading.value = true
+            _todoistTasks.value = todoistRepository.getTodayTasks()
+            _todoistLoading.value = false
+        }
+    }
+
+    fun completeTodoistTask(taskId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = todoistRepository.closeTask(taskId)
+            if (ok) {
+                _todoistTasks.value = _todoistTasks.value.filter { it.id != taskId }
+            }
+        }
+    }
 
     private val _monitoredAppsState = MutableStateFlow(settingsManager.getMonitoredApps())
     val monitoredAppsState = _monitoredAppsState.asStateFlow()
@@ -465,8 +496,8 @@ If no emails need attention, output exactly: NONE
         }
     }
 
-    val meetingsTodayCount: StateFlow<Int> = todayTimelineEvents.map { events ->
-        events.count { it.sourcePackage == "calendar" }
+    val meetingsTodayCount: StateFlow<Int> = combine(todayTimelineEvents, _todoistTasks) { events, tasks ->
+        events.count { it.sourcePackage == "calendar" } + tasks.size
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     companion object {

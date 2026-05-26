@@ -71,6 +71,14 @@ class CaptureSettingsManager(private val context: Context) {
         securePrefs.edit().putString("gemini_api_key", key.trim()).apply()
     }
 
+    fun getTodoistApiToken(): String {
+        return securePrefs.getString("todoist_api_token", "")?.trim() ?: ""
+    }
+
+    fun saveTodoistApiToken(token: String) {
+        securePrefs.edit().putString("todoist_api_token", token.trim()).apply()
+    }
+
     fun getGeminiModel(): String {
         return prefs.getString("gemini_model", "gemini-2.5-flash") ?: "gemini-2.5-flash"
     }
