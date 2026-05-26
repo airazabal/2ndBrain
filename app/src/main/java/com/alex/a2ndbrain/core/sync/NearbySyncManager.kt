@@ -35,7 +35,8 @@ class NearbySyncManager(
     private val usageRepository: UsageRepository,
     private val scope: CoroutineScope,
     private val meditationRepository: com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository,
-    private val healthRepository: HealthRepository
+    private val healthRepository: HealthRepository,
+    private val digitalTimeManager: com.alex.a2ndbrain.core.usage.DigitalTimeManager
 ) {
     private val _meditationSyncTrigger = MutableSharedFlow<Unit>(replay = 0)
     val meditationSyncTrigger = _meditationSyncTrigger.asSharedFlow()
@@ -361,10 +362,14 @@ class NearbySyncManager(
     private fun sendLocalStats(endpointId: String) {
         scope.launch(Dispatchers.IO) {
             try {
+                // Refresh local usage stats from UsageStatsManager before sending,
+                // so the peer always receives current data rather than a stale DB snapshot.
+                digitalTimeManager.syncUsageStats()
+
                 val calendar = Calendar.getInstance()
                 calendar.add(Calendar.DAY_OF_YEAR, -7)
                 val startDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(calendar.time)
-                
+
                 // Fetch local usage stats
                 val localStats = usageRepository.getUsageStatsSince(startDate)
                 val filteredStats = localStats.filter { it.deviceId == localDeviceId }
