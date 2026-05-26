@@ -229,10 +229,9 @@ fun HomeScreen(
 
     // ── Tasks Sheet ──────────────────────────────────────────────────────────
     if (showMeetingsSheet) {
-        val todoistTitles = todoistTasks.map { it.content.trim().lowercase() }.toSet()
         val calEvents = todayTimelineEvents
             .filter { it.sourcePackage == "calendar" }
-            .filter { it.title.trim().lowercase() !in todoistTitles }
+            .filter { !it.appName.contains("todoist", ignoreCase = true) }
             .sortedBy { it.minutesFromMidnight }
         val totalCount = todoistTasks.size + calEvents.size
         ModalBottomSheet(onDismissRequest = { showMeetingsSheet = false }) {
