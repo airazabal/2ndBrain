@@ -69,7 +69,9 @@ fun MemoryScreen(
     val configuration = LocalConfiguration.current
     
     var isScanning by remember { mutableStateOf(false) }
-    var selectedApp by remember(initialFilter) { mutableStateOf(initialFilter) }
+    var selectedApps by remember(initialFilter) {
+        mutableStateOf<Set<String>>(if (initialFilter == "All") emptySet() else setOf(initialFilter))
+    }
     var showRecordingDialog by remember { mutableStateOf(false) }
     var expandedAppGroups by remember { mutableStateOf(setOf<String>()) }
     var expandedDays by remember { mutableStateOf(setOf<String>("Today")) }
@@ -93,23 +95,28 @@ fun MemoryScreen(
             .sorted()
     }
 
-    // Reset selectedApp only when memories are loaded and the app is genuinely gone
-    if (selectedApp != "All" && memories.isNotEmpty() && selectedApp !in availableApps) {
-        selectedApp = "All"
+    // Drop any selected apps that have disappeared from the memory list
+    if (selectedApps.isNotEmpty() && memories.isNotEmpty()) {
+        val pruned = selectedApps.filter { it in availableApps }.toSet()
+        if (pruned != selectedApps) selectedApps = pruned
     }
 
-    val dayGroups = remember(memories, monitoredApps, selectedApp, localReadOverrides) {
+    val dayGroups by remember(memories, monitoredApps) {
+        derivedStateOf {
         val filtered = memories.map { memory ->
             val override = localReadOverrides[memory.id]
             if (override != null) memory.copy(isRead = override) else memory
         }.filter { memory ->
-            // "All" shows every captured notification; individual chips respect the monitored filter
-            val matchesMonitored = selectedApp == "All" ||
+            val appName = getAppName(context, memory.packageName, memory.source)
+            if (selectedApps.isNotEmpty()) {
+                // Explicit selection — show exactly those apps, ignore monitored filter
+                selectedApps.contains(appName)
+            } else {
+                // "All" — respect the monitored-apps filter
                 monitoredApps.isEmpty() ||
-                memory.source != "notification" ||
-                monitoredApps.contains(memory.packageName)
-            val matchesAppFilter = selectedApp == "All" || getAppName(context, memory.packageName, memory.source) == selectedApp
-            matchesMonitored && matchesAppFilter
+                    memory.source != "notification" ||
+                    monitoredApps.contains(memory.packageName)
+            }
         }
 
         val sdf = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
@@ -150,6 +157,7 @@ fun MemoryScreen(
             groups.add(buildDayGroup(label, dayBoundaries[i], dayMemories))
         }
         groups
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -304,13 +312,20 @@ fun MemoryScreen(
             ) {
                 items(chips.size) { idx ->
                     val chip = chips[idx]
-                    val isSelected = chip == selectedApp
+                    val isSelected = if (chip == "All") selectedApps.isEmpty()
+                                     else selectedApps.contains(chip)
                     val primary = MaterialTheme.colorScheme.primary
                     val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
                     Surface(
                         modifier = Modifier
                             .clip(RoundedCornerShape(20.dp))
-                            .clickable { selectedApp = chip },
+                            .clickable {
+                                selectedApps = when {
+                                    chip == "All" -> emptySet()
+                                    selectedApps.contains(chip) -> selectedApps - chip
+                                    else -> selectedApps + chip
+                                }
+                            },
                         color = if (isSelected) primary else surfaceVariant.copy(alpha = 0.35f),
                         shape = RoundedCornerShape(20.dp)
                     ) {
