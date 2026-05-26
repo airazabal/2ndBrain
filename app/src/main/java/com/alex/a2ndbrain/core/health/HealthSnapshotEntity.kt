@@ -1,11 +1,10 @@
 package com.alex.a2ndbrain.core.health
 
 import androidx.room.Entity
-import androidx.room.PrimaryKey
 
-@Entity(tableName = "health_snapshots")
+@Entity(tableName = "health_snapshots", primaryKeys = ["date", "deviceId"])
 data class HealthSnapshotEntity(
-    @PrimaryKey val date: String,      // "yyyy-MM-dd"
+    val date: String,      // "yyyy-MM-dd"
     val deviceId: String,
     val steps: Long = 0,
     val sleepMinutes: Int = 0,

@@ -63,19 +63,22 @@ class HealthRepository(
                 val sinceDate = dateFormat.format(
                     Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -(days - 1)) }.time
                 )
-                val snapshots = healthDao.getSnapshotsSince(sinceDate)
+                val allSnapshots = healthDao.getSnapshotsSince(sinceDate)
                 val todayStr = dateFormat.format(Date())
                 val yesterdayStr = dateFormat.format(
                     Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }.time
                 )
-                val yesterdaySleep = snapshots.firstOrNull { it.date == yesterdayStr }?.sleepMinutes ?: 0
-                val metrics = snapshots.map { snap ->
+                // Collapse multiple device rows per date into the best one
+                val byDate = allSnapshots.groupBy { it.date }
+                    .mapValues { (_, snaps) -> bestSnapshot(snaps)!! }
+                val yesterdaySleep = byDate[yesterdayStr]?.sleepMinutes ?: 0
+                val metrics = byDate.values.map { snap ->
                     val corrected = if (snap.date == todayStr
                         && snap.sleepMinutes < 120
                         && yesterdaySleep > snap.sleepMinutes
                     ) snap.copy(sleepMinutes = yesterdaySleep) else snap
                     corrected.toDailyMetrics()
-                }
+                }.sortedBy { it.date }
                 Pair(metrics, false)
             } catch (e: Exception) {
                 Log.e("HealthRepository", "getPeriodMetrics failed", e)
@@ -127,14 +130,17 @@ class HealthRepository(
         healthDao.insertSnapshot(snapshot)
     }
 
+    private fun bestSnapshot(snapshots: List<HealthSnapshotEntity>): HealthSnapshotEntity? =
+        snapshots.maxByOrNull { it.sleepMinutes * 10_000 + it.avgHeartRate * 100 + it.steps.coerceAtMost(9999) }
+
     private suspend fun getMetricsFromDb(): HealthMetrics {
         val today = dateFormat.format(Date())
-        var metrics = healthDao.getSnapshotForDate(today)?.toHealthMetrics() ?: HealthMetrics()
+        var metrics = bestSnapshot(healthDao.getSnapshotsForDate(today))?.toHealthMetrics() ?: HealthMetrics()
         if (metrics.sleepMinutes < 120) {
             val yesterday = dateFormat.format(
                 Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }.time
             )
-            val prev = healthDao.getSnapshotForDate(yesterday)
+            val prev = bestSnapshot(healthDao.getSnapshotsForDate(yesterday))
             if (prev != null && prev.sleepMinutes > metrics.sleepMinutes) {
                 metrics = metrics.copy(sleepMinutes = prev.sleepMinutes)
             }

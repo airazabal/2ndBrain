@@ -10,8 +10,8 @@ interface HealthDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSnapshot(snapshot: HealthSnapshotEntity)
 
-    @Query("SELECT * FROM health_snapshots WHERE date = :date LIMIT 1")
-    suspend fun getSnapshotForDate(date: String): HealthSnapshotEntity?
+    @Query("SELECT * FROM health_snapshots WHERE date = :date")
+    suspend fun getSnapshotsForDate(date: String): List<HealthSnapshotEntity>
 
     @Query("SELECT * FROM health_snapshots WHERE date >= :sinceDate ORDER BY date DESC")
     suspend fun getSnapshotsSince(sinceDate: String): List<HealthSnapshotEntity>
