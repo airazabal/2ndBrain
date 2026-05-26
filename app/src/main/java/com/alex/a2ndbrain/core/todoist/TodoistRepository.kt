@@ -15,6 +15,7 @@ data class TodoistTask(
     val description: String,
     val priority: Int,         // 1=normal … 4=urgent
     val dueDateStr: String?,   // "yyyy-MM-dd" or null
+    val deadlineDateStr: String?, // "yyyy-MM-dd" or null — separate from due date
     val url: String
 )
 
@@ -26,16 +27,16 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
         val token = settingsManager.getTodoistApiToken()
         Log.d("Todoist", "getTodayTasks: token blank=${token.isBlank()}, length=${token.length}")
         if (token.isBlank()) return@withContext emptyList()
+        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
         val allTasks = mutableListOf<TodoistTask>()
         var cursor: String? = null
         var page = 0
         try {
             do {
-                val urlStr = buildString {
-                    append("$baseUrl/tasks?filter=")
-                    append(java.net.URLEncoder.encode("today", "UTF-8"))
-                    if (cursor != null) append("&cursor=${java.net.URLEncoder.encode(cursor, "UTF-8")}")
-                }
+                val urlStr = if (cursor != null)
+                    "$baseUrl/tasks?cursor=${java.net.URLEncoder.encode(cursor, "UTF-8")}"
+                else
+                    "$baseUrl/tasks"
                 Log.d("Todoist", "Fetching page $page: $urlStr")
                 val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
@@ -55,12 +56,16 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
                 val root = org.json.JSONTokener(body).nextValue() as? JSONObject ?: break
                 val arr = root.optJSONArray("results") ?: JSONArray()
                 val pageTasks = parseTasks(arr)
-                allTasks.addAll(pageTasks)
-                Log.d("Todoist", "page $page: ${pageTasks.size} tasks, running total=${allTasks.size}")
+                val todayTasks = pageTasks.filter { task ->
+                    task.dueDateStr?.startsWith(todayStr) == true ||
+                    task.deadlineDateStr?.startsWith(todayStr) == true
+                }
+                allTasks.addAll(todayTasks)
+                Log.d("Todoist", "page $page: ${pageTasks.size} tasks, ${todayTasks.size} due/deadline today, running total=${allTasks.size}")
                 cursor = root.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
                 page++
             } while (cursor != null)
-            Log.d("Todoist", "Done: ${allTasks.size} tasks for today across $page page(s)")
+            Log.d("Todoist", "Done: ${allTasks.size} tasks for today ($todayStr) across $page page(s)")
             allTasks
         } catch (e: Exception) {
             Log.e("Todoist", "getTodayTasks failed", e)
@@ -93,6 +98,10 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
         for (i in 0 until arr.length()) {
             val obj: JSONObject = arr.getJSONObject(i)
             val due = obj.optJSONObject("due")
+            val deadline = obj.optJSONObject("deadline")
+            // deadline may also appear as a flat string in some API versions
+            val deadlineDateStr = deadline?.optString("date")?.ifBlank { null }
+                ?: obj.optString("deadline").ifBlank { null }
             result.add(
                 TodoistTask(
                     id = obj.getString("id"),
@@ -100,6 +109,7 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
                     description = obj.optString("description", ""),
                     priority = obj.optInt("priority", 1),
                     dueDateStr = due?.optString("date"),
+                    deadlineDateStr = deadlineDateStr,
                     url = obj.optString("url", "")
                 )
             )
