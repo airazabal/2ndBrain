@@ -56,9 +56,10 @@ class HealthRepository(
                 val hasHC = healthConnectManager.isAvailable() && healthConnectManager.hasPermissions()
                 val hcData = if (hasHC) healthConnectManager.fetchDailyBreakdown(days) else null
                 val hasWearableData = hcData?.any { it.hasSleep || it.hasHeart } == true
-                // Use HC data whenever it has anything (steps-only counts). Only fall through
-                // to DB when HC returned nothing — e.g. a tablet with no HC at all.
-                if (!hcData.isNullOrEmpty()) return@withContext Pair(hcData, hasWearableData)
+                // Only trust HC data when it has wearable readings (sleep or HR). A tablet
+                // with only accelerometer steps would otherwise hide the phone's synced
+                // wearable data that lives in the DB.
+                if (hasWearableData) return@withContext Pair(hcData!!, true)
 
                 val sinceDate = dateFormat.format(
                     Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -(days - 1)) }.time
