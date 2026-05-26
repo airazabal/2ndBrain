@@ -8,7 +8,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.text.SimpleDateFormat
 
 data class TodoistTask(
     val id: String,
@@ -27,16 +26,16 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
         val token = settingsManager.getTodoistApiToken()
         Log.d("Todoist", "getTodayTasks: token blank=${token.isBlank()}, length=${token.length}")
         if (token.isBlank()) return@withContext emptyList()
-        val todayStr = SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
         val allTasks = mutableListOf<TodoistTask>()
         var cursor: String? = null
         var page = 0
         try {
             do {
-                val urlStr = if (cursor != null)
-                    "$baseUrl/tasks?cursor=${java.net.URLEncoder.encode(cursor, "UTF-8")}"
-                else
-                    "$baseUrl/tasks"
+                val urlStr = buildString {
+                    append("$baseUrl/tasks?filter=")
+                    append(java.net.URLEncoder.encode("today", "UTF-8"))
+                    if (cursor != null) append("&cursor=${java.net.URLEncoder.encode(cursor, "UTF-8")}")
+                }
                 Log.d("Todoist", "Fetching page $page: $urlStr")
                 val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
@@ -56,13 +55,12 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
                 val root = org.json.JSONTokener(body).nextValue() as? JSONObject ?: break
                 val arr = root.optJSONArray("results") ?: JSONArray()
                 val pageTasks = parseTasks(arr)
-                val todayTasks = pageTasks.filter { it.dueDateStr?.startsWith(todayStr) == true }
-                allTasks.addAll(todayTasks)
-                Log.d("Todoist", "page $page: ${pageTasks.size} tasks, ${todayTasks.size} due today, running total=${allTasks.size}")
+                allTasks.addAll(pageTasks)
+                Log.d("Todoist", "page $page: ${pageTasks.size} tasks, running total=${allTasks.size}")
                 cursor = root.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
                 page++
             } while (cursor != null)
-            Log.d("Todoist", "Done: ${allTasks.size} tasks due today ($todayStr) across $page page(s)")
+            Log.d("Todoist", "Done: ${allTasks.size} tasks for today across $page page(s)")
             allTasks
         } catch (e: Exception) {
             Log.e("Todoist", "getTodayTasks failed", e)
