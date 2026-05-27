@@ -231,7 +231,7 @@
   <div class="pipeline-item">
     <div class="pi-icon">📨</div>
     <div class="pi-label">Notifications</div>
-    <div class="pi-sub">Gmail · Calendar · Todoist</div>
+    <div class="pi-sub">Gmail · Calendar · Apps</div>
   </div>
   <div class="pipeline-item">
     <div class="pi-icon">📋</div>
@@ -257,6 +257,11 @@
     <div class="pi-icon">📓</div>
     <div class="pi-label">Obsidian</div>
     <div class="pi-sub">Vault notes &amp; agenda</div>
+  </div>
+  <div class="pipeline-item">
+    <div class="pi-icon">✅</div>
+    <div class="pi-label">Todoist</div>
+    <div class="pi-sub">Tasks · Overdue · Reminders</div>
   </div>
 </div>
 
@@ -284,10 +289,10 @@
 
   <div class="feat green">
     <div class="feat-icon">✅</div>
-    <div class="feat-title">Habits &amp; Alarms</div>
-    <div class="feat-body">SQLite-backed habit engine with exact-alarm reminders, boot-rescheduling, and one-tap completion from the notification shade or watch. Visual 7-day streak rings on the home screen.</div>
+    <div class="feat-title">Habits, Alarms &amp; Tasks</div>
+    <div class="feat-body">SQLite-backed habit engine with exact-alarm reminders and one-tap completion. Todoist integration shows today's tasks and overdue items with priority badges. Hourly reminders nudge incomplete tasks until done.</div>
     <div class="feat-pills">
-      <span class="pill">Streaks</span><span class="pill">Alarms</span><span class="pill">Undo</span>
+      <span class="pill">Streaks</span><span class="pill">Alarms</span><span class="pill">Todoist</span><span class="pill">Overdue</span>
     </div>
   </div>
 
@@ -310,11 +315,11 @@
   </div>
 
   <div class="feat purple">
-    <div class="feat-icon">📓</div>
-    <div class="feat-title">Obsidian Vault</div>
-    <div class="feat-body">Browse your Obsidian vault in-app, deep-link to edit, and quick-capture timestamped notes. Daily notes and agenda files flow into the home timeline for a unified view of your day.</div>
+    <div class="feat-icon">🏠</div>
+    <div class="feat-title">Smart Home Cockpit</div>
+    <div class="feat-body">Needs Attention card aggregates schedule conflicts, sleep deficit, heart rate, steps, and email urgency. Conflicts auto-expire when events pass, dismissals persist across restarts, and state re-evaluates every minute.</div>
     <div class="feat-pills">
-      <span class="pill">Vault Browse</span><span class="pill">Quick Capture</span><span class="pill">Timeline</span>
+      <span class="pill">Needs Attention</span><span class="pill">Obsidian</span><span class="pill">Timeline</span>
     </div>
   </div>
 
@@ -369,13 +374,13 @@
     <div class="sc-icon">🗄️</div>
     <div class="sc-num">100%</div>
     <div class="sc-label">Local Storage</div>
-    <div class="sc-sub">All data lives in an on-device Room database. 5 entities, 17 schema versions, strict migrations — your data never leaves your device unless you choose to sync.</div>
+    <div class="sc-sub">All data lives in an on-device Room database. 5 entities, 20 schema versions, strict migrations — your data never leaves your device unless you choose to sync.</div>
   </div>
   <div class="stat-card">
     <div class="sc-icon">⚡</div>
-    <div class="sc-num">3</div>
+    <div class="sc-num">5</div>
     <div class="sc-label">Background Workers</div>
-    <div class="sc-sub">UsageSyncWorker (4 h), P2pSyncWorker (15 min), ReflectionWorker (6 h) — scheduled via WorkManager, running silently in the background 24/7.</div>
+    <div class="sc-sub">UsageSync (4 h) · P2pSync (15 min) · Reflection (6 h) · DistractionAlert (15 min) · TodoistReminder (1 h) — all via WorkManager, running silently 24/7.</div>
   </div>
 </div>
 

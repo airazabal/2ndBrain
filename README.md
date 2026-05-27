@@ -29,12 +29,24 @@
 - **Streak & Performance Visualizer**: Cockpit presents a weekly progress strip featuring **7 beautifully styled circular HSL progress rings** representing routine completion over the past 7 days.
 - **AI Co-Pilot Integration**: Today's checked-off routines and alarms are automatically injected into the AI Reflection/Briefing prompt context so your co-pilot can track your physical habits.
 
+### 📋 Todoist Task Management
+- **Today's Tasks Panel**: Live Todoist tasks due today displayed on the Home cockpit with priority-color-coded checkboxes (red = urgent, orange = high, blue = medium). Complete tasks directly from the app.
+- **Overdue Actions Card**: Dedicated dashboard card showing the count of past-due Todoist tasks. Tapping opens a sheet listing each overdue item with its original due date highlighted in red and a one-tap complete button.
+- **Hourly Task Reminders**: WorkManager-backed hourly notifications (7 AM–10 PM) fire whenever incomplete tasks remain for today. The first reminder fires immediately on app open; subsequent ones are rate-limited to once per hour so you're nudged — not spammed.
+- **Unified Completion**: Completing a task from 2ndBrain closes it in Todoist via the REST API and removes it from both the today and overdue lists instantly — no refresh needed.
+
 ### 🧘 Zen (Meditation) — Powered by Zendence
 - **Zendence Integration**: Reads real meditation session data via a content provider bridge to the companion Zendence app.
 - **Session History**: Displays a full history of meditation sessions including duration, insight notes, and timestamps in a dedicated **Zen** tab.
 - **Streak Tracking**: Tracks your current and longest meditation streaks with a live streak indicator on the Home cockpit.
 - **Meditated Today indicator**: Home cockpit updates in real time to reflect whether you've meditated today, contributing to your Sense of Day Score (+20 pts).
 - **P2P Zen Sync**: Meditation sessions are automatically included in the Nearby Connections P2P sync payload. When a sync completes, the Zen tab refreshes instantly — no manual action required.
+
+### 🏠 Home Cockpit & Needs Attention
+- **Needs Attention Card**: Aggregates urgent signals — imminent calendar events (≤15 min), sleep deficit, elevated heart rate, low step count, overdue email, and schedule conflicts — into a single prioritised card with red/amber/green colour coding.
+- **Auto-Expiring Schedule Conflicts**: "Schedule Crunch" alerts automatically disappear once both conflicting events have passed — no stale warnings lingering all day.
+- **Persistent Dismissals**: Dismissed conflicts survive app restarts and auto-clear at midnight; each conflict ID is stored in SharedPreferences keyed by today's date.
+- **Live Recomputation**: Conflict state re-evaluates every minute via a ticker flow, so time-sensitive alerts stay accurate without requiring a data change to trigger a refresh.
 
 ### 🤖 AI Intelligence & Private Co-Pilot
 - **💬 Interactive Co-Pilot Chat**: A beautiful sidebar-driven bubble log to ask direct questions about your captures, clipboard logs, and daily usage. It pulls relevant DB context in real-time.
@@ -79,11 +91,12 @@
 - `ui/meditation/`: Zen tab displaying meditation session history and streaks.
 - `ui/settings/`: Sync controls, habit management, theme, and app monitoring configuration.
 - `core/sync/`: Nearby Connections P2P manager (usage + meditation payload) and WorkManager background sync workers.
-- `core/usage/`: `UsageStatsManager` local usage collection and SQLite usage database repository.
+- `core/usage/`: `UsageStatsManager` local usage collection, SQLite usage database repository, and `DistractionAlertWorker`.
 - `core/reflection/`: Gemini API, LiteRT on-device LLM picker, and briefing logic.
 - `core/capture/`: Notification listener service and clipboard manager with heuristic auto-tagging.
 - `core/health/`: Health Connect bridge for step count, sleep, and heart-rate tracking.
 - `core/meditation/`: Zendence content provider bridge and meditation session repository.
+- `core/todoist/`: Todoist REST API client (`TodoistRepository`), data model, and `TodoistReminderWorker` for hourly background reminders.
 
 ---
 
