@@ -118,12 +118,10 @@ class HomeViewModel(
     private fun maybeFireTodoistReminder(tasks: List<com.alex.a2ndbrain.core.todoist.TodoistTask>) {
         val prefs = applicationContext.getSharedPreferences("todoist_reminder_prefs", android.content.Context.MODE_PRIVATE)
         val lastMs = prefs.getLong("last_notified_ms", 0L)
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        if (hour < 7 || hour >= 22) return
         if (System.currentTimeMillis() - lastMs < 60 * 60 * 1000L) return
 
         val nm = applicationContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-        val channelId = "todoist_reminders"
+        val channelId = "task_reminders_v2"
         nm.createNotificationChannel(
             android.app.NotificationChannel(channelId, "Todoist Reminders", android.app.NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Hourly reminders for incomplete tasks due today."

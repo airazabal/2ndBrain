@@ -80,7 +80,7 @@ class TodoistReminderWorker(
     }
 
     companion object {
-        private const val CHANNEL_ID = "todoist_reminders"
+        private const val CHANNEL_ID = "task_reminders_v2"
         private const val NOTIFICATION_ID = 9001
         private const val WORK_NAME = "todoist_reminder"
 
