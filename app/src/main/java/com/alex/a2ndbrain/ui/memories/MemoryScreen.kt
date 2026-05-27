@@ -28,6 +28,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.memory.MemoryEntity
+import com.alex.a2ndbrain.core.memory.MergedMemory
+import com.alex.a2ndbrain.core.memory.deduplicateMemories
 import com.alex.a2ndbrain.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -69,8 +71,15 @@ fun MemoryScreen(
     val configuration = LocalConfiguration.current
     
     var isScanning by remember { mutableStateOf(false) }
+    val messagingChipNames = setOf("Messages", "WhatsApp", "Telegram", "Signal", "Messenger", "Viber", "SMS")
     var selectedApps by remember(initialFilter) {
-        mutableStateOf<Set<String>>(if (initialFilter == "All") emptySet() else setOf(initialFilter))
+        mutableStateOf<Set<String>>(
+            when (initialFilter) {
+                "All" -> emptySet()
+                "Messages" -> messagingChipNames
+                else -> setOf(initialFilter)
+            }
+        )
     }
     var showRecordingDialog by remember { mutableStateOf(false) }
     var expandedAppGroups by remember { mutableStateOf(setOf<String>()) }
@@ -512,13 +521,6 @@ data class DayGroup(
     val unreadCount: Int
 )
 
-data class MergedMemory(
-    val primary: MemoryEntity,
-    val allIds: List<Long>,
-    val duplicateCount: Int,
-    val isRead: Boolean
-)
-
 private fun getStartOfDay(daysAgo: Int): Long {
     val cal = java.util.Calendar.getInstance()
     cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
@@ -527,74 +529,6 @@ private fun getStartOfDay(daysAgo: Int): Long {
     cal.set(java.util.Calendar.MILLISECOND, 0)
     cal.add(java.util.Calendar.DAY_OF_YEAR, -daysAgo)
     return cal.timeInMillis
-}
-
-private fun deduplicateMemories(memories: List<MemoryEntity>): List<MergedMemory> {
-    val sorted = memories.sortedByDescending { it.timestamp }
-    val mergedList = mutableListOf<MergedMemory>()
-    
-    for (item in sorted) {
-        val isChatApp = (item.packageName ?: "").contains("whatsapp") || 
-                        (item.packageName ?: "").contains("telegram") || 
-                        (item.packageName ?: "").contains("signal") || 
-                        (item.packageName ?: "").contains("discord") || 
-                        (item.packageName ?: "").contains("messenger") || 
-                        (item.packageName ?: "").contains("slack")
-        
-        val existingIdx = if (item.source == "voice") -1 else mergedList.indexOfFirst { merged ->
-            val existing = merged.primary
-            if (existing.source != item.source || existing.packageName != item.packageName) {
-                return@indexOfFirst false
-            }
-            
-            val similarity = calculateSimilarity(existing.content, item.content)
-            val titleSimilarity = calculateSimilarity(existing.title ?: "", item.title ?: "")
-            
-            val existingLines = existing.content.split("\n").filter { it.isNotBlank() }
-            val itemLines = item.content.split("\n").filter { it.isNotBlank() }
-            val hasLineOverlap = if (existingLines.isNotEmpty() && itemLines.isNotEmpty()) {
-                val intersection = existingLines.intersect(itemLines.toSet())
-                (intersection.size.toFloat() / itemLines.size.toFloat()) > 0.5f
-            } else false
-            
-            val isGmailSummary = (existing.packageName ?: "").contains("gm") && 
-                                 (existing.title ?: "").contains("messages") && 
-                                 (item.title ?: "").contains("messages")
-            
-            when {
-                // Exact content match
-                existing.content == item.content -> true
-                // Chat app substring match
-                isChatApp && (existing.content.contains(item.content) || item.content.contains(existing.content)) -> true
-                // Fuzzy content similarity > 0.8
-                similarity > 0.8 && (existing.title == item.title || titleSimilarity > 0.8) -> true
-                // Prefix match (only for non-voice)
-                existing.source != "voice" && existing.content.take(15) == item.content.take(15) -> true
-                // Line overlap for group summaries/conversations
-                hasLineOverlap || isGmailSummary -> true
-                else -> false
-            }
-        }
-        
-        if (existingIdx != -1) {
-            val merged = mergedList[existingIdx]
-            mergedList[existingIdx] = merged.copy(
-                allIds = merged.allIds + item.id,
-                duplicateCount = merged.duplicateCount + item.duplicateCount,
-                isRead = merged.isRead && item.isRead
-            )
-        } else {
-            mergedList.add(
-                MergedMemory(
-                    primary = item,
-                    allIds = listOf(item.id),
-                    duplicateCount = item.duplicateCount,
-                    isRead = item.isRead
-                )
-            )
-        }
-    }
-    return mergedList
 }
 
 @Composable
@@ -982,34 +916,6 @@ private fun MemoryCard(
     }
 }
 
-
-private fun calculateSimilarity(s1: String, s2: String): Double {
-    if (s1 == s2) return 1.0
-    if (s1.isEmpty() || s2.isEmpty()) return 0.0
-    val maxLen = maxOf(s1.length, s2.length)
-    val distance = levenshteinDistance(s1, s2)
-    return (maxLen - distance).toDouble() / maxLen.toDouble()
-}
-
-private fun levenshteinDistance(s1: String, s2: String): Int {
-    val len1 = s1.length
-    val len2 = s2.length
-    val dp = IntArray(len2 + 1) { it }
-    for (i in 1..len1) {
-        var prev = dp[0]
-        dp[0] = i
-        for (j in 1..len2) {
-            val temp = dp[j]
-            if (s1[i - 1] == s2[j - 1]) {
-                dp[j] = prev
-            } else {
-                dp[j] = minOf(dp[j] + 1, dp[j - 1] + 1, prev + 1)
-            }
-            prev = temp
-        }
-    }
-    return dp[len2]
-}
 
 @Composable
 fun VoiceRecordingDialog(

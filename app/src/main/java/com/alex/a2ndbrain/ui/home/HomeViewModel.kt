@@ -14,6 +14,7 @@ import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
+import com.alex.a2ndbrain.core.memory.deduplicateMemories
 import com.alex.a2ndbrain.core.agents.ModelRouter
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
@@ -185,11 +186,12 @@ class HomeViewModel(
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
-        memories.filter { m ->
+        val todayMessaging = memories.filter { m ->
             m.source == "notification" && m.timestamp >= startOfToday &&
             messagingPackages.any { pkg -> m.packageName?.contains(pkg) == true } &&
             (monitored.isEmpty() || monitored.contains(m.packageName))
-        }.distinctBy { "${it.packageName}-${it.title?.trim()}" }.size
+        }
+        deduplicateMemories(todayMessaging).count { !it.isRead }
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val _meditationSessions = MutableStateFlow<List<MeditationSession>>(emptyList())
