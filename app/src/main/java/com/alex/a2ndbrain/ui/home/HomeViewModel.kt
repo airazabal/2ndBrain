@@ -111,12 +111,12 @@ class HomeViewModel(
     fun refreshTodoistTasks() {
         viewModelScope.launch(Dispatchers.IO) {
             _todoistLoading.value = true
-            val today = todoistRepository.getTodayTasks()
-            val overdue = todoistRepository.getOverdueTasks()
-            _todoistTasks.value = today
-            _overdueTasks.value = overdue
+            val split = todoistRepository.fetchTodayAndOverdue()
+            _todoistTasks.value = split.today
+            _overdueTasks.value = split.overdue
             _todoistLoading.value = false
-            if (today.isNotEmpty() || overdue.isNotEmpty()) maybeFireTodoistReminder(today + overdue)
+            val allPending = split.today + split.overdue
+            if (allPending.isNotEmpty()) maybeFireTodoistReminder(allPending)
         }
     }
 

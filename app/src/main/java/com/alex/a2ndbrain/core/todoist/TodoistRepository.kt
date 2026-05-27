@@ -23,90 +23,73 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
 
     private val baseUrl = "https://api.todoist.com/api/v1"
 
-    suspend fun getTodayTasks(): List<TodoistTask> = withContext(Dispatchers.IO) {
+    data class SplitTasks(val today: List<TodoistTask>, val overdue: List<TodoistTask>)
+
+    // Single paginated fetch — splits into today's tasks and overdue tasks so callers
+    // don't need two round-trips.
+    suspend fun fetchTodayAndOverdue(): SplitTasks = withContext(Dispatchers.IO) {
         val token = settingsManager.getTodoistApiToken()
-        Log.d("Todoist", "getTodayTasks: token blank=${token.isBlank()}, length=${token.length}")
-        if (token.isBlank()) return@withContext emptyList()
+        Log.d("Todoist", "fetchTodayAndOverdue: token blank=${token.isBlank()}")
+        if (token.isBlank()) return@withContext SplitTasks(emptyList(), emptyList())
+
         val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-        val allTasks = mutableListOf<TodoistTask>()
+        val nowCal = java.util.Calendar.getInstance()
+        val nowMinutes = nowCal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + nowCal.get(java.util.Calendar.MINUTE)
+
+        val todayList = mutableListOf<TodoistTask>()
+        val overdueList = mutableListOf<TodoistTask>()
         var cursor: String? = null
         var page = 0
         try {
             do {
                 val urlStr = if (cursor != null)
                     "$baseUrl/tasks?cursor=${java.net.URLEncoder.encode(cursor, "UTF-8")}"
-                else
-                    "$baseUrl/tasks"
+                else "$baseUrl/tasks"
                 Log.d("Todoist", "Fetching page $page: $urlStr")
                 val conn = (URL(urlStr).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"
                     setRequestProperty("Authorization", "Bearer $token")
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
+                    connectTimeout = 10_000; readTimeout = 10_000
                 }
                 val code = conn.responseCode
                 if (code != 200) {
-                    val err = conn.errorStream?.bufferedReader()?.readText()
-                    Log.w("Todoist", "HTTP $code on page $page: $err")
-                    conn.disconnect()
-                    break
+                    Log.w("Todoist", "HTTP $code on page $page")
+                    conn.disconnect(); break
                 }
-                val body = conn.inputStream.bufferedReader().readText()
-                conn.disconnect()
-                val root = org.json.JSONTokener(body).nextValue() as? JSONObject ?: break
-                val arr = root.optJSONArray("results") ?: JSONArray()
-                val pageTasks = parseTasks(arr)
-                val todayTasks = pageTasks.filter { task ->
-                    task.dueDateStr?.startsWith(todayStr) == true ||
-                    task.deadlineDateStr?.startsWith(todayStr) == true
-                }
-                allTasks.addAll(todayTasks)
-                Log.d("Todoist", "page $page: ${pageTasks.size} tasks, ${todayTasks.size} due/deadline today, running total=${allTasks.size}")
-                cursor = root.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
-                page++
-            } while (cursor != null)
-            Log.d("Todoist", "Done: ${allTasks.size} tasks for today ($todayStr) across $page page(s)")
-            allTasks
-        } catch (e: Exception) {
-            Log.e("Todoist", "getTodayTasks failed", e)
-            emptyList()
-        }
-    }
-
-    suspend fun getOverdueTasks(): List<TodoistTask> = withContext(Dispatchers.IO) {
-        val token = settingsManager.getTodoistApiToken()
-        if (token.isBlank()) return@withContext emptyList()
-        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-        val allTasks = mutableListOf<TodoistTask>()
-        var cursor: String? = null
-        try {
-            do {
-                val urlStr = if (cursor != null)
-                    "$baseUrl/tasks?cursor=${java.net.URLEncoder.encode(cursor, "UTF-8")}"
-                else
-                    "$baseUrl/tasks"
-                val conn = (java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    setRequestProperty("Authorization", "Bearer $token")
-                    connectTimeout = 10_000; readTimeout = 10_000
-                }
-                if (conn.responseCode != 200) { conn.disconnect(); break }
                 val body = conn.inputStream.bufferedReader().readText()
                 conn.disconnect()
                 val root = org.json.JSONTokener(body).nextValue() as? JSONObject ?: break
                 val arr = root.optJSONArray("results") ?: JSONArray()
                 parseTasks(arr).forEach { task ->
-                    val dateStr = task.dueDateStr?.take(10) ?: task.deadlineDateStr?.take(10)
-                    if (dateStr != null && dateStr < todayStr) allTasks.add(task)
+                    val rawDate = task.dueDateStr ?: task.deadlineDateStr ?: return@forEach
+                    val dateOnly = rawDate.take(10)
+                    when {
+                        dateOnly < todayStr -> overdueList.add(task)
+                        dateOnly == todayStr -> {
+                            // Timed task whose time has already passed → overdue
+                            val pastDue = rawDate.length > 10 && try {
+                                val t = rawDate.substring(11, 16)
+                                val (h, m) = t.split(":").map { it.toInt() }
+                                h * 60 + m < nowMinutes
+                            } catch (_: Exception) { false }
+                            if (pastDue) overdueList.add(task) else todayList.add(task)
+                        }
+                    }
                 }
                 cursor = root.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
+                page++
             } while (cursor != null)
-            allTasks
+            Log.d("Todoist", "Done: ${todayList.size} today, ${overdueList.size} overdue across $page page(s)")
+            SplitTasks(todayList, overdueList)
         } catch (e: Exception) {
-            Log.e("Todoist", "getOverdueTasks failed", e)
-            emptyList()
+            Log.e("Todoist", "fetchTodayAndOverdue failed", e)
+            SplitTasks(emptyList(), emptyList())
         }
     }
+
+    suspend fun getTodayTasks(): List<TodoistTask> = fetchTodayAndOverdue().today
+
+    suspend fun getOverdueTasks(): List<TodoistTask> = fetchTodayAndOverdue().overdue
 
     suspend fun closeTask(taskId: String): Boolean = withContext(Dispatchers.IO) {
         val token = settingsManager.getTodoistApiToken()
