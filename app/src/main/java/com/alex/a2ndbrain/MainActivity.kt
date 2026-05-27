@@ -141,6 +141,7 @@ class MainActivity : ComponentActivity() {
         nearbySyncManager.schedulePeriodicP2pSync()
         com.alex.a2ndbrain.core.sync.CloudSyncWorker.schedule(this)
         com.alex.a2ndbrain.core.usage.DistractionAlertWorker.schedule(this)
+        com.alex.a2ndbrain.core.todoist.TodoistReminderWorker.schedule(this)
         com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.schedule(this)
         com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.runNow(this)
 
