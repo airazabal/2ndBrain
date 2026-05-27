@@ -142,6 +142,7 @@ class MainActivity : ComponentActivity() {
         com.alex.a2ndbrain.core.sync.CloudSyncWorker.schedule(this)
         com.alex.a2ndbrain.core.usage.DistractionAlertWorker.schedule(this)
         com.alex.a2ndbrain.core.todoist.TodoistReminderWorker.schedule(this)
+        com.alex.a2ndbrain.core.todoist.TodoistReminderWorker.runNow(this)
         com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.schedule(this)
         com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.runNow(this)
 

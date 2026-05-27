@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -90,6 +91,10 @@ class TodoistReminderWorker(
                 ExistingPeriodicWorkPolicy.KEEP,
                 request
             )
+        }
+
+        fun runNow(context: Context) {
+            WorkManager.getInstance(context).enqueue(OneTimeWorkRequestBuilder<TodoistReminderWorker>().build())
         }
     }
 }
