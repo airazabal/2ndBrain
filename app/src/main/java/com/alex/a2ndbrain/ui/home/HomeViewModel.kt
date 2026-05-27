@@ -103,9 +103,47 @@ class HomeViewModel(
     fun refreshTodoistTasks() {
         viewModelScope.launch(Dispatchers.IO) {
             _todoistLoading.value = true
-            _todoistTasks.value = todoistRepository.getTodayTasks()
+            val tasks = todoistRepository.getTodayTasks()
+            _todoistTasks.value = tasks
             _todoistLoading.value = false
+            if (tasks.isNotEmpty()) maybeFireTodoistReminder(tasks)
         }
+    }
+
+    private fun maybeFireTodoistReminder(tasks: List<com.alex.a2ndbrain.core.todoist.TodoistTask>) {
+        val prefs = applicationContext.getSharedPreferences("todoist_reminder_prefs", android.content.Context.MODE_PRIVATE)
+        val lastMs = prefs.getLong("last_notified_ms", 0L)
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        if (hour < 7 || hour >= 22) return
+        if (System.currentTimeMillis() - lastMs < 60 * 60 * 1000L) return
+
+        val nm = applicationContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val channelId = "todoist_reminders"
+        nm.createNotificationChannel(
+            android.app.NotificationChannel(channelId, "Todoist Reminders", android.app.NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "Hourly reminders for incomplete tasks due today."
+            }
+        )
+        val openIntent = android.app.PendingIntent.getActivity(
+            applicationContext, 9001,
+            android.content.Intent(applicationContext, com.alex.a2ndbrain.MainActivity::class.java).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
+            },
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val title = if (tasks.size == 1) "1 task still pending" else "${tasks.size} tasks still pending"
+        val body = tasks.take(5).joinToString(" · ") { it.content }
+        val notification = androidx.core.app.NotificationCompat.Builder(applicationContext, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .setContentIntent(openIntent)
+            .build()
+        nm.notify(9001, notification)
+        prefs.edit().putLong("last_notified_ms", System.currentTimeMillis()).apply()
     }
 
     fun completeTodoistTask(taskId: String) {
@@ -578,6 +616,8 @@ If no emails need attention, output exactly: NONE
         usageStats
     ) { events, usage ->
         val conflicts = mutableListOf<TimelineConflict>()
+        val nowCal = Calendar.getInstance()
+        val currentMinutes = nowCal.get(Calendar.HOUR_OF_DAY) * 60 + nowCal.get(Calendar.MINUTE)
 
         // 1. Overlap Detection (only explicit calendar and manual events within 45 mins)
         val sortedEvents = events.filter { it.sourcePackage == "calendar" || it.sourcePackage == "manual" }.sortedBy { it.minutesFromMidnight }
@@ -585,7 +625,8 @@ If no emails need attention, output exactly: NONE
             val ev1 = sortedEvents[i]
             val ev2 = sortedEvents[i+1]
             val diff = ev2.minutesFromMidnight - ev1.minutesFromMidnight
-            if (diff in 0..45) {
+            // Skip if both events are already in the past — conflict is no longer actionable
+            if (diff in 0..45 && ev2.minutesFromMidnight >= currentMinutes) {
                 conflicts.add(
                     TimelineConflict(
                         id = "overlap_${ev1.id}_${ev2.id}",
