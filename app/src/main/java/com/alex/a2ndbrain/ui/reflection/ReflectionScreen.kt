@@ -29,7 +29,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
-import com.alex.a2ndbrain.core.todoist.TodoistRepository
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.reflection.ModelDownloader
 import com.alex.a2ndbrain.core.reflection.ModelPicker
@@ -540,37 +539,6 @@ fun ReflectionScreen(
                                 singleLine = true,
                                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            var testResult by remember { mutableStateOf("") }
-                            Button(
-                                onClick = {
-                                    scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                                        testResult = "Testing…"
-                                        val token = settingsManager.getTodoistApiToken()
-                                        if (token.isBlank()) { testResult = "No token saved."; return@launch }
-                                        val tasks = try { TodoistRepository(settingsManager).getTodayTasks() }
-                                            catch (e: Exception) { testResult = "API error: ${e.message}"; return@launch }
-                                        if (tasks.isEmpty()) { testResult = "API ok — no tasks due today."; return@launch }
-                                        val nm = context.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
-                                        nm.createNotificationChannel(android.app.NotificationChannel("task_reminders_v2", "Task Reminders", android.app.NotificationManager.IMPORTANCE_HIGH))
-                                        val pi = android.app.PendingIntent.getActivity(context, 9001,
-                                            android.content.Intent(context, com.alex.a2ndbrain.MainActivity::class.java).apply { flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK },
-                                            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
-                                        nm.notify(9001, androidx.core.app.NotificationCompat.Builder(context, "task_reminders_v2")
-                                            .setSmallIcon(android.R.drawable.ic_dialog_info)
-                                            .setContentTitle("${tasks.size} task(s) pending")
-                                            .setContentText(tasks.take(3).joinToString(" · ") { it.content })
-                                            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
-                                            .setAutoCancel(true).setContentIntent(pi).build())
-                                        testResult = "Sent for ${tasks.size} task(s): ${tasks.take(3).joinToString(", ") { it.content }}"
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) { Text("Test Reminder Notification") }
-                            if (testResult.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(testResult, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
-                            }
                         }
                     }
                 }
