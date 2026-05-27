@@ -89,6 +89,11 @@ class HomeViewModel(
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    // Ticks every minute so time-sensitive UI (conflict expiry, etc.) stays current
+    private val _minuteTicker: StateFlow<Long> = flow {
+        while (true) { emit(System.currentTimeMillis()); kotlinx.coroutines.delay(60_000L) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, System.currentTimeMillis())
+
     // ── Todoist ──────────────────────────────────────────────────────────────
     private val _todoistTasks = MutableStateFlow<List<TodoistTask>>(emptyList())
     val todoistTasks: StateFlow<List<TodoistTask>> = _todoistTasks.asStateFlow()
@@ -120,7 +125,7 @@ class HomeViewModel(
         val nm = applicationContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
         val channelId = "todoist_reminders"
         nm.createNotificationChannel(
-            android.app.NotificationChannel(channelId, "Todoist Reminders", android.app.NotificationManager.IMPORTANCE_DEFAULT).apply {
+            android.app.NotificationChannel(channelId, "Todoist Reminders", android.app.NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Hourly reminders for incomplete tasks due today."
             }
         )
@@ -607,14 +612,29 @@ If no emails need attention, output exactly: NONE
         }
     }
 
-    private val _dismissedConflictIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _conflictPrefs = applicationContext.getSharedPreferences("dismissed_conflicts", android.content.Context.MODE_PRIVATE)
+    // Persist dismissed IDs keyed by today's date so they auto-clear at midnight
+    private fun persistedDismissedIds(): Set<String> {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        return _conflictPrefs.getStringSet("dismissed_$today", emptySet()) ?: emptySet()
+    }
+    private fun persistDismiss(id: String) {
+        val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val key = "dismissed_$today"
+        val current = _conflictPrefs.getStringSet(key, emptySet())?.toMutableSet() ?: mutableSetOf()
+        current.add(id)
+        _conflictPrefs.edit().putStringSet(key, current).apply()
+    }
+
+    private val _dismissedConflictIds = MutableStateFlow<Set<String>>(persistedDismissedIds())
     val dismissedConflictIds = _dismissedConflictIds.asStateFlow()
 
     // Raw local conflicts (no dismiss filter) — pushed to NearbySyncManager for peer sync
     private val _localComputedConflicts: StateFlow<List<TimelineConflict>> = combine(
         todayTimelineEvents,
-        usageStats
-    ) { events, usage ->
+        usageStats,
+        _minuteTicker
+    ) { events, usage, _ ->
         val conflicts = mutableListOf<TimelineConflict>()
         val nowCal = Calendar.getInstance()
         val currentMinutes = nowCal.get(Calendar.HOUR_OF_DAY) * 60 + nowCal.get(Calendar.MINUTE)
@@ -686,6 +706,7 @@ If no emails need attention, output exactly: NONE
 
     fun dismissConflict(id: String) {
         _dismissedConflictIds.value = _dismissedConflictIds.value + id
+        persistDismiss(id)
         nearbySyncManager.addDismissedConflict(id)
     }
 

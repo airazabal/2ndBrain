@@ -48,7 +48,7 @@ class TodoistReminderWorker(
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "Todoist Reminders", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            NotificationChannel(CHANNEL_ID, "Todoist Reminders", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Hourly reminders for incomplete tasks due today."
             }
         )
