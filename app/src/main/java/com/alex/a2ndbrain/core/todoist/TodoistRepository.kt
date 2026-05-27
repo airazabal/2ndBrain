@@ -73,6 +73,41 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
         }
     }
 
+    suspend fun getOverdueTasks(): List<TodoistTask> = withContext(Dispatchers.IO) {
+        val token = settingsManager.getTodoistApiToken()
+        if (token.isBlank()) return@withContext emptyList()
+        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val allTasks = mutableListOf<TodoistTask>()
+        var cursor: String? = null
+        try {
+            do {
+                val urlStr = if (cursor != null)
+                    "$baseUrl/tasks?cursor=${java.net.URLEncoder.encode(cursor, "UTF-8")}"
+                else
+                    "$baseUrl/tasks"
+                val conn = (java.net.URL(urlStr).openConnection() as java.net.HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    setRequestProperty("Authorization", "Bearer $token")
+                    connectTimeout = 10_000; readTimeout = 10_000
+                }
+                if (conn.responseCode != 200) { conn.disconnect(); break }
+                val body = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+                val root = org.json.JSONTokener(body).nextValue() as? JSONObject ?: break
+                val arr = root.optJSONArray("results") ?: JSONArray()
+                parseTasks(arr).forEach { task ->
+                    val dateStr = task.dueDateStr?.take(10) ?: task.deadlineDateStr?.take(10)
+                    if (dateStr != null && dateStr < todayStr) allTasks.add(task)
+                }
+                cursor = root.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
+            } while (cursor != null)
+            allTasks
+        } catch (e: Exception) {
+            Log.e("Todoist", "getOverdueTasks failed", e)
+            emptyList()
+        }
+    }
+
     suspend fun closeTask(taskId: String): Boolean = withContext(Dispatchers.IO) {
         val token = settingsManager.getTodoistApiToken()
         if (token.isBlank()) return@withContext false

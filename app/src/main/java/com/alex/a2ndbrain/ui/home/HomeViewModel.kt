@@ -98,6 +98,9 @@ class HomeViewModel(
     private val _todoistTasks = MutableStateFlow<List<TodoistTask>>(emptyList())
     val todoistTasks: StateFlow<List<TodoistTask>> = _todoistTasks.asStateFlow()
 
+    private val _overdueTasks = MutableStateFlow<List<TodoistTask>>(emptyList())
+    val overdueTasks: StateFlow<List<TodoistTask>> = _overdueTasks.asStateFlow()
+
     private val _todoistLoading = MutableStateFlow(false)
     val todoistLoading: StateFlow<Boolean> = _todoistLoading.asStateFlow()
 
@@ -108,10 +111,12 @@ class HomeViewModel(
     fun refreshTodoistTasks() {
         viewModelScope.launch(Dispatchers.IO) {
             _todoistLoading.value = true
-            val tasks = todoistRepository.getTodayTasks()
-            _todoistTasks.value = tasks
+            val today = todoistRepository.getTodayTasks()
+            val overdue = todoistRepository.getOverdueTasks()
+            _todoistTasks.value = today
+            _overdueTasks.value = overdue
             _todoistLoading.value = false
-            if (tasks.isNotEmpty()) maybeFireTodoistReminder(tasks)
+            if (today.isNotEmpty() || overdue.isNotEmpty()) maybeFireTodoistReminder(today + overdue)
         }
     }
 
@@ -154,6 +159,7 @@ class HomeViewModel(
             val ok = todoistRepository.closeTask(taskId)
             if (ok) {
                 _todoistTasks.value = _todoistTasks.value.filter { it.id != taskId }
+                _overdueTasks.value = _overdueTasks.value.filter { it.id != taskId }
             }
         }
     }

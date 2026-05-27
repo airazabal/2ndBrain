@@ -120,6 +120,7 @@ fun HomeScreen(
     meetingsTodayCount: Int = 0,
     emailTriageResult: EmailTriageResult = EmailTriageResult(),
     todoistTasks: List<TodoistTask> = emptyList(),
+    overdueTasks: List<TodoistTask> = emptyList(),
     todoistLoading: Boolean = false,
     onCompleteTodoistTask: (String) -> Unit = {},
     onRefreshTodoistTasks: () -> Unit = {},
@@ -169,7 +170,7 @@ fun HomeScreen(
                 lastRefreshedAt       = lastRefreshedAt,
                 refreshIntervalMinutes = refreshIntervalMinutes,
                 onRefreshIntervalChange = onRefreshIntervalChange,
-                overdueCount          = 0,
+                overdueCount          = overdueTasks.size,
                 unreadEmailCount      = unreadEmailCount,
                 meetingsCount         = meetingsTodayCount,
                 unreadMessageCount    = unreadMessageCount,
@@ -216,13 +217,63 @@ fun HomeScreen(
 
     }
 
-    // ── Overdue Sheet (placeholder — kept for overdueCount card) ─────────────
+    // ── Overdue Sheet ────────────────────────────────────────────────────────
     if (showOverdueSheet) {
         ModalBottomSheet(onDismissRequest = { showOverdueSheet = false }) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
-                Text("Overdue Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(8.dp))
-                Text("No overdue items.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Overdue Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (overdueTasks.isEmpty()) "All clear" else "${overdueTasks.size} task(s) past due",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                    IconButton(onClick = { onRefreshTodoistTasks() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                if (overdueTasks.isEmpty()) {
+                    Text("No overdue tasks.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                } else {
+                    overdueTasks.forEach { task ->
+                        val priorityColor = when (task.priority) {
+                            4 -> Color(0xFFE53935)
+                            3 -> Color(0xFFFF8F00)
+                            2 -> Color(0xFF1E88E5)
+                            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = { onCompleteTodoistTask(task.id) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.RadioButtonUnchecked, contentDescription = "Complete",
+                                    tint = priorityColor, modifier = Modifier.size(22.dp))
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(task.content, style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold)
+                                val dueLabel = task.dueDateStr?.take(10) ?: task.deadlineDateStr?.take(10)
+                                if (dueLabel != null) {
+                                    Text("Due $dueLabel", style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFFE53935).copy(alpha = 0.8f))
+                                }
+                            }
+                        }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
+                    }
+                }
             }
         }
     }
