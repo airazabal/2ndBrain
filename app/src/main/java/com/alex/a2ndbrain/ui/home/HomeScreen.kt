@@ -643,29 +643,38 @@ private fun NeedsAttentionCard(
             val reflectionSnippet = remember(latestReflection) {
                 latestReflection?.summary?.takeIf { it.isNotBlank() }?.let { raw ->
                     val lines = raw.lines().map { it.trim() }.filter { it.isNotBlank() }
+
+                    // A true section header uses # markdown or is a standalone bold phrase
+                    // (no sentence content after it). A bold item inside a list is NOT a header.
                     fun isSectionHeader(line: String): Boolean {
-                        val stripped = line.replace(Regex("[*#:.]"), "").trim()
-                        return stripped.isNotBlank() && (line.startsWith("#") ||
-                            (line.startsWith("**") &&
-                                (line.endsWith("**") || line.endsWith("**:") || line.endsWith("**."))))
+                        if (line.startsWith("#")) return true
+                        if (!line.startsWith("**")) return false
+                        val inner = line.removePrefix("**").removeSuffix("**").removeSuffix("**:").removeSuffix("**.").trim()
+                        // Treat as header only if it's a short title-like phrase (≤ 8 words, no sentence punctuation mid-text)
+                        val wordCount = inner.split(" ").size
+                        return wordCount <= 8 && !inner.contains(". ")
                     }
+
                     fun stripMarkdown(line: String) = line
                         .replace(Regex("^[-*•]\\s+"), "")
                         .replace(Regex("^\\d+[.)>]\\s*"), "")
                         .replace(Regex("\\*\\*(.*?)\\*\\*"), "$1")
                         .replace(Regex("\\*(.*?)\\*"), "$1")
                         .trim()
+
+                    // Matches explicit bullet/numbered lines AND standalone bold-title lines
+                    // (e.g. "**Re-energize with Movement**" used as a list item without a marker)
+                    fun isBulletLine(line: String) =
+                        line.startsWith("- ") || line.startsWith("* ") ||
+                        line.startsWith("• ") || line.matches(Regex("^\\d+[.)>].*")) ||
+                        (line.startsWith("**") && line.length > 4)
+
                     fun extractBullets(src: List<String>): List<String> = src
-                        .filter { it.startsWith("- ") || it.startsWith("* ") ||
-                            it.startsWith("• ") || it.matches(Regex("^\\d+[.)>].*")) }
+                        .filter { isBulletLine(it) }
                         .map { stripMarkdown(it) }
                         .filter { it.isNotBlank() }
-                        .take(4)
 
-                    // 1. Try to locate the recommendations / advisory section.
-                    // Priority order matches the actual section names Gemini generates:
-                    // "Your Second Brain Recommendations", "Take Aways & Recommendations",
-                    // "Advisory Tone", "Advisory & Focus Areas", etc.
+                    // Find the recommendations / advisory section header
                     val advisoryIndex = lines.indexOfFirst { line ->
                         val lower = line.lowercase()
                         isSectionHeader(line) && (
@@ -678,14 +687,14 @@ private fun NeedsAttentionCard(
                             lower.contains("focus area") || lower.contains("suggestion")
                         )
                     }
+                    // Collect lines until next # header (bold titles inside the section are content)
                     val sectionLines = if (advisoryIndex >= 0)
-                        lines.drop(advisoryIndex + 1).takeWhile { !isSectionHeader(it) }
+                        lines.drop(advisoryIndex + 1).takeWhile { !it.startsWith("#") }
                     else emptyList()
 
-                    // 2. Prefer bullets inside advisory section
                     val bullets = extractBullets(sectionLines)
-                        .ifEmpty { extractBullets(lines) }           // 3. Fallback: bullets anywhere
-                        .ifEmpty {                                   // 4. Last resort: first prose lines
+                        .ifEmpty { extractBullets(lines) }
+                        .ifEmpty {
                             (if (sectionLines.isNotEmpty()) sectionLines else lines)
                                 .filter { !isSectionHeader(it) }
                                 .take(3)
