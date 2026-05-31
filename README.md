@@ -34,6 +34,7 @@
 - **Overdue Actions Card**: Dedicated dashboard card showing the count of past-due Todoist tasks. Tapping opens a sheet listing each overdue item with its original due date highlighted in red and a one-tap complete button.
 - **Hourly Task Reminders**: WorkManager-backed hourly notifications (7 AM–10 PM) fire whenever incomplete tasks remain for today. The first reminder fires immediately on app open; subsequent ones are rate-limited to once per hour so you're nudged — not spammed.
 - **Unified Completion**: Completing a task from 2ndBrain closes it in Todoist via the REST API and removes it from both the today and overdue lists instantly — no refresh needed.
+- **Task Latency Tracking**: Each overdue task displays a red `"Xd"` chip showing how many days it has been sitting in the overdue list. The sheet header shows a rolling performance summary — avg, best, and worst completion latency over the last 30 completed tasks — so you can track how quickly you're clearing your backlog over time.
 
 ### 🧘 Zen (Meditation) — Powered by Zendence
 - **Zendence Integration**: Reads real meditation session data via a content provider bridge to the companion Zendence app.
@@ -44,13 +45,16 @@
 
 ### 🏠 Home Cockpit & Needs Attention
 - **Needs Attention Card**: Aggregates urgent signals — imminent calendar events (≤15 min), sleep deficit, elevated heart rate, low step count, overdue email, and schedule conflicts — into a single prioritised card with red/amber/green colour coding.
+- **AI Email Triage**: Gemini scans up to 20 unread email notifications using a 4-category executive-assistant prompt (⚡ Urgent, 📝 Action Required, ℹ️ FYI, 🚫 SPAM). Only actionable items surface as attention cards; informational and promotional emails are silently discarded.
+- **Reflection Advisory Snippet**: The latest AI reflection's Advisory & Focus section is extracted and displayed as a concise numbered bullet list directly inside the Needs Attention card, giving you a quick glance at your AI's top focus recommendations for the day.
 - **Auto-Expiring Schedule Conflicts**: "Schedule Crunch" alerts automatically disappear once both conflicting events have passed — no stale warnings lingering all day.
 - **Persistent Dismissals**: Dismissed conflicts survive app restarts and auto-clear at midnight; each conflict ID is stored in SharedPreferences keyed by today's date.
 - **Live Recomputation**: Conflict state re-evaluates every minute via a ticker flow, so time-sensitive alerts stay accurate without requiring a data change to trigger a refresh.
 
 ### 🤖 AI Intelligence & Private Co-Pilot
 - **💬 Interactive Co-Pilot Chat**: A beautiful sidebar-driven bubble log to ask direct questions about your captures, clipboard logs, and daily usage. It pulls relevant DB context in real-time.
-- **🔍 Concept-Expanding Semantic Search**: Intercepts queries (like "workout", "gmail", "spending") and matches their underlying semantic intent against smart folder tags.
+- **🔍 Universal Memory Search**: Co-Pilot queries search across all captured sources — Gmail, SMS, WhatsApp, clipboard, and every notification — with up to 50 scored candidates and 20 shown to the model. Each memory entry includes its source app and title so the AI can distinguish between an email, a text message, and a notification from the same sender.
+- **Draggable Co-Pilot FAB**: The floating action button can be repositioned anywhere on screen by long-pressing and dragging. Position is clamped to screen bounds and saved across recompositions.
 - **Dynamic Context Routing**: Automatically selects between on-device (Qwen-0.6B via LiteRT) and cloud (Gemini API) models based on query length and complexity to prevent overload and maximize quality.
 - **Morning Briefings**: Generates a "game plan" between 4 AM - 11 AM based on upcoming meetings and yesterday's unfinished tasks.
 - **Evening Reflections**: Analyzes how your day actually went by comparing your intended tasks with your actual screen time.
@@ -96,7 +100,7 @@
 - `core/capture/`: Notification listener service and clipboard manager with heuristic auto-tagging.
 - `core/health/`: Health Connect bridge for step count, sleep, and heart-rate tracking.
 - `core/meditation/`: Zendence content provider bridge and meditation session repository.
-- `core/todoist/`: Todoist REST API client (`TodoistRepository`), data model, and `TodoistReminderWorker` for hourly background reminders.
+- `core/todoist/`: Todoist REST API client (`TodoistRepository`), data model, `TaskLatencyTracker` for overdue staleness and completion stats, and `TodoistReminderWorker` for hourly background reminders.
 
 ---
 
