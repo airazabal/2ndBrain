@@ -569,7 +569,7 @@ Output format rules:
     }
 
     val meetingsTodayCount: StateFlow<Int> = combine(todayTimelineEvents, _todoistTasks) { events, tasks ->
-        events.count { it.sourcePackage == "calendar" } + tasks.size
+        events.count { it.sourcePackage == "calendar" && !it.appName.contains("todoist", ignoreCase = true) } + tasks.size
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     companion object {

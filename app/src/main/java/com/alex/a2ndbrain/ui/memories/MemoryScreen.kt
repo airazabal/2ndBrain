@@ -471,7 +471,8 @@ fun MemoryScreen(
                 if (isDayExpanded) {
                     dayGroup.appGroups.forEach { appGroup ->
                         val groupKey = "${dayGroup.label}_${appGroup.appName}"
-                        val isExpanded = expandedAppGroups.contains(groupKey)
+                        val isExpanded = expandedAppGroups.contains(groupKey) ||
+                            expandedAppGroups.contains(appGroup.appName)
 
                         item(key = "app_header_${dayGroup.label}_${appGroup.appName}") {
                             AppGroupHeader(
@@ -483,7 +484,7 @@ fun MemoryScreen(
                                 isExpanded = isExpanded,
                                 onToggleExpand = {
                                     expandedAppGroups = if (isExpanded) {
-                                        expandedAppGroups - groupKey
+                                        expandedAppGroups - groupKey - appGroup.appName
                                     } else {
                                         expandedAppGroups + groupKey
                                     }
