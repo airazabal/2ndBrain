@@ -459,7 +459,12 @@ fun MemoryScreen(
                             }
                         },
                         onMarkDayAsRead = {
-                            val unreadIds = dayGroup.memories.filter { !it.isRead }.map { it.id }
+                            // Use allIds from every merged group so deduplicated duplicates are
+                            // also marked read — otherwise deduplicateEmailCount still counts them.
+                            val unreadIds = dayGroup.appGroups
+                                .flatMap { it.memories }
+                                .filter { !it.isRead }
+                                .flatMap { it.allIds }
                             if (unreadIds.isNotEmpty()) {
                                 localReadOverrides = localReadOverrides + unreadIds.associateWith { true }
                                 onMarkAsRead(unreadIds)

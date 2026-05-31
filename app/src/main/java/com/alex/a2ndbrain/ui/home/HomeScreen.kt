@@ -731,7 +731,9 @@ private fun NeedsAttentionCard(
                     text = buildAnnotatedString {
                         reflectionSnippet.split("\n").forEachIndexed { idx, line ->
                             if (idx > 0) append("\n")
-                            val match = Regex("^(\\d+\\.\\s*.+?)(?:[:\\-—]\\s*(.+))?$").find(line)
+                            // Split only on ": " or " - " / " — " (space-surrounded dash), never on a
+                            // bare hyphen inside a word like "Re-energize".
+                            val match = Regex("^(\\d+\\.\\s*.+?)(?:(?::\\s+|\\s[-—]\\s)(.+))?$").find(line)
                             if (match != null) {
                                 withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) {
                                     append(match.groupValues[1].trim())
