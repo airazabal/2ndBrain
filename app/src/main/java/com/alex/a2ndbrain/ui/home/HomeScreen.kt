@@ -514,10 +514,10 @@ private fun NeedsAttentionCard(
             add(AttentionItem("Scanning $unreadEmailCount email(s)…", "Gemini is checking for urgent items.", 1, onEmailClick))
         } else {
             emailTriageResult.critical.forEach { desc ->
-                add(AttentionItem("Email: $desc", "Tap to open inbox.", 0, onEmailClick))
+                add(AttentionItem("⚡ $desc", "Tap to open inbox.", 0, onEmailClick))
             }
             emailTriageResult.overdue.forEach { desc ->
-                add(AttentionItem("Overdue email: $desc", "Tap to open inbox.", 1, onEmailClick))
+                add(AttentionItem("📝 $desc", "Tap to open inbox.", 1, onEmailClick))
             }
             // Fallback count when triage found nothing but inbox is overloaded
             if (emailTriageResult.critical.isEmpty() && emailTriageResult.overdue.isEmpty() && unreadEmailCount > 25) {

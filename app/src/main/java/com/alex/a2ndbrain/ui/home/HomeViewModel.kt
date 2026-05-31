@@ -35,8 +35,8 @@ import com.alex.a2ndbrain.core.todoist.TodoistTask
 
 data class EmailTriageResult(
     val isLoading: Boolean = false,
-    val critical: List<String> = emptyList(),
-    val overdue: List<String> = emptyList()
+    val critical: List<String> = emptyList(),   // ⚡ Urgent
+    val overdue: List<String> = emptyList()     // 📝 Action Required
 )
 
 @OptIn(FlowPreview::class)
@@ -240,25 +240,37 @@ class HomeViewModel(
             "- From: $sender | $body"
         }
         val prompt = """
-You are reviewing ${emails.size} unread email notification(s). Identify only the ones that are CRITICAL (need immediate action or response) or OVERDUE (past a deadline or time-sensitive). Ignore newsletters, promotions, automated alerts, and FYI emails.
+You are an elite executive assistant specializing in email triage, organization, and inbox management. Your sole purpose is to analyze the emails below and categorize them into a clean, highly scannable summary organized strictly into these four categories:
 
-Emails:
+1. ⚡ **Urgent:** Time-sensitive matters requiring immediate attention (e.g., critical family logistics, pressing medical updates, or high-stakes financial issues).
+2. 📝 **Action Required:** Tasks, requests, or decisions that need a response or action, but are not immediate emergencies (e.g., items to review, invitations requiring an RSVP, or project follow-ups).
+3. ℹ️ **FYI (For Your Information):** Order confirmations, status updates, receipts, or informative updates that require zero action or response.
+4. 🚫 **SPAM:** Marketing fluff, newsletters, and promotional junk.
+
+Emails (${emails.size} unread):
 $snippets
 
-For each actionable email output exactly ONE line in this format (nothing else):
-CRITICAL|Brief description of what needs action
-OVERDUE|Brief description of what is overdue
-
-If no emails need attention, output exactly: NONE
+Output format rules:
+- Use the exact category headers above.
+- Each item is a bullet: "- Sender Name: core topic"
+- If a category is empty, write "None." under its header.
+- No intro, no outro, no filler. Dive straight into the categorization.
         """.trimIndent()
         try {
             val (response, _) = modelRouter.run(prompt, ModelRouter.Complexity.MEDIUM, timeoutMs = 20_000L)
             val critical = mutableListOf<String>()
             val overdue = mutableListOf<String>()
+            var currentSection = ""
             response.lines().forEach { line ->
+                val trimmed = line.trim()
                 when {
-                    line.startsWith("CRITICAL|") -> critical.add(line.removePrefix("CRITICAL|").trim())
-                    line.startsWith("OVERDUE|") -> overdue.add(line.removePrefix("OVERDUE|").trim())
+                    trimmed.contains("Urgent", ignoreCase = true) && trimmed.contains("⚡") -> currentSection = "urgent"
+                    trimmed.contains("Action Required", ignoreCase = true) && trimmed.contains("📝") -> currentSection = "action"
+                    trimmed.contains("FYI", ignoreCase = true) || trimmed.contains("SPAM", ignoreCase = true) -> currentSection = "ignore"
+                    trimmed.startsWith("-") && currentSection == "urgent" && !trimmed.equals("- None.", ignoreCase = true) ->
+                        critical.add(trimmed.removePrefix("-").trim())
+                    trimmed.startsWith("-") && currentSection == "action" && !trimmed.equals("- None.", ignoreCase = true) ->
+                        overdue.add(trimmed.removePrefix("-").trim())
                 }
             }
             _emailTriageResult.value = EmailTriageResult(isLoading = false, critical = critical, overdue = overdue)
