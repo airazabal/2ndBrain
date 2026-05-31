@@ -463,6 +463,10 @@ fun MemoryScreen(
                             if (unreadIds.isNotEmpty()) {
                                 localReadOverrides = localReadOverrides + unreadIds.associateWith { true }
                                 onMarkAsRead(unreadIds)
+                                val dayGroupKeys = dayGroup.appGroups.flatMap { ag ->
+                                    listOf("${dayGroup.label}_${ag.appName}", ag.appName)
+                                }.toSet()
+                                expandedAppGroups = expandedAppGroups - dayGroupKeys
                             }
                         }
                     )
@@ -494,6 +498,7 @@ fun MemoryScreen(
                                     if (unreadIds.isNotEmpty()) {
                                         localReadOverrides = localReadOverrides + unreadIds.associateWith { true }
                                         onMarkAsRead(unreadIds)
+                                        expandedAppGroups = expandedAppGroups - groupKey - appGroup.appName
                                     }
                                 }
                             )
