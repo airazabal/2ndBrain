@@ -85,7 +85,15 @@ fun MemoryScreen(
     }
     var showUnreadOnly by remember(initialFilter) { mutableStateOf(startsUnreadOnly) }
     var showRecordingDialog by remember { mutableStateOf(false) }
-    var expandedAppGroups by remember { mutableStateOf(setOf<String>()) }
+    var expandedAppGroups by remember(initialFilter) {
+        mutableStateOf(
+            when {
+                baseFilter == "All" || baseFilter.isEmpty() -> setOf<String>()
+                baseFilter == "Messages" -> messagingChipNames
+                else -> setOf(baseFilter)
+            }
+        )
+    }
     var expandedDays by remember { mutableStateOf(setOf<String>("Today")) }
     var localReadOverrides by remember { mutableStateOf(mapOf<Long, Boolean>()) }
 
