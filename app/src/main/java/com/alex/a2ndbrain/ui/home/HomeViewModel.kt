@@ -184,12 +184,14 @@ class HomeViewModel(
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
         }.timeInMillis
+        // Pass ALL today's email notifications (read + unread) to deduplicateMemories so the
+        // grouping algorithm is identical to the feed — then count groups that are still unread.
         val emailMemories = memories.filter { m ->
-            m.source == "notification" && m.timestamp >= startOfToday && !m.isRead &&
+            m.source == "notification" && m.timestamp >= startOfToday &&
             emailPackages.any { pkg -> m.packageName?.contains(pkg) == true } &&
             (monitored.isEmpty() || monitored.contains(m.packageName))
         }
-        deduplicateEmailCount(emailMemories)
+        deduplicateMemories(emailMemories).count { !it.isRead }
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     val unreadMessageCount: StateFlow<Int> = combine(allMemoriesForHome, _monitoredAppsState) { memories, monitored ->
