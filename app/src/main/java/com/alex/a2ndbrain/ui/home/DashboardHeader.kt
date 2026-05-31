@@ -87,6 +87,12 @@ fun DashboardHeader(
                 }
                 Spacer(Modifier.height(4.dp))
                 RefreshChip(intervalMinutes = refreshIntervalMinutes, onIntervalChange = onRefreshIntervalChange)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "v${com.alex.a2ndbrain.BuildConfig.VERSION_NAME}",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.35f)
+                )
             }
         }
 
