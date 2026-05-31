@@ -643,18 +643,21 @@ private fun NeedsAttentionCard(
             val reflectionSnippet = remember(latestReflection) {
                 latestReflection?.summary?.let { raw ->
                     val lines = raw.lines().map { it.trim() }
+                    fun isSectionHeader(line: String): Boolean {
+                        return line.startsWith("#") ||
+                            (line.startsWith("**") && line.replace(Regex("[*:.]"), "").isNotBlank() &&
+                                (line.endsWith("**") || line.endsWith("**:") || line.endsWith("**.")))
+                    }
                     val advisoryIndex = lines.indexOfFirst { line ->
                         val lower = line.lowercase()
                         (lower.contains("advisory") || lower.contains("focus area") ||
-                            lower.contains("focus areas") || lower.contains("suggestion")) &&
-                            (line.startsWith("#") || (line.startsWith("**") && line.endsWith("**")))
+                            lower.contains("focus areas") || lower.contains("suggestion") ||
+                            lower.contains("recommendation")) &&
+                            isSectionHeader(line)
                     }
                     val relevantLines = if (advisoryIndex >= 0) {
                         lines.drop(advisoryIndex + 1)
-                            .takeWhile { line ->
-                                !line.startsWith("#") &&
-                                !(line.startsWith("**") && line.endsWith("**") && line.length > 4)
-                            }
+                            .takeWhile { line -> !isSectionHeader(line) }
                     } else {
                         lines
                     }
