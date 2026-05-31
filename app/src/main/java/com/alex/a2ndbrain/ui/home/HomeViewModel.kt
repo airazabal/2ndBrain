@@ -188,7 +188,7 @@ class HomeViewModel(
         // grouping algorithm is identical to the feed — then count groups that are still unread.
         val emailMemories = memories.filter { m ->
             m.source == "notification" && m.timestamp >= startOfToday &&
-            emailPackages.any { pkg -> m.packageName?.contains(pkg) == true } &&
+            emailPackages.any { pkg -> m.packageName == pkg || m.packageName?.startsWith("$pkg.") == true } &&
             (monitored.isEmpty() || monitored.contains(m.packageName))
         }
         deduplicateMemories(emailMemories).count { !it.isRead }
@@ -231,7 +231,7 @@ class HomeViewModel(
                 }.timeInMillis
                 memories.filter { m ->
                     m.source == "notification" && m.timestamp >= startOfToday && !m.isRead &&
-                    emailPackages.any { pkg -> m.packageName?.contains(pkg) == true } &&
+                    emailPackages.any { pkg -> m.packageName == pkg || m.packageName?.startsWith("$pkg.") == true } &&
                     (monitored.isEmpty() || monitored.contains(m.packageName))
                 }
             }
@@ -576,8 +576,15 @@ Output format rules:
 
     companion object {
         private const val DAY_MS = 24 * 60 * 60 * 1000L
-        // Gmail package is com.google.android.gm — NOT "gmail"
-        private val emailPackages = setOf("google.android.gm", "outlook", "yahoo.mail", "protonmail", "hotmail", "thunderbird")
+        // Full package prefixes — matched with == or startsWith("$pkg.") to prevent
+        // partial hits (e.g. "google.android.gm" would wrongly match com.google.android.gms).
+        private val emailPackages = setOf(
+            "com.google.android.gm",          // Gmail
+            "com.microsoft.office.outlook",   // Outlook
+            "com.yahoo.mobile.client.android.mail", // Yahoo Mail
+            "me.proton.mail", "ch.protonmail.android", // ProtonMail
+            "net.thunderbird.android", "org.mozilla.thunderbird" // Thunderbird
+        )
         private val messagingPackages = setOf("whatsapp", "messaging", "messages", "mms", "sms", "messenger", "telegram", "signal", "viber")
 
         // Mirrors MemoryScreen.deduplicateMemories — keeps card count in sync with feed's group count.
