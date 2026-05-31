@@ -72,15 +72,18 @@ fun MemoryScreen(
     
     var isScanning by remember { mutableStateOf(false) }
     val messagingChipNames = setOf("Messages", "WhatsApp", "Telegram", "Signal", "Messenger", "Viber", "SMS")
+    val baseFilter = initialFilter.removeSuffix("+unread")
+    val startsUnreadOnly = initialFilter.endsWith("+unread")
     var selectedApps by remember(initialFilter) {
         mutableStateOf<Set<String>>(
-            when (initialFilter) {
+            when (baseFilter) {
                 "All" -> emptySet()
                 "Messages" -> messagingChipNames
-                else -> setOf(initialFilter)
+                else -> setOf(baseFilter)
             }
         )
     }
+    var showUnreadOnly by remember(initialFilter) { mutableStateOf(startsUnreadOnly) }
     var showRecordingDialog by remember { mutableStateOf(false) }
     var expandedAppGroups by remember { mutableStateOf(setOf<String>()) }
     var expandedDays by remember { mutableStateOf(setOf<String>("Today")) }
@@ -110,22 +113,21 @@ fun MemoryScreen(
         if (pruned != selectedApps) selectedApps = pruned
     }
 
-    val dayGroups by remember(memories, monitoredApps) {
+    val dayGroups by remember(memories, monitoredApps, showUnreadOnly) {
         derivedStateOf {
         val filtered = memories.map { memory ->
             val override = localReadOverrides[memory.id]
             if (override != null) memory.copy(isRead = override) else memory
         }.filter { memory ->
             val appName = getAppName(context, memory.packageName, memory.source)
-            if (selectedApps.isNotEmpty()) {
-                // Explicit selection — show exactly those apps, ignore monitored filter
+            val appMatch = if (selectedApps.isNotEmpty()) {
                 selectedApps.contains(appName)
             } else {
-                // "All" — respect the monitored-apps filter
                 monitoredApps.isEmpty() ||
                     memory.source != "notification" ||
                     monitoredApps.contains(memory.packageName)
             }
+            appMatch && (!showUnreadOnly || !memory.isRead)
         }
 
         val sdf = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
@@ -319,6 +321,27 @@ fun MemoryScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 2.dp)
             ) {
+                // Unread chip
+                item {
+                    val primary = MaterialTheme.colorScheme.primary
+                    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable { showUnreadOnly = !showUnreadOnly },
+                        color = if (showUnreadOnly) primary else surfaceVariant.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(20.dp)
+                    ) {
+                        Text(
+                            text = "Unread",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (showUnreadOnly) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
                 items(chips.size) { idx ->
                     val chip = chips[idx]
                     val isSelected = if (chip == "All") selectedApps.isEmpty()

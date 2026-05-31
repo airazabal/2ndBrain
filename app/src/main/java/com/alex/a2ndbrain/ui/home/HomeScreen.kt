@@ -209,12 +209,12 @@ fun HomeScreen(
                 onEmailClick       = {
                     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_EMAIL)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    try { context.startActivity(intent) } catch (e: Exception) { onNavigateToFeedWithFilter("Gmail") }
+                    try { context.startActivity(intent) } catch (e: Exception) { onNavigateToFeedWithFilter("Gmail+unread") }
                 },
                 onMessagesClick    = {
                     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    try { context.startActivity(intent) } catch (e: Exception) { onNavigateToFeedWithFilter("Messages") }
+                    try { context.startActivity(intent) } catch (e: Exception) { onNavigateToFeedWithFilter("Messages+unread") }
                 },
                 onHealthClick      = { onNavigateToTab(AppTab.WELLNESS) }
             )
