@@ -641,40 +641,50 @@ private fun NeedsAttentionCard(
             }
 
             val reflectionSnippet = remember(latestReflection) {
-                latestReflection?.summary?.let { raw ->
-                    val lines = raw.lines().map { it.trim() }
+                latestReflection?.summary?.takeIf { it.isNotBlank() }?.let { raw ->
+                    val lines = raw.lines().map { it.trim() }.filter { it.isNotBlank() }
                     fun isSectionHeader(line: String): Boolean {
-                        return line.startsWith("#") ||
-                            (line.startsWith("**") && line.replace(Regex("[*:.]"), "").isNotBlank() &&
-                                (line.endsWith("**") || line.endsWith("**:") || line.endsWith("**.")))
+                        val stripped = line.replace(Regex("[*#:.]"), "").trim()
+                        return stripped.isNotBlank() && (line.startsWith("#") ||
+                            (line.startsWith("**") &&
+                                (line.endsWith("**") || line.endsWith("**:") || line.endsWith("**."))))
                     }
-                    val advisoryIndex = lines.indexOfFirst { line ->
-                        val lower = line.lowercase()
-                        (lower.contains("advisory") || lower.contains("focus area") ||
-                            lower.contains("focus areas") || lower.contains("suggestion") ||
-                            lower.contains("recommendation")) &&
-                            isSectionHeader(line)
-                    }
-                    val relevantLines = if (advisoryIndex >= 0) {
-                        lines.drop(advisoryIndex + 1)
-                            .takeWhile { line -> !isSectionHeader(line) }
-                    } else {
-                        lines
-                    }
-                    val bullets = relevantLines
-                        .filter { line ->
-                            line.startsWith("- ") || line.startsWith("* ") ||
-                            line.startsWith("• ") || line.matches(Regex("^\\d+[.)>].*"))
-                        }
-                        .map { line ->
-                            line.replace(Regex("^[-*•]\\s+"), "")
-                                .replace(Regex("^\\d+[.)>]\\s*"), "")
-                                .replace(Regex("\\*\\*(.*?)\\*\\*"), "$1")
-                                .replace(Regex("\\*(.*?)\\*"), "$1")
-                                .trim()
-                        }
+                    fun stripMarkdown(line: String) = line
+                        .replace(Regex("^[-*•]\\s+"), "")
+                        .replace(Regex("^\\d+[.)>]\\s*"), "")
+                        .replace(Regex("\\*\\*(.*?)\\*\\*"), "$1")
+                        .replace(Regex("\\*(.*?)\\*"), "$1")
+                        .trim()
+                    fun extractBullets(src: List<String>): List<String> = src
+                        .filter { it.startsWith("- ") || it.startsWith("* ") ||
+                            it.startsWith("• ") || it.matches(Regex("^\\d+[.)>].*")) }
+                        .map { stripMarkdown(it) }
                         .filter { it.isNotBlank() }
                         .take(4)
+
+                    // 1. Try to locate the advisory/focus section
+                    val advisoryIndex = lines.indexOfFirst { line ->
+                        val lower = line.lowercase()
+                        isSectionHeader(line) &&
+                            (lower.contains("advisory") || lower.contains("focus") ||
+                                lower.contains("suggestion") || lower.contains("recommendation") ||
+                                lower.contains("action") || lower.contains("next step"))
+                    }
+                    val sectionLines = if (advisoryIndex >= 0)
+                        lines.drop(advisoryIndex + 1).takeWhile { !isSectionHeader(it) }
+                    else emptyList()
+
+                    // 2. Prefer bullets inside advisory section
+                    val bullets = extractBullets(sectionLines)
+                        .ifEmpty { extractBullets(lines) }           // 3. Fallback: bullets anywhere
+                        .ifEmpty {                                   // 4. Last resort: first prose lines
+                            (if (sectionLines.isNotEmpty()) sectionLines else lines)
+                                .filter { !isSectionHeader(it) }
+                                .take(3)
+                                .map { stripMarkdown(it) }
+                                .filter { it.isNotBlank() }
+                        }
+
                     bullets.mapIndexed { i, b -> "${i + 1}. $b" }.joinToString("\n")
                 }
             }
