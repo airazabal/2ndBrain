@@ -662,13 +662,21 @@ private fun NeedsAttentionCard(
                         .filter { it.isNotBlank() }
                         .take(4)
 
-                    // 1. Try to locate the advisory/focus section
+                    // 1. Try to locate the recommendations / advisory section.
+                    // Priority order matches the actual section names Gemini generates:
+                    // "Your Second Brain Recommendations", "Take Aways & Recommendations",
+                    // "Advisory Tone", "Advisory & Focus Areas", etc.
                     val advisoryIndex = lines.indexOfFirst { line ->
                         val lower = line.lowercase()
-                        isSectionHeader(line) &&
-                            (lower.contains("advisory") || lower.contains("focus") ||
-                                lower.contains("suggestion") || lower.contains("recommendation") ||
-                                lower.contains("action") || lower.contains("next step"))
+                        isSectionHeader(line) && (
+                            lower.contains("recommendation") ||
+                            lower.contains("take away") || lower.contains("takeaway") ||
+                            lower.contains("second brain") ||
+                            lower.contains("advisory") ||
+                            lower.contains("key insight") || lower.contains("key takeaway") ||
+                            lower.contains("action item") || lower.contains("next step") ||
+                            lower.contains("focus area") || lower.contains("suggestion")
+                        )
                     }
                     val sectionLines = if (advisoryIndex >= 0)
                         lines.drop(advisoryIndex + 1).takeWhile { !isSectionHeader(it) }
