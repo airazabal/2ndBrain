@@ -30,6 +30,8 @@ import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
+import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
+import com.alex.a2ndbrain.core.todoist.TaskLatencyTracker
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
 import com.alex.a2ndbrain.core.todoist.TodoistTask
 
@@ -105,6 +107,10 @@ class HomeViewModel(
     private val _todoistLoading = MutableStateFlow(false)
     val todoistLoading: StateFlow<Boolean> = _todoistLoading.asStateFlow()
 
+    private val taskLatencyTracker = TaskLatencyTracker(applicationContext)
+    private val _taskLatencyStats = MutableStateFlow(TaskLatencyStats())
+    val taskLatencyStats: StateFlow<TaskLatencyStats> = _taskLatencyStats.asStateFlow()
+
     init {
         refreshTodoistTasks()
     }
@@ -116,6 +122,8 @@ class HomeViewModel(
             _todoistTasks.value = split.today
             _overdueTasks.value = split.overdue
             _todoistLoading.value = false
+            taskLatencyTracker.markSeen(split.overdue)
+            _taskLatencyStats.value = taskLatencyTracker.getStats(split.overdue)
             val allPending = split.today + split.overdue
             if (allPending.isNotEmpty()) maybeFireTodoistReminder(allPending)
         }
@@ -157,10 +165,13 @@ class HomeViewModel(
 
     fun completeTodoistTask(taskId: String) {
         viewModelScope.launch(Dispatchers.IO) {
+            val task = _overdueTasks.value.find { it.id == taskId }
             val ok = todoistRepository.closeTask(taskId)
             if (ok) {
+                if (task != null) taskLatencyTracker.recordCompletion(task)
                 _todoistTasks.value = _todoistTasks.value.filter { it.id != taskId }
                 _overdueTasks.value = _overdueTasks.value.filter { it.id != taskId }
+                _taskLatencyStats.value = taskLatencyTracker.getStats(_overdueTasks.value)
             }
         }
     }

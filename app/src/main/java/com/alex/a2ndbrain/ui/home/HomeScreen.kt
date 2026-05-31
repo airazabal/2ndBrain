@@ -81,6 +81,7 @@ import java.util.Locale
 import java.util.Calendar
 import java.util.Date
 import com.alex.a2ndbrain.ui.home.EmailTriageResult
+import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
 import com.alex.a2ndbrain.core.todoist.TodoistTask
 
 
@@ -123,6 +124,7 @@ fun HomeScreen(
     emailTriageResult: EmailTriageResult = EmailTriageResult(),
     todoistTasks: List<TodoistTask> = emptyList(),
     overdueTasks: List<TodoistTask> = emptyList(),
+    taskLatencyStats: TaskLatencyStats = TaskLatencyStats(),
     todoistLoading: Boolean = false,
     onCompleteTodoistTask: (String) -> Unit = {},
     onRefreshTodoistTasks: () -> Unit = {},
@@ -236,6 +238,14 @@ fun HomeScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
+                        if (taskLatencyStats.completedCount > 0) {
+                            val avg = "%.1f".format(taskLatencyStats.avgDays)
+                            Text(
+                                "Avg: ${avg}d · Best: ${taskLatencyStats.bestDays}d · Worst: ${taskLatencyStats.worstDays}d  (${taskLatencyStats.completedCount} completed)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                            )
+                        }
                     }
                     IconButton(onClick = { onRefreshTodoistTasks() }) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.primary)
@@ -271,6 +281,20 @@ fun HomeScreen(
                                 if (dueLabel != null) {
                                     Text("Due $dueLabel", style = MaterialTheme.typography.bodySmall,
                                         color = Color(0xFFE53935).copy(alpha = 0.8f))
+                                }
+                            }
+                            val staleDays = taskLatencyStats.staleDays[task.id] ?: 0
+                            if (staleDays >= 1) {
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = Color(0xFFE53935).copy(alpha = 0.1f)
+                                ) {
+                                    Text(
+                                        "${staleDays}d",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFE53935),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
                                 }
                             }
                         }

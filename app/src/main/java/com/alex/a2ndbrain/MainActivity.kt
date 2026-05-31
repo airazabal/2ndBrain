@@ -576,6 +576,7 @@ class MainActivity : ComponentActivity() {
                                                     val emailTriageResult by homeViewModel.emailTriageResult.collectAsStateWithLifecycle()
                                                     val todoistTasks by homeViewModel.todoistTasks.collectAsStateWithLifecycle()
                                                     val overdueTasks by homeViewModel.overdueTasks.collectAsStateWithLifecycle()
+                                                    val taskLatencyStats by homeViewModel.taskLatencyStats.collectAsStateWithLifecycle()
                                                     val todoistLoading by homeViewModel.todoistLoading.collectAsStateWithLifecycle()
                                                     LaunchedEffect(Unit) {
                                                         homeViewModel.checkHealthPermissionsAndSync()
@@ -646,6 +647,7 @@ class MainActivity : ComponentActivity() {
                                                         emailTriageResult = emailTriageResult,
                                                         todoistTasks = todoistTasks,
                                                         overdueTasks = overdueTasks,
+                                                        taskLatencyStats = taskLatencyStats,
                                                         todoistLoading = todoistLoading,
                                                         onCompleteTodoistTask = { id -> homeViewModel.completeTodoistTask(id) },
                                                         onRefreshTodoistTasks = { homeViewModel.refreshTodoistTasks() },
