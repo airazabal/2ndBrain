@@ -207,15 +207,17 @@ class OrchestratorAgent(
             val lower = userMessage.lowercase(java.util.Locale.getDefault())
             val isFinanceQuery = listOf("money", "spend", "spent", "paid", "pay", "payment", "bank", "transaction", "cost", "price", "purchase", "budget", "expense", "shop", "bought", "dollar", "financ", "bill", "invoice", "charge", "receipt").any { lower.contains(it) }
             val header = if (isFinanceQuery)
-                "CAPTURED MEMORIES (look for bank, payment, shopping, and financial app notifications):\n"
+                "CAPTURED MEMORIES (search ALL sources — notifications, SMS, email, clipboard — for bank/payment/shopping entries):\n"
             else
-                "CAPTURED MEMORIES:\n"
+                "CAPTURED MEMORIES (all sources: notifications, SMS, email, clipboard):\n"
             append(header)
-            val limit = if (flags.isGeneral) 5 else 10
-            ctx.memories.take(limit).forEach { mem ->
+            ctx.memories.take(20).forEach { mem ->
                 val date = java.text.SimpleDateFormat("MMM dd HH:mm", java.util.Locale.getDefault())
                     .format(java.util.Date(mem.timestamp))
-                append("- [$date][${mem.tags ?: ""}] ${mem.content}\n")
+                val source = mem.packageName?.substringAfterLast(".")
+                    ?: mem.source
+                val title = mem.title?.let { " | $it" } ?: ""
+                append("- [$date][$source$title][${mem.tags ?: ""}] ${mem.content}\n")
             }
             append("\n")
         }

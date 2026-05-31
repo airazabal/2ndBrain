@@ -28,7 +28,7 @@ class MemoryAgent(private val repo: MemoryRepository) {
      * Falls back to recent memories when query is blank.
      * Always deduplicates by id before scoring.
      */
-    suspend fun retrieve(query: String = "", limit: Int = 30): List<MemoryEntity> =
+    suspend fun retrieve(query: String = "", limit: Int = 50): List<MemoryEntity> =
         withContext(Dispatchers.IO) {
             try {
                 val candidates = if (query.isBlank()) {
