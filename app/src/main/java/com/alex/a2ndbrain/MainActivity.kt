@@ -12,7 +12,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.roundToInt
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -476,13 +481,7 @@ class MainActivity : ComponentActivity() {
                                         }
                                     }
                                 },
-                                floatingActionButton = {
-                                    if (!useRail && currentTab != AppTab.NOTES && currentTab != AppTab.COPILOT) {
-                                        FloatingActionButton(onClick = { navViewModel.setTab(AppTab.COPILOT) }) {
-                                            Icon(Icons.Default.AutoAwesome, contentDescription = "Co-pilot")
-                                        }
-                                    }
-                                }
+                                floatingActionButton = {}
                             ) { innerPadding ->
                                 Row(
                                     modifier = Modifier
@@ -545,7 +544,9 @@ class MainActivity : ComponentActivity() {
                                     }
 
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Box(modifier = Modifier.weight(1f)) {
+                                        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+                                            val maxW = constraints.maxWidth.toFloat()
+                                            val maxH = constraints.maxHeight.toFloat()
                                             when (currentTab) {
                                                 AppTab.TODAY -> {
                                                     val healthMetrics by homeViewModel.healthMetricsToday.collectAsStateWithLifecycle()
@@ -801,6 +802,33 @@ class MainActivity : ComponentActivity() {
                                                             }
                                                         }
                                                     )
+                                                }
+                                            }
+
+                                            // Draggable copilot FAB
+                                            if (!useRail && currentTab != AppTab.NOTES && currentTab != AppTab.COPILOT) {
+                                                val fabSizePx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.toPx() }
+                                                val fabPadPx = with(androidx.compose.ui.platform.LocalDensity.current) { 16.dp.toPx() }
+                                                var fabOffsetX by rememberSaveable { mutableFloatStateOf(0f) }
+                                                var fabOffsetY by rememberSaveable { mutableFloatStateOf(0f) }
+                                                FloatingActionButton(
+                                                    onClick = { navViewModel.setTab(AppTab.COPILOT) },
+                                                    modifier = Modifier
+                                                        .align(Alignment.BottomEnd)
+                                                        .padding(end = 16.dp, bottom = 16.dp)
+                                                        .offset { androidx.compose.ui.unit.IntOffset(fabOffsetX.roundToInt(), fabOffsetY.roundToInt()) }
+                                                        .pointerInput(Unit) {
+                                                            detectDragGesturesAfterLongPress(
+                                                                onDrag = { _, dragAmount ->
+                                                                    fabOffsetX = (fabOffsetX + dragAmount.x)
+                                                                        .coerceIn(-(maxW - fabSizePx - fabPadPx), 0f)
+                                                                    fabOffsetY = (fabOffsetY + dragAmount.y)
+                                                                        .coerceIn(-(maxH - fabSizePx - fabPadPx), 0f)
+                                                                }
+                                                            )
+                                                        }
+                                                ) {
+                                                    Icon(Icons.Default.AutoAwesome, contentDescription = "Co-pilot")
                                                 }
                                             }
                                         }

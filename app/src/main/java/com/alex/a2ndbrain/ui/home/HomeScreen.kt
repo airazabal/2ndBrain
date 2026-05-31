@@ -33,8 +33,10 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -196,6 +198,7 @@ fun HomeScreen(
                 unreadEmailCount   = unreadEmailCount,
                 unreadMessageCount = unreadMessageCount,
                 emailTriageResult  = emailTriageResult,
+                latestReflection   = latestReflection,
                 onTasksClick       = {
                     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -427,6 +430,7 @@ private fun NeedsAttentionCard(
     unreadEmailCount: Int,
     unreadMessageCount: Int,
     emailTriageResult: EmailTriageResult,
+    latestReflection: DailySummaryEntity?,
     onTasksClick: () -> Unit,
     onEmailClick: () -> Unit,
     onMessagesClick: () -> Unit,
@@ -610,6 +614,85 @@ private fun NeedsAttentionCard(
                     }
                 }
                 if (item != items.last()) Spacer(Modifier.height(4.dp))
+            }
+
+            val reflectionSnippet = remember(latestReflection) {
+                latestReflection?.summary?.let { raw ->
+                    val lines = raw.lines().map { it.trim() }
+                    val advisoryIndex = lines.indexOfFirst { line ->
+                        val lower = line.lowercase()
+                        (lower.contains("advisory") || lower.contains("focus area") ||
+                            lower.contains("focus areas") || lower.contains("suggestion")) &&
+                            (line.startsWith("#") || (line.startsWith("**") && line.endsWith("**")))
+                    }
+                    val relevantLines = if (advisoryIndex >= 0) {
+                        lines.drop(advisoryIndex + 1)
+                            .takeWhile { line ->
+                                !line.startsWith("#") &&
+                                !(line.startsWith("**") && line.endsWith("**") && line.length > 4)
+                            }
+                    } else {
+                        lines
+                    }
+                    val bullets = relevantLines
+                        .filter { line ->
+                            line.startsWith("- ") || line.startsWith("* ") ||
+                            line.startsWith("• ") || line.matches(Regex("^\\d+[.)>].*"))
+                        }
+                        .map { line ->
+                            line.replace(Regex("^[-*•]\\s+"), "")
+                                .replace(Regex("^\\d+[.)>]\\s*"), "")
+                                .replace(Regex("\\*\\*(.*?)\\*\\*"), "$1")
+                                .replace(Regex("\\*(.*?)\\*"), "$1")
+                                .trim()
+                        }
+                        .filter { it.isNotBlank() }
+                        .take(4)
+                    bullets.mapIndexed { i, b -> "${i + 1}. $b" }.joinToString("\n")
+                }
+            }
+            if (!reflectionSnippet.isNullOrBlank()) {
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Latest Reflection",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = buildAnnotatedString {
+                        reflectionSnippet.split("\n").forEachIndexed { idx, line ->
+                            if (idx > 0) append("\n")
+                            val match = Regex("^(\\d+\\.\\s*.+?)(?:[:\\-—]\\s*(.+))?$").find(line)
+                            if (match != null) {
+                                withStyle(androidx.compose.ui.text.SpanStyle(fontWeight = FontWeight.Bold)) {
+                                    append(match.groupValues[1].trim())
+                                }
+                                val description = match.groupValues[2].trim()
+                                if (description.isNotBlank()) append(": $description")
+                            } else {
+                                append(line)
+                            }
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
+                    lineHeight = 18.sp
+                )
             }
         }
     }
