@@ -129,6 +129,9 @@ fun HomeScreen(
     onCompleteTodoistTask: (String) -> Unit = {},
     onRefreshTodoistTasks: () -> Unit = {},
     onRefreshIntervalChange: (Int) -> Unit = {},
+    exerciseSessionsThisWeek: Int = 0,
+    exerciseTotalMinutesThisWeek: Int = 0,
+    onExerciseClick: () -> Unit = {},
     themePreference: String = "SYSTEM",
     onThemeToggle: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -186,6 +189,9 @@ fun HomeScreen(
                 onMeetingsClick       = { showMeetingsSheet = true },
                 onMessagesClick       = { onNavigateToFeedWithFilter("Messages") },
                 onHealthClick         = { onNavigateToTab(AppTab.WELLNESS) },
+                exerciseSessionsThisWeek = exerciseSessionsThisWeek,
+                exerciseTotalMinutesThisWeek = exerciseTotalMinutesThisWeek,
+                onExerciseClick       = onExerciseClick,
                 themePreference       = themePreference,
                 onThemeToggle         = onThemeToggle
             )

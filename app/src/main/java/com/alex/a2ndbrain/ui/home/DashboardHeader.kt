@@ -40,6 +40,9 @@ fun DashboardHeader(
     onMeetingsClick: () -> Unit,
     onMessagesClick: () -> Unit,
     onHealthClick: () -> Unit = {},
+    exerciseSessionsThisWeek: Int = 0,
+    exerciseTotalMinutesThisWeek: Int = 0,
+    onExerciseClick: () -> Unit = {},
     themePreference: String = "SYSTEM",
     onThemeToggle: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -151,6 +154,15 @@ fun DashboardHeader(
                 accentColor = Color(0xFF7E57C2),
                 icon = Icons.Default.Favorite,
                 onClick = onHealthClick
+            )
+            DashCard(
+                label = "EXERCISE\nTHIS WEEK",
+                value = exerciseSessionsThisWeek.toString(),
+                subtitle = if (exerciseSessionsThisWeek == 0) "No sessions logged"
+                           else "${exerciseTotalMinutesThisWeek} min total",
+                accentColor = Color(0xFF43A047),
+                icon = Icons.Default.FitnessCenter,
+                onClick = onExerciseClick
             )
         }
     }

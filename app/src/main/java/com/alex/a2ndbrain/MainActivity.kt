@@ -328,6 +328,7 @@ class MainActivity : ComponentActivity() {
 
                         val currentTab by navViewModel.currentTab.collectAsStateWithLifecycle()
                         val error by navViewModel.errorFlow.collectAsStateWithLifecycle()
+                        val wellnessInitialTab by navViewModel.wellnessInitialTab.collectAsStateWithLifecycle()
 
                         // Refresh health data every time the app resumes so Zepp→Health Connect
                         // syncs are picked up without relaunching the app.
@@ -578,6 +579,8 @@ class MainActivity : ComponentActivity() {
                                                     val overdueTasks by homeViewModel.overdueTasks.collectAsStateWithLifecycle()
                                                     val taskLatencyStats by homeViewModel.taskLatencyStats.collectAsStateWithLifecycle()
                                                     val todoistLoading by homeViewModel.todoistLoading.collectAsStateWithLifecycle()
+                                                    val exerciseWeekSessions by homeViewModel.exerciseWeekSessions.collectAsStateWithLifecycle()
+                                                    val exerciseTotalMinutes by homeViewModel.exerciseTotalMinutesThisWeek.collectAsStateWithLifecycle()
                                                     LaunchedEffect(Unit) {
                                                         homeViewModel.checkHealthPermissionsAndSync()
                                                         homeViewModel.loadVaultNotes()
@@ -652,6 +655,9 @@ class MainActivity : ComponentActivity() {
                                                         onCompleteTodoistTask = { id -> homeViewModel.completeTodoistTask(id) },
                                                         onRefreshTodoistTasks = { homeViewModel.refreshTodoistTasks() },
                                                         onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
+                                                        exerciseSessionsThisWeek = exerciseWeekSessions,
+                                                        exerciseTotalMinutesThisWeek = exerciseTotalMinutes,
+                                                        onExerciseClick = { navViewModel.navigateToWellness("EXERCISE") },
                                                         themePreference = themePreference,
                                                         onThemeToggle = {
                                                             val next = if (themePreference == "DARK") "LIGHT" else "DARK"
@@ -705,7 +711,10 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 }
 
-                                                AppTab.WELLNESS -> WellnessScreen(settingsManager = settingsManager)
+                                                AppTab.WELLNESS -> WellnessScreen(
+                                                    settingsManager = settingsManager,
+                                                    initialTab = wellnessInitialTab
+                                                )
 
                                                 AppTab.NOTES -> NotesScreen(
                                                     settingsManager = settingsManager,

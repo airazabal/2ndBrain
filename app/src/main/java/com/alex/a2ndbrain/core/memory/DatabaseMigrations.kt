@@ -92,12 +92,34 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_20_21 = object : Migration(20, 21) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS exercise_sessions (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    deviceId TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    durationMinutes INTEGER NOT NULL,
+                    startedAt INTEGER NOT NULL,
+                    notes TEXT NOT NULL,
+                    date TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL,
+                    lastModifiedAt INTEGER NOT NULL,
+                    isDeleted INTEGER NOT NULL
+                )
+            """.trimIndent())
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_exercise_sessions_date ON exercise_sessions(date)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_exercise_sessions_lastModifiedAt ON exercise_sessions(lastModifiedAt)")
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> = arrayOf(
         MIGRATION_14_15,
         MIGRATION_15_16,
         MIGRATION_16_17,
         MIGRATION_17_18,
         MIGRATION_18_19,
-        MIGRATION_19_20
+        MIGRATION_19_20,
+        MIGRATION_20_21
     )
 }

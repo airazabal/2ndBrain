@@ -32,6 +32,7 @@ import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
 import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
 import com.alex.a2ndbrain.core.todoist.TaskLatencyTracker
+import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
 import com.alex.a2ndbrain.core.todoist.TodoistTask
 
@@ -52,7 +53,8 @@ class HomeViewModel(
     private val zendenceMeditationRepository: ZendenceMeditationRepository,
     private val healthRepository: HealthRepository,
     private val modelRouter: ModelRouter,
-    private val todoistRepository: TodoistRepository
+    private val todoistRepository: TodoistRepository,
+    private val exerciseRepository: ExerciseRepository
 ) : ViewModel() {
     val healthConnectManager get() = healthRepository.healthConnectManager
 
@@ -309,6 +311,32 @@ Output format rules:
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         sessions.any { sdf.format(Date(it.timestamp)) == todayStr }
     }.stateIn(viewModelScope, SharingStarted.Lazily, false)
+
+    // ── Exercise ─────────────────────────────────────────────────────────────
+    val exerciseWeekSessions: StateFlow<Int> =
+        exerciseRepository.getAllSessionsFlow()
+            .map { sessions ->
+                val cutoff = run {
+                    val cal = Calendar.getInstance()
+                    cal.add(Calendar.DAY_OF_YEAR, -6)
+                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+                }
+                sessions.count { it.isDeleted == 0 && it.date >= cutoff }
+            }
+            .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
+    val exerciseTotalMinutesThisWeek: StateFlow<Int> =
+        exerciseRepository.getAllSessionsFlow()
+            .map { sessions ->
+                val cutoff = run {
+                    val cal = Calendar.getInstance()
+                    cal.add(Calendar.DAY_OF_YEAR, -6)
+                    SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
+                }
+                sessions.filter { it.isDeleted == 0 && it.date >= cutoff }
+                    .sumOf { it.durationMinutes }
+            }
+            .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val _vaultNotes = MutableStateFlow<List<DocumentFile>>(emptyList())
     val vaultNotes = _vaultNotes.asStateFlow()

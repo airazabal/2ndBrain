@@ -4,13 +4,16 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import com.alex.a2ndbrain.core.exercise.ExerciseDao
+import com.alex.a2ndbrain.core.exercise.ExerciseSessionEntity
 import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.health.HealthSnapshotEntity
 
-@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class, HealthSnapshotEntity::class], version = 20, exportSchema = true)
+@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class, HealthSnapshotEntity::class, ExerciseSessionEntity::class], version = 21, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
     abstract fun healthDao(): HealthDao
+    abstract fun exerciseDao(): ExerciseDao
 
     companion object {
         @Volatile

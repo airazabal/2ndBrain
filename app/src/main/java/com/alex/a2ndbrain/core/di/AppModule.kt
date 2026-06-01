@@ -29,16 +29,21 @@ import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.module
 
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
+import com.alex.a2ndbrain.core.exercise.ExerciseDao
+import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
+import com.alex.a2ndbrain.ui.exercise.ExerciseViewModel
 
 val appModule = module {
     // Database and Dao
     single { AppDatabase.getDatabase(androidContext()) }
     single { get<AppDatabase>().memoryDao() }
     single<HealthDao> { get<AppDatabase>().healthDao() }
+    single<ExerciseDao> { get<AppDatabase>().exerciseDao() }
 
     // Repositories
     single { MemoryRepository(get()) }
+    single { ExerciseRepository(get(), androidContext()) }
     single { UsageRepository(get()) }
 
     // Managers
@@ -72,7 +77,8 @@ val appModule = module {
 
     // ViewModels
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get(), get(), get(), get(), get()) }
+    viewModel { ExerciseViewModel(get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get(), get(), get(), get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }

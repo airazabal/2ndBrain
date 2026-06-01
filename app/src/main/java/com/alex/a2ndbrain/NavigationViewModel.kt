@@ -19,9 +19,18 @@ class NavigationViewModel : ViewModel() {
     private val _feedFilter = MutableStateFlow("All")
     val feedFilter = _feedFilter.asStateFlow()
 
+    private val _wellnessInitialTab = MutableStateFlow("HEALTH")
+    val wellnessInitialTab = _wellnessInitialTab.asStateFlow()
+
     fun setTab(tab: AppTab) {
         if (tab != AppTab.FEED) _feedFilter.value = "All"
+        if (tab != AppTab.WELLNESS) _wellnessInitialTab.value = "HEALTH"
         _currentTab.value = tab
+    }
+
+    fun navigateToWellness(tab: String = "HEALTH") {
+        _wellnessInitialTab.value = tab
+        _currentTab.value = AppTab.WELLNESS
     }
 
     fun navigateToFeed(filter: String = "All") {
