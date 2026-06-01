@@ -39,4 +39,7 @@ interface ExerciseDao {
         ORDER BY lastModifiedAt DESC
     """)
     suspend fun getModifiedSince(since: Long): List<ExerciseSessionEntity>
+
+    @Query("SELECT * FROM exercise_sessions WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): ExerciseSessionEntity?
 }

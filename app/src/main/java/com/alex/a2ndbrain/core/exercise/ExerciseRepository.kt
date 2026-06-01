@@ -92,4 +92,12 @@ class ExerciseRepository(
     suspend fun getModifiedSince(since: Long) = withContext(Dispatchers.IO) {
         exerciseDao.getModifiedSince(since)
     }
+
+    suspend fun getById(id: String) = withContext(Dispatchers.IO) {
+        exerciseDao.getById(id)
+    }
+
+    suspend fun upsert(session: ExerciseSessionEntity) = withContext(Dispatchers.IO) {
+        exerciseDao.insert(session)
+    }
 }

@@ -8,6 +8,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.TimeZone
 
 data class TodoistTask(
     val id: String,
@@ -32,8 +34,11 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
         Log.d("Todoist", "fetchTodayAndOverdue: token blank=${token.isBlank()}")
         if (token.isBlank()) return@withContext SplitTasks(emptyList(), emptyList())
 
-        val todayStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
+        val localFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
         val nowCal = java.util.Calendar.getInstance()
+        val todayStr = localFmt.format(nowCal.time)
+        val tomorrowCal = (nowCal.clone() as java.util.Calendar).also { it.add(java.util.Calendar.DAY_OF_YEAR, 1) }
+        val tomorrowStr = localFmt.format(tomorrowCal.time)
         val nowMinutes = nowCal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + nowCal.get(java.util.Calendar.MINUTE)
 
         val todayList = mutableListOf<TodoistTask>()
@@ -61,19 +66,31 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
                 val root = org.json.JSONTokener(body).nextValue() as? JSONObject ?: break
                 val arr = root.optJSONArray("results") ?: JSONArray()
                 parseTasks(arr).forEach { task ->
-                    val rawDate = task.dueDateStr ?: task.deadlineDateStr ?: return@forEach
-                    val dateOnly = rawDate.take(10)
+                    // Prefer the due datetime; fall back to deadline date.
+                    // Guard against empty strings returned by optString() when the key is absent.
+                    val rawDate = task.dueDateStr?.takeIf { it.isNotBlank() }
+                        ?: task.deadlineDateStr?.takeIf { it.isNotBlank() }
+                        ?: return@forEach
+
+                    // Convert to local date + local time-of-day minutes.
+                    // The Todoist API v1 returns datetimes in UTC when a timezone is set
+                    // (e.g. "2026-06-01T11:00:00Z" for a 6 AM Eastern task).
+                    // We normalise to local before comparing so that the overdue/today
+                    // split is always correct regardless of the device's UTC offset.
+                    val (localDateOnly, localTaskMinutes) = localDateAndMinutes(rawDate)
+
                     when {
-                        dateOnly < todayStr -> overdueList.add(task)
-                        dateOnly == todayStr -> {
-                            // Timed task whose time has already passed → overdue
-                            val pastDue = rawDate.length > 10 && try {
-                                val t = rawDate.substring(11, 16)
-                                val (h, m) = t.split(":").map { it.toInt() }
-                                h * 60 + m < nowMinutes
-                            } catch (_: Exception) { false }
+                        localDateOnly < todayStr -> overdueList.add(task)
+                        localDateOnly == todayStr -> {
+                            // Timed entry whose local time has already passed → overdue
+                            val pastDue = localTaskMinutes != null && localTaskMinutes < nowMinutes
                             if (pastDue) overdueList.add(task) else todayList.add(task)
                         }
+                        // Recurring tasks often show the NEXT occurrence (tomorrow) when
+                        // today's slot was created after the scheduled time or was just set up.
+                        // Include tomorrow's occurrences in today's list so they're always visible.
+                        localDateOnly == tomorrowStr -> todayList.add(task)
+                        // Genuinely future tasks (2+ days out) are not surfaced on the home screen.
                     }
                 }
                 cursor = root.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
@@ -84,6 +101,46 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
         } catch (e: Exception) {
             Log.e("Todoist", "fetchTodayAndOverdue failed", e)
             SplitTasks(emptyList(), emptyList())
+        }
+    }
+
+    /**
+     * Parse a Todoist due-date string (which may be date-only "yyyy-MM-dd",
+     * a floating local datetime "yyyy-MM-ddTHH:mm:ss", or a UTC datetime
+     * "yyyy-MM-ddTHH:mm:ssZ") and return a pair of:
+     *   - the local date string ("yyyy-MM-dd")
+     *   - the local time-of-day in minutes from midnight, or null if no time component
+     */
+    private fun localDateAndMinutes(raw: String): Pair<String, Int?> {
+        val dateOnly = raw.take(10)
+        if (raw.length <= 10) return dateOnly to null
+
+        return try {
+            if (raw.endsWith("Z") || raw.contains("+") || raw.length > 19) {
+                // UTC or offset-aware datetime — parse properly and convert to local
+                val utcFmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).apply {
+                    timeZone = TimeZone.getTimeZone("UTC")
+                }
+                // Strip any trailing Z, milliseconds, or offset so the formatter accepts it
+                val normalized = raw.substringBefore("Z").substringBefore("+").take(19)
+                val date = utcFmt.parse(normalized)
+                if (date != null) {
+                    val localCal = java.util.Calendar.getInstance()
+                    localCal.time = date
+                    val localDate = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(localCal.time)
+                    val localMins = localCal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + localCal.get(java.util.Calendar.MINUTE)
+                    localDate to localMins
+                } else {
+                    dateOnly to null
+                }
+            } else {
+                // Floating local datetime (no Z, no offset) — substring is already local time
+                val t = raw.substring(11, 16)
+                val (h, m) = t.split(":").map { it.toInt() }
+                dateOnly to (h * 60 + m)
+            }
+        } catch (_: Exception) {
+            dateOnly to null
         }
     }
 
@@ -120,13 +177,22 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
             // deadline may also appear as a flat string in some API versions
             val deadlineDateStr = deadline?.optString("date")?.ifBlank { null }
                 ?: obj.optString("deadline").ifBlank { null }
+
+            // Prefer due.datetime (UTC full datetime, e.g. "2026-06-01T11:00:00.000000Z")
+            // over due.date (which Todoist returns as date-only even for timed tasks).
+            // Falling back to due.date handles tasks with no specific time of day.
+            val dueDateStr = due?.optString("datetime")?.ifBlank { null }
+                ?: due?.optString("date")?.ifBlank { null }
+
+            if (i == 0) Log.d("Todoist", "Sample task due obj: $due | dueDateStr=$dueDateStr")
+
             result.add(
                 TodoistTask(
                     id = obj.getString("id"),
                     content = obj.getString("content"),
                     description = obj.optString("description", ""),
                     priority = obj.optInt("priority", 1),
-                    dueDateStr = due?.optString("date"),
+                    dueDateStr = dueDateStr,
                     deadlineDateStr = deadlineDateStr,
                     url = obj.optString("url", "")
                 )

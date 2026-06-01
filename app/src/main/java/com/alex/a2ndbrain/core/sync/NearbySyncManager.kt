@@ -11,6 +11,8 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import com.alex.a2ndbrain.ConflictSeverity
 import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.TimelineConflict
+import com.alex.a2ndbrain.core.exercise.ExerciseRepository
+import com.alex.a2ndbrain.core.exercise.ExerciseSessionEntity
 import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.health.HealthSnapshotEntity
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -36,13 +38,17 @@ class NearbySyncManager(
     private val scope: CoroutineScope,
     private val meditationRepository: com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository,
     private val healthRepository: HealthRepository,
-    private val digitalTimeManager: com.alex.a2ndbrain.core.usage.DigitalTimeManager
+    private val digitalTimeManager: com.alex.a2ndbrain.core.usage.DigitalTimeManager,
+    private val exerciseRepository: ExerciseRepository
 ) {
     private val _meditationSyncTrigger = MutableSharedFlow<Unit>(replay = 0)
     val meditationSyncTrigger = _meditationSyncTrigger.asSharedFlow()
 
     private val _healthSyncTrigger = MutableSharedFlow<Unit>(replay = 0)
     val healthSyncTrigger = _healthSyncTrigger.asSharedFlow()
+
+    private val _exerciseSyncTrigger = MutableSharedFlow<Unit>(replay = 0)
+    val exerciseSyncTrigger = _exerciseSyncTrigger.asSharedFlow()
 
     // Conflicts from the remote peer, refreshed on every successful sync
     private val _remoteConflicts = MutableStateFlow<List<TimelineConflict>>(emptyList())
@@ -438,16 +444,36 @@ class NearbySyncManager(
                 val dismissedJsonArray = JSONArray()
                 localDismissedForSync.forEach { dismissedJsonArray.put(it) }
 
+                // Fetch exercise sessions modified in the last 30 days (includes tombstones)
+                val thirtyDaysAgo = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+                val exerciseSessions = exerciseRepository.getModifiedSince(thirtyDaysAgo)
+                val exerciseJsonArray = JSONArray()
+                exerciseSessions.forEach { session ->
+                    val json = JSONObject()
+                    json.put("id", session.id)
+                    json.put("deviceId", session.deviceId)
+                    json.put("type", session.type)
+                    json.put("durationMinutes", session.durationMinutes)
+                    json.put("startedAt", session.startedAt)
+                    json.put("notes", session.notes)
+                    json.put("date", session.date)
+                    json.put("createdAt", session.createdAt)
+                    json.put("lastModifiedAt", session.lastModifiedAt)
+                    json.put("isDeleted", session.isDeleted)
+                    exerciseJsonArray.put(json)
+                }
+
                 val payloadObject = JSONObject()
                 payloadObject.put("usage", usageJsonArray)
                 payloadObject.put("meditations", meditationJsonArray)
                 if (healthJsonArray.length() > 0) payloadObject.put("health", healthJsonArray)
                 if (alertsJsonArray.length() > 0) payloadObject.put("alerts", alertsJsonArray)
                 if (dismissedJsonArray.length() > 0) payloadObject.put("dismissedAlertIds", dismissedJsonArray)
+                if (exerciseJsonArray.length() > 0) payloadObject.put("exercise", exerciseJsonArray)
 
                 val payloadBytes = payloadObject.toString().toByteArray()
                 connectionsClient.sendPayload(endpointId, Payload.fromBytes(payloadBytes))
-                Log.d("NearbySync", "Sent ${filteredStats.size} usage, ${localMeditations.size} meditations, ${healthJsonArray.length()} health, ${alertsJsonArray.length()} alerts")
+                Log.d("NearbySync", "Sent ${filteredStats.size} usage, ${localMeditations.size} meditations, ${healthJsonArray.length()} health, ${alertsJsonArray.length()} alerts, ${exerciseJsonArray.length()} exercise")
             } catch (e: Exception) {
                 Log.e("NearbySync", "Failed to send local stats", e)
             }
@@ -476,6 +502,9 @@ class NearbySyncManager(
                 }
                 if (jsonObject.has("dismissedAlertIds")) {
                     importRemoteDismissedIds(jsonObject.getJSONArray("dismissedAlertIds"))
+                }
+                if (jsonObject.has("exercise")) {
+                    importExerciseSessions(jsonObject.getJSONArray("exercise"))
                 }
             } else if (trimmed.startsWith("[")) {
                 val usageArray = JSONArray(trimmed)
@@ -611,6 +640,41 @@ class NearbySyncManager(
             }
         } catch (e: Exception) {
             Log.e("NearbySync", "Failed to import remote dismissed IDs", e)
+        }
+    }
+
+    private fun importExerciseSessions(jsonArray: JSONArray) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                var importedCount = 0
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val id = obj.getString("id")
+                    val incomingLastModified = obj.getLong("lastModifiedAt")
+                    val existing = exerciseRepository.getById(id)
+                    if (existing == null || incomingLastModified > existing.lastModifiedAt) {
+                        exerciseRepository.upsert(
+                            ExerciseSessionEntity(
+                                id = id,
+                                deviceId = obj.getString("deviceId"),
+                                type = obj.getString("type"),
+                                durationMinutes = obj.getInt("durationMinutes"),
+                                startedAt = obj.getLong("startedAt"),
+                                notes = obj.getString("notes"),
+                                date = obj.getString("date"),
+                                createdAt = obj.getLong("createdAt"),
+                                lastModifiedAt = incomingLastModified,
+                                isDeleted = obj.getInt("isDeleted")
+                            )
+                        )
+                        importedCount++
+                    }
+                }
+                Log.d("NearbySync", "Imported $importedCount/${jsonArray.length()} exercise sessions (skipped older/unchanged)")
+                if (importedCount > 0) scope.launch { _exerciseSyncTrigger.emit(Unit) }
+            } catch (e: Exception) {
+                Log.e("NearbySync", "Failed to import exercise sessions", e)
+            }
         }
     }
 }

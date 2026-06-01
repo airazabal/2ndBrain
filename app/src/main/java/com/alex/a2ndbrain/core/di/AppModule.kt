@@ -63,7 +63,7 @@ val appModule = module {
     }
     single { ZendenceMeditationRepository(androidContext()) }
     single { TodoistRepository(get()) }
-    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get()) }
+    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get()) }
 
     // Agent layer (Phase 1-3 migration)
     single { MemoryAgent(get()) }

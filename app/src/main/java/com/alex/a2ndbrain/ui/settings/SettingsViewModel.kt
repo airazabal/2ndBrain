@@ -97,13 +97,18 @@ class SettingsViewModel(
             })
         }
 
+        val todoistToken = settingsManager.getTodoistApiToken()
+        val geminiKey = settingsManager.getGeminiApiKey()
+
         org.json.JSONObject().apply {
-            put("version", 2)
+            put("version", 3)
             put("exportedAt", System.currentTimeMillis())
             put("monitoredApps", appsArray)
             put("memories", memoriesArray)
             put("reflections", summariesArray)
             put("healthSnapshots", healthArray)
+            if (todoistToken.isNotBlank()) put("todoistApiToken", todoistToken)
+            if (geminiKey.isNotBlank()) put("geminiApiKey", geminiKey)
         }.toString(2)
     }
 
@@ -115,5 +120,11 @@ class SettingsViewModel(
             val apps = (0 until appsArray.length()).map { appsArray.getString(it) }.toSet()
             settingsManager.saveMonitoredApps(apps)
         }
+
+        obj.optString("todoistApiToken").takeIf { it.isNotBlank() }
+            ?.let { settingsManager.saveTodoistApiToken(it) }
+
+        obj.optString("geminiApiKey").takeIf { it.isNotBlank() }
+            ?.let { settingsManager.saveGeminiApiKey(it) }
     }
 }
