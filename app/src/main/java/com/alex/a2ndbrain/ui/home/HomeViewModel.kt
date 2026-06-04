@@ -929,15 +929,7 @@ Output format rules:
             val sleepProgress = (sleepMinutes / 60f / sleepGoalHours).coerceIn(0f, 1f)
             val exerciseProgress = (todayExerciseMins.toFloat() / exerciseGoalMinutes).coerceIn(0f, 1f)
 
-            var totalFocusMs = 0L
-            usageStats.value.forEach { stat ->
-                val pkg = stat.packageName.lowercase()
-                if (pkg.contains("todoist") || pkg.contains("calendar") || pkg.contains("chrome") ||
-                    pkg.contains("keep") || pkg.contains("brain") || pkg.contains("notion") ||
-                    pkg.contains("slack") || pkg.contains("gmail")) {
-                    totalFocusMs += stat.totalTimeVisibleMs
-                }
-            }
+            val totalFocusMs = usageStats.value.sumOf { it.totalTimeVisibleMs }
             val focusMinutes = (totalFocusMs / 60_000L).toInt()
             val focusProgress = (focusMinutes.toFloat() / digitalFocusBaseline).coerceIn(0f, 1f)
 

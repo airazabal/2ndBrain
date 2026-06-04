@@ -6,6 +6,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -197,14 +199,27 @@ private fun PillarIndicator(
             .clickable(onClick = onClick)
             .padding(4.dp)
     ) {
-        Text(
-            text = pillar.label.uppercase(),
-            fontSize = 8.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.4.sp,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
-            maxLines = 1
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = pillar.label.uppercase(),
+                fontSize = 8.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.4.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                maxLines = 1
+            )
+            if (pillar.progress >= 1f) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = "Goal met",
+                    tint = color,
+                    modifier = Modifier.size(8.dp)
+                )
+            }
+        }
         Spacer(Modifier.height(2.dp))
         Text(
             text = pillar.value,
