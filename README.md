@@ -19,9 +19,11 @@
 
 ### 🌡️ Sense of Day
 - **Dynamic Scoring Widget**: A live gauge displayed at the top of the Home cockpit, showing a 0–100 score that updates throughout the day as new data arrives.
-- **HSV-Mapped Arc Ring**: A speedometer-style arc ring transitions smoothly from red (0) through yellow (50) to green (100) using HSV color mapping.
+- **Multi-Color Segmented Arc**: The arc ring is split into 4 per-pillar colored segments — blue (Steps), purple (Sleep), green (Exercise), orange (Focus) — each filling proportionally to that pillar's progress so you can see at a glance which dimensions are complete and which need work.
 - **4 Pillar Indicators**: Four animated progress bars track each dimension of your day — **Steps** (blue), **Sleep** (purple), **Exercise** (green), and **Digital Focus** (orange) — each showing current value vs. your personal goal.
+- **Tappable Pillars**: Tap any pillar to jump directly to the relevant screen — Steps/Sleep → Health, Exercise → Exercise, Focus → Online.
 - **Reactive Score Engine**: Score recomputes automatically whenever Health Connect data, usage stats, exercise logs, or meditation status changes, without requiring a manual refresh.
+- **Always-Synced Goals**: Goals updated in Settings are reflected on the Home screen immediately on next resume — no stale values.
 - **Contextual Narrative**: A one-line advisory beneath the ring explains the weakest pillar and suggests a corrective action.
 - **Configurable Goals**: Set your personal daily targets in Settings → Daily Goals: step count, sleep hours, exercise minutes, and digital focus baseline.
 
@@ -43,6 +45,7 @@
 - **Hourly Task Reminders**: WorkManager-backed hourly notifications (7 AM–10 PM) fire whenever incomplete tasks remain for today. The first reminder fires immediately on app open; subsequent ones are rate-limited to once per hour so you're nudged — not spammed.
 - **Unified Completion**: Completing a task from 2ndBrain closes it in Todoist via the REST API and removes it from both the today and overdue lists instantly — no refresh needed.
 - **Task Latency Tracking**: Each overdue task displays a red `"Xd"` chip showing how many days it has been sitting in the overdue list. The sheet header shows a rolling performance summary — avg, best, and worst completion latency over the last 30 completed tasks — so you can track how quickly you're clearing your backlog over time.
+- **Completion History & Stats**: Every completed task is recorded locally. The **Tasks** tab in Wellness shows Today / This Week / All-Time counts, a 7-day bar chart of daily completions, and a full scrollable history with timestamps — great for reflections.
 
 ### 🧘 Zen (Meditation) — Powered by Zendence
 - **Zendence Integration**: Reads real meditation session data via a content provider bridge to the companion Zendence app.
@@ -121,7 +124,8 @@
 - `core/capture/`: Notification listener service and clipboard manager with heuristic auto-tagging.
 - `core/health/`: Health Connect bridge for step count, sleep, and heart-rate tracking.
 - `core/meditation/`: Zendence content provider bridge and meditation session repository.
-- `core/todoist/`: Todoist REST API client (`TodoistRepository`), data model, `TaskLatencyTracker` for overdue staleness and completion stats, and `TodoistReminderWorker` for hourly background reminders.
+- `core/todoist/`: Todoist REST API client (`TodoistRepository`), data model, `TaskLatencyTracker` for overdue staleness and completion stats, `TodoistStatsRepository` + `TodoistCompletionEntity` for local completion history, and `TodoistReminderWorker` for hourly background reminders.
+- `ui/todoist/`: `TodoistScreen` and `TodoistViewModel` — daily/weekly/total stats, 7-day bar chart, and collapsible completion history.
 
 ---
 
