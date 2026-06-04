@@ -1,0 +1,55 @@
+package com.alex.a2ndbrain.ui.trends
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
+import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+data class TrendsUiState(
+    val todayScore: Int = 0,
+    val weekAvg: Int = 0,
+    val monthAvg: Int = 0,
+    val last14Days: List<SenseOfDaySnapshotEntity> = emptyList(),
+    val weeklyAverages: List<Pair<String, Float>> = emptyList(),
+    val avgStepsProgress: Float = 0f,
+    val avgSleepProgress: Float = 0f,
+    val avgExerciseProgress: Float = 0f,
+    val avgFocusProgress: Float = 0f
+)
+
+class SenseOfDayTrendsViewModel(
+    private val repository: SenseOfDayHistoryRepository
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(TrendsUiState())
+    val uiState: StateFlow<TrendsUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            repository.getLast14DaysFlow().collect { snapshots ->
+                val (todayScore, weekAvg, monthAvg) = repository.getStats()
+                val weeklyAverages = repository.getWeeklyAverages(8)
+
+                val avg = { selector: (SenseOfDaySnapshotEntity) -> Float ->
+                    if (snapshots.isNotEmpty()) snapshots.map(selector).average().toFloat() else 0f
+                }
+
+                _uiState.value = TrendsUiState(
+                    todayScore = todayScore,
+                    weekAvg = weekAvg,
+                    monthAvg = monthAvg,
+                    last14Days = snapshots.sortedBy { it.date },
+                    weeklyAverages = weeklyAverages,
+                    avgStepsProgress = avg { it.stepsProgress },
+                    avgSleepProgress = avg { it.sleepProgress },
+                    avgExerciseProgress = avg { it.exerciseProgress },
+                    avgFocusProgress = avg { it.focusProgress }
+                )
+            }
+        }
+    }
+}

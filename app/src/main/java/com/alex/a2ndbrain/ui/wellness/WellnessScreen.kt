@@ -15,6 +15,8 @@ import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionViewModel
 import com.alex.a2ndbrain.ui.todoist.TodoistScreen
 import com.alex.a2ndbrain.ui.todoist.TodoistViewModel
+import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsScreen
+import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsViewModel
 import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -23,6 +25,7 @@ private enum class WellnessTab(val label: String) {
     HEALTH("Health"),
     EXERCISE("Exercise"),
     TASKS("Tasks"),
+    TRENDS("Trends"),
     MEDITATION("Meditation"),
     ONLINE("Online"),
     REFLECT("Reflect")
@@ -38,9 +41,11 @@ fun WellnessScreen(
     val reflectionViewModel: ReflectionViewModel = koinViewModel()
     val exerciseViewModel: ExerciseViewModel = koinViewModel()
     val todoistViewModel: TodoistViewModel = koinViewModel()
+    val trendsViewModel: SenseOfDayTrendsViewModel = koinViewModel()
 
     val sessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
     val todoistUiState by todoistViewModel.uiState.collectAsStateWithLifecycle()
+    val trendsUiState by trendsViewModel.uiState.collectAsStateWithLifecycle()
     val streaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
     val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
     val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
@@ -109,6 +114,10 @@ fun WellnessScreen(
                     onSetEditDuration = exerciseViewModel::setEditDuration,
                     onSetEditNotes = exerciseViewModel::setEditNotes,
                     onSaveEdit = exerciseViewModel::saveEdit,
+                    modifier = Modifier.fillMaxSize()
+                )
+                WellnessTab.TRENDS -> SenseOfDayTrendsScreen(
+                    uiState = trendsUiState,
                     modifier = Modifier.fillMaxSize()
                 )
                 WellnessTab.MEDITATION -> MeditationScreen(sessions = sessions, streaks = streaks)

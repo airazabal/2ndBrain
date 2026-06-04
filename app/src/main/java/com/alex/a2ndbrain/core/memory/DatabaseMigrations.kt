@@ -121,6 +121,14 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_22_23 = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `sense_of_day_snapshots` (`date` TEXT NOT NULL, `score` INTEGER NOT NULL, `stepsProgress` REAL NOT NULL, `sleepProgress` REAL NOT NULL, `exerciseProgress` REAL NOT NULL, `focusProgress` REAL NOT NULL, `savedAt` INTEGER NOT NULL, PRIMARY KEY(`date`))
+            """.trimIndent())
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> = arrayOf(
         MIGRATION_14_15,
         MIGRATION_15_16,
@@ -129,6 +137,7 @@ object DatabaseMigrations {
         MIGRATION_18_19,
         MIGRATION_19_20,
         MIGRATION_20_21,
-        MIGRATION_21_22
+        MIGRATION_21_22,
+        MIGRATION_22_23
     )
 }

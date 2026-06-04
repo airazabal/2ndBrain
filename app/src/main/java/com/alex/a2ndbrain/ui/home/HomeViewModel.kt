@@ -63,7 +63,8 @@ class HomeViewModel(
     private val modelRouter: ModelRouter,
     private val todoistRepository: TodoistRepository,
     private val exerciseRepository: ExerciseRepository,
-    private val todoistStatsRepository: TodoistStatsRepository
+    private val todoistStatsRepository: TodoistStatsRepository,
+    private val senseOfDayHistoryRepository: com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 ) : ViewModel() {
     val healthConnectManager get() = healthRepository.healthConnectManager
 
@@ -966,6 +967,17 @@ Output format rules:
                 else -> "Steady progress. Keep an eye on your lowest pillar."
             }
             _senseOfDayContext.value = contextText
+
+            // Persist today's snapshot so trends history accumulates
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                senseOfDayHistoryRepository.saveSnapshot(
+                    score = score,
+                    stepsProgress = stepsProgress,
+                    sleepProgress = sleepProgress,
+                    exerciseProgress = exerciseProgress,
+                    focusProgress = focusProgress
+                )
+            }
         }
     }
 

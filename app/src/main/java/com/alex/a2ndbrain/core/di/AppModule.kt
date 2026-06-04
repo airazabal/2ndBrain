@@ -31,11 +31,14 @@ import org.koin.dsl.module
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.exercise.ExerciseDao
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
+import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
+import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotDao
 import com.alex.a2ndbrain.core.todoist.TodoistDao
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
 import com.alex.a2ndbrain.core.todoist.TodoistStatsRepository
 import com.alex.a2ndbrain.ui.exercise.ExerciseViewModel
 import com.alex.a2ndbrain.ui.todoist.TodoistViewModel
+import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsViewModel
 
 val appModule = module {
     // Database and Dao
@@ -44,11 +47,13 @@ val appModule = module {
     single<HealthDao> { get<AppDatabase>().healthDao() }
     single<ExerciseDao> { get<AppDatabase>().exerciseDao() }
     single<TodoistDao> { get<AppDatabase>().todoistDao() }
+    single<SenseOfDaySnapshotDao> { get<AppDatabase>().senseOfDaySnapshotDao() }
 
     // Repositories
     single { MemoryRepository(get()) }
     single { ExerciseRepository(get(), androidContext()) }
     single { TodoistStatsRepository(get()) }
+    single { SenseOfDayHistoryRepository(get()) }
     single { UsageRepository(get()) }
 
     // Managers
@@ -84,7 +89,8 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
     viewModel { ExerciseViewModel(get()) }
     viewModel { TodoistViewModel(get()) }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { SenseOfDayTrendsViewModel(get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get(), get(), get(), get(), get(), get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }
