@@ -65,10 +65,13 @@
 - **AI Integration**: Exercise sessions from the last 7 days are automatically injected into Morning Briefings, Evening Reflections, and Weekly Correlations. The Co-Pilot can also answer exercise questions directly ("How much did I work out this week?").
 - **P2P Exercise Sync**: Exercise sessions are included in the Nearby Connections sync payload so your workout history stays consistent across devices.
 
-### 🏠 Home Cockpit & Needs Attention
-- **Needs Attention Card**: Aggregates urgent signals — imminent calendar events (≤15 min), sleep deficit, elevated heart rate, low step count, overdue email, and schedule conflicts — into a single prioritised card with red/amber/green colour coding.
-- **AI Email Triage**: Gemini scans up to 20 unread email notifications using a 4-category executive-assistant prompt (⚡ Urgent, 📝 Action Required, ℹ️ FYI, 🚫 SPAM). Only actionable items surface as attention cards; informational and promotional emails are silently discarded.
-- **Reflection Advisory Snippet**: The latest AI reflection's Advisory & Focus section is extracted and displayed as a concise numbered bullet list directly inside the Needs Attention card, giving you a quick glance at your AI's top focus recommendations for the day.
+### 🏠 Grand Central — Unified AI Command Center
+- **Grand Central Card**: Replaces the old "Needs Attention" card with a unified command center that runs a single AI pass over *all* today's unread notifications (Gmail, Messages, Instagram, Todoist, and every other monitored app) and returns both suggested actions and contextual topic categories.
+- **AI Notification Triage**: Gemini analyzes up to 20 unread notifications in one shot and groups them into semantic topic categories (e.g., 📦 Deliveries, 💬 Conversations, 💼 Work Actions) — each with an emoji, category name, item count, and collapsible item list showing the source app badge.
+- **Suggested Actions**: High-priority items that need a response are surfaced at the top as a dedicated "Suggested Actions" section, separate from informational categories.
+- **RIGHT NOW Alerts**: Time-sensitive local signals (imminent calendar events ≤15 min, sleep deficit, elevated heart rate, low step count, schedule conflicts) appear above the AI content so nothing urgent is buried.
+- **Feed Category Sync**: The same AI categories flow directly into the Feed screen — today's notifications are grouped by AI topic (emoji + category name headers) instead of by app name. Yesterday and older entries continue to group by app as before.
+- **Reflection Advisory Snippet**: The latest AI reflection's Advisory & Focus section is displayed as a numbered bullet list at the bottom of the card, giving a quick glance at today's top AI recommendations.
 - **Auto-Expiring Schedule Conflicts**: "Schedule Crunch" alerts automatically disappear once both conflicting events have passed — no stale warnings lingering all day.
 - **Persistent Dismissals**: Dismissed conflicts survive app restarts and auto-clear at midnight; each conflict ID is stored in SharedPreferences keyed by today's date.
 - **Live Recomputation**: Conflict state re-evaluates every minute via a ticker flow, so time-sensitive alerts stay accurate without requiring a data change to trigger a refresh.
