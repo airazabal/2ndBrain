@@ -17,10 +17,18 @@
 - **Optimistic UI Updates**: Mark-as-read/unread actions are reflected instantly in the UI without waiting for a database round-trip, eliminating visible lag.
 - **Individual Mark Unread**: Toggle individual messages back to unread from within any expanded app group.
 
+### 🌡️ Sense of Day
+- **Dynamic Scoring Widget**: A live gauge displayed at the top of the Home cockpit, showing a 0–100 score that updates throughout the day as new data arrives.
+- **HSV-Mapped Arc Ring**: A speedometer-style arc ring transitions smoothly from red (0) through yellow (50) to green (100) using HSV color mapping.
+- **4 Pillar Indicators**: Four animated progress bars track each dimension of your day — **Steps** (blue), **Sleep** (purple), **Exercise** (green), and **Digital Focus** (orange) — each showing current value vs. your personal goal.
+- **Reactive Score Engine**: Score recomputes automatically whenever Health Connect data, usage stats, exercise logs, or meditation status changes, without requiring a manual refresh.
+- **Contextual Narrative**: A one-line advisory beneath the ring explains the weakest pillar and suggests a corrective action.
+- **Configurable Goals**: Set your personal daily targets in Settings → Daily Goals: step count, sleep hours, exercise minutes, and digital focus baseline.
+
 ### ⌚ Smartwatch & Physical Wellness (Health Connect)
 - **Central Health Sync**: Integrates with Android **Health Connect** to seamlessly read smartwatch wellness data (e.g., Google Fit, Samsung Health, Zepp/Amazfit).
 - **Physical Insights Dashboard**: Home cockpit renders steps walked today, sleep duration last night, and active heart rate zones (min/max/avg) in real-time.
-- **Physical-Digital Correlation**: Correlates your sleep and physical activity metrics with your digital focus and routine tasks to compute your custom **Sense of Day Score** (HSV-mapped progress ring).
+- **Physical-Digital Correlation**: Correlates your sleep and physical activity metrics with your digital focus and routine tasks to compute your custom **Sense of Day Score**.
 
 ### ⏰ Dynamic Medication Reminders & Routine Alarms
 - **SQLite-Backed Habit Engine**: Dynamic scheduling and persistence of custom daily habits, medication times, and routines.
@@ -40,7 +48,7 @@
 - **Zendence Integration**: Reads real meditation session data via a content provider bridge to the companion Zendence app.
 - **Session History**: Displays a full history of meditation sessions including duration, insight notes, and timestamps in a dedicated **Zen** tab.
 - **Streak Tracking**: Tracks your current and longest meditation streaks with a live streak indicator on the Home cockpit.
-- **Meditated Today indicator**: Home cockpit updates in real time to reflect whether you've meditated today, contributing to your Sense of Day Score (+20 pts).
+- **Meditated Today Indicator**: Home cockpit updates in real time to reflect whether you've meditated today, feeding into the Sense of Day score.
 - **P2P Zen Sync**: Meditation sessions are automatically included in the Nearby Connections P2P sync payload. When a sync completes, the Zen tab refreshes instantly — no manual action required.
 
 ### 🏋️ Exercise Tracking
@@ -104,7 +112,8 @@
 - `ui/notes/`: Obsidian vault explorer and markdown preview.
 - `ui/meditation/`: Zen tab displaying meditation session history and streaks.
 - `ui/exercise/`: Exercise tab — stat cards, consistency bars, collapsible session list, log/edit bottom sheets.
-- `ui/settings/`: Sync controls, habit management, theme, and app monitoring configuration.
+- `ui/home/SenseOfDayWidget.kt`: HSV arc ring + 4-pillar animated indicator composable for the Home cockpit header.
+- `ui/settings/`: Sync controls, habit management, theme, daily goals, and app monitoring configuration.
 - `core/exercise/`: `ExerciseSessionEntity`, `ExerciseDao`, `ExerciseRepository` — session CRUD, daily/weekly/total aggregates, and P2P sync support.
 - `core/sync/`: Nearby Connections P2P manager (usage + meditation + exercise payload) and WorkManager background sync workers.
 - `core/usage/`: `UsageStatsManager` local usage collection, SQLite usage database repository, and `DistractionAlertWorker`.
@@ -127,6 +136,7 @@
    - Select your **Obsidian Vault** folder in the Notes tab to enable syncing.
    - Grant **Nearby Devices & Location Permissions** inside the Settings screen to enable P2P device sync.
    - Install the companion **Zendence** app on the same device to enable Zen session sync.
+5. **Backup & Restore** (Settings → Backup & Restore): Full JSON export (v4) covers monitored apps, memories (90 days), AI reflections, health snapshots, API credentials, AI model preferences, theme, refresh interval, calendar sync, and all Daily Goals. Restoring on a new device rehydrates all settings in one step.
 
 ---
 *Your private data stays local or in your own vault. No cloud servers required.*
