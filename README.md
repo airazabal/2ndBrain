@@ -43,6 +43,15 @@
 - **Meditated Today indicator**: Home cockpit updates in real time to reflect whether you've meditated today, contributing to your Sense of Day Score (+20 pts).
 - **P2P Zen Sync**: Meditation sessions are automatically included in the Nearby Connections P2P sync payload. When a sync completes, the Zen tab refreshes instantly — no manual action required.
 
+### 🏋️ Exercise Tracking
+- **Session Logging**: Log workouts across 8 types — Walking, Running, Cycling, Swimming, Strength, HIIT, Stretching, and Other — with a duration slider (5–120 min in 5-min steps) and optional notes.
+- **Edit Sessions**: Tap the pencil icon on any logged session to change its type, duration, and notes in a bottom sheet.
+- **Stats Cards**: Three Zen Space–styled cards at the top of the Exercise tab show **Today** (sessions + total time), **This Week** (sessions + total time), and **Total** (all-time session count).
+- **7-Day Consistency Bars**: Visual bar chart showing workout minutes per day over the last 7 days (full bar = 60+ min).
+- **Collapsible Session List**: Session history is collapsed behind a tappable header by default — keeps the screen clean while still giving full access to the log.
+- **AI Integration**: Exercise sessions from the last 7 days are automatically injected into Morning Briefings, Evening Reflections, and Weekly Correlations. The Co-Pilot can also answer exercise questions directly ("How much did I work out this week?").
+- **P2P Exercise Sync**: Exercise sessions are included in the Nearby Connections sync payload so your workout history stays consistent across devices.
+
 ### 🏠 Home Cockpit & Needs Attention
 - **Needs Attention Card**: Aggregates urgent signals — imminent calendar events (≤15 min), sleep deficit, elevated heart rate, low step count, overdue email, and schedule conflicts — into a single prioritised card with red/amber/green colour coding.
 - **AI Email Triage**: Gemini scans up to 20 unread email notifications using a 4-category executive-assistant prompt (⚡ Urgent, 📝 Action Required, ℹ️ FYI, 🚫 SPAM). Only actionable items surface as attention cards; informational and promotional emails are silently discarded.
@@ -56,8 +65,9 @@
 - **🔍 Universal Memory Search**: Co-Pilot queries search across all captured sources — Gmail, SMS, WhatsApp, clipboard, and every notification — with up to 50 scored candidates and 20 shown to the model. Each memory entry includes its source app and title so the AI can distinguish between an email, a text message, and a notification from the same sender.
 - **Draggable Co-Pilot FAB**: The floating action button can be repositioned anywhere on screen by long-pressing and dragging. Position is clamped to screen bounds and saved across recompositions.
 - **Dynamic Context Routing**: Automatically selects between on-device (Qwen-0.6B via LiteRT) and cloud (Gemini API) models based on query length and complexity to prevent overload and maximize quality.
-- **Morning Briefings**: Generates a "game plan" between 4 AM - 11 AM based on upcoming meetings and yesterday's unfinished tasks.
-- **Evening Reflections**: Analyzes how your day actually went by comparing your intended tasks with your actual screen time.
+- **Morning Briefings**: Generates a "game plan" between 4 AM - 11 AM based on upcoming meetings, yesterday's unfinished tasks, and recent exercise activity.
+- **Evening Reflections**: Analyzes how your day actually went by comparing your intended tasks with your actual screen time and any workouts logged.
+- **Weekly Correlation**: 7-day narrative across physical activity (steps, sleep, heart rate), exercise sessions, meditation streaks, screen time, and habits — delivered as a cohesive cognitive co-pilot summary.
 - **Conflict Detection**: Flags "Distraction Gaps" where significant time was spent on non-productive apps during busy work windows.
 - **Customizable Models**: Dynamically downloads and runs local offline **LiteRT** models or connects securely to remote Gemini APIs directly configured inside Settings.
 
@@ -93,8 +103,10 @@
 - `ui/usage/`: Digital Time dashboard, visual charts, and Nearby Sync cards.
 - `ui/notes/`: Obsidian vault explorer and markdown preview.
 - `ui/meditation/`: Zen tab displaying meditation session history and streaks.
+- `ui/exercise/`: Exercise tab — stat cards, consistency bars, collapsible session list, log/edit bottom sheets.
 - `ui/settings/`: Sync controls, habit management, theme, and app monitoring configuration.
-- `core/sync/`: Nearby Connections P2P manager (usage + meditation payload) and WorkManager background sync workers.
+- `core/exercise/`: `ExerciseSessionEntity`, `ExerciseDao`, `ExerciseRepository` — session CRUD, daily/weekly/total aggregates, and P2P sync support.
+- `core/sync/`: Nearby Connections P2P manager (usage + meditation + exercise payload) and WorkManager background sync workers.
 - `core/usage/`: `UsageStatsManager` local usage collection, SQLite usage database repository, and `DistractionAlertWorker`.
 - `core/reflection/`: Gemini API, LiteRT on-device LLM picker, and briefing logic.
 - `core/capture/`: Notification listener service and clipboard manager with heuristic auto-tagging.
