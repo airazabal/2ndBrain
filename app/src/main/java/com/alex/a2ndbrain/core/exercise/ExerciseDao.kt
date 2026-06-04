@@ -43,6 +43,12 @@ interface ExerciseDao {
     @Query("SELECT * FROM exercise_sessions WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): ExerciseSessionEntity?
 
+    @Query("SELECT * FROM exercise_sessions WHERE date = :date AND isDeleted = 0")
+    suspend fun getSessionsForDate(date: String): List<ExerciseSessionEntity>
+
+    @Query("SELECT COUNT(*) FROM exercise_sessions WHERE isDeleted = 0")
+    suspend fun getTotalSessionCount(): Int
+
     @Query("UPDATE exercise_sessions SET type = :type, durationMinutes = :durationMinutes, notes = :notes, lastModifiedAt = :now WHERE id = :id")
     suspend fun updateSession(id: String, type: String, durationMinutes: Int, notes: String, now: Long = System.currentTimeMillis())
 }

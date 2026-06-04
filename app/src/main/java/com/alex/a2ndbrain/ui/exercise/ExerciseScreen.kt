@@ -1,6 +1,8 @@
 package com.alex.a2ndbrain.ui.exercise
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +16,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -35,8 +39,11 @@ private val accentGreen = Color(0xFF43A047)
 fun ExerciseScreen(
     sessions: List<ExerciseSessionEntity>,
     weeklyConsistency: List<Pair<String, Float>>,
+    todaySessionCount: Int,
+    todayTotalMinutes: Int,
     weeklySessionCount: Int,
     weeklyTotalMinutes: Int,
+    totalSessionCount: Int,
     showLogSheet: Boolean,
     selectedType: ExerciseType,
     durationMinutes: Int,
@@ -61,15 +68,24 @@ fun ExerciseScreen(
     onSaveEdit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var sessionsExpanded by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (sessionsExpanded) 180f else 0f,
+        label = "chevron"
+    )
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            ExerciseWeeklySummaryRow(
-                sessionCount = weeklySessionCount,
-                totalMinutes = weeklyTotalMinutes
+            ExerciseStatsRow(
+                todaySessionCount = todaySessionCount,
+                todayTotalMinutes = todayTotalMinutes,
+                weeklySessionCount = weeklySessionCount,
+                weeklyTotalMinutes = weeklyTotalMinutes,
+                totalSessionCount = totalSessionCount
             )
         }
         item {
@@ -90,20 +106,38 @@ fun ExerciseScreen(
         item {
             ExerciseConsistencyBars(consistency = weeklyConsistency)
         }
-        if (sessions.isEmpty()) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            Icons.Default.FitnessCenter,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(Modifier.height(8.dp))
+        // Collapsible sessions header
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { sessionsExpanded = !sessionsExpanded }
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = if (sessions.isEmpty()) "Sessions" else "Sessions (${sessions.size})",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (sessionsExpanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.size(20.dp).rotate(chevronRotation)
+                )
+            }
+        }
+        if (sessionsExpanded) {
+            if (sessions.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text(
                             "No sessions logged yet",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
@@ -111,14 +145,14 @@ fun ExerciseScreen(
                         )
                     }
                 }
-            }
-        } else {
-            items(sessions, key = { it.id }) { session ->
-                ExerciseSessionItem(
-                    session = session,
-                    onDelete = { onDeleteSession(session.id) },
-                    onEdit = { onEditSession(session) }
-                )
+            } else {
+                items(sessions, key = { it.id }) { session ->
+                    ExerciseSessionItem(
+                        session = session,
+                        onDelete = { onDeleteSession(session.id) },
+                        onEdit = { onEditSession(session) }
+                    )
+                }
             }
         }
     }
@@ -153,54 +187,96 @@ fun ExerciseScreen(
 }
 
 @Composable
-private fun ExerciseWeeklySummaryRow(sessionCount: Int, totalMinutes: Int) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth()
+private fun ExerciseStatsRow(
+    todaySessionCount: Int,
+    todayTotalMinutes: Int,
+    weeklySessionCount: Int,
+    weeklyTotalMinutes: Int,
+    totalSessionCount: Int
+) {
+    fun minutesToLabel(mins: Int): String = when {
+        mins == 0 -> "0m"
+        mins >= 60 -> "${mins / 60}h ${mins % 60}m"
+        else -> "${mins}m"
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        ExerciseStatCard(
+            title = "Today",
+            value = if (todaySessionCount == 0) "Rest day"
+                    else "${todaySessionCount} · ${minutesToLabel(todayTotalMinutes)}",
+            icon = Icons.Default.Today,
+            tint = accentGreen,
+            modifier = Modifier.weight(1f)
+        )
+        ExerciseStatCard(
+            title = "This Week",
+            value = if (weeklySessionCount == 0) "No sessions"
+                    else "${weeklySessionCount} · ${minutesToLabel(weeklyTotalMinutes)}",
+            icon = Icons.Default.CalendarViewWeek,
+            tint = accentGreen,
+            modifier = Modifier.weight(1f)
+        )
+        ExerciseStatCard(
+            title = "Total",
+            value = "$totalSessionCount sessions",
+            icon = Icons.Default.EmojiEvents,
+            tint = accentGreen,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+private fun ExerciseStatCard(
+    title: String,
+    value: String,
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Column {
-                Text(
-                    text = "THIS WEEK",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(tint.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = tint,
+                    modifier = Modifier.size(20.dp)
                 )
-                Spacer(Modifier.height(2.dp))
-                if (sessionCount == 0) {
-                    Text(
-                        "No sessions logged",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                    )
-                } else {
-                    val hours = totalMinutes / 60
-                    val mins = totalMinutes % 60
-                    val timeStr = when {
-                        hours > 0 && mins > 0 -> "${hours}h ${mins}m"
-                        hours > 0 -> "${hours}h"
-                        else -> "${mins}m"
-                    }
-                    Text(
-                        "$sessionCount ${if (sessionCount == 1) "session" else "sessions"} · $timeStr total",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
             }
-            Icon(
-                Icons.Default.FitnessCenter,
-                contentDescription = null,
-                tint = accentGreen,
-                modifier = Modifier.size(24.dp)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                fontSize = 12.sp
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
             )
         }
     }

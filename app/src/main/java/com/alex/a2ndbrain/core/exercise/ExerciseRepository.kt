@@ -93,6 +93,18 @@ class ExerciseRepository(
         sessions.size to sessions.sumOf { it.durationMinutes }
     }
 
+    /** One-shot: (sessionCount, totalMinutes) for today. */
+    suspend fun getTodaySummary(): Pair<Int, Int> = withContext(Dispatchers.IO) {
+        val today = dateFormat.format(Date())
+        val sessions = exerciseDao.getSessionsForDate(today)
+        sessions.size to sessions.sumOf { it.durationMinutes }
+    }
+
+    /** One-shot: total all-time session count. */
+    suspend fun getTotalSessionCount(): Int = withContext(Dispatchers.IO) {
+        exerciseDao.getTotalSessionCount()
+    }
+
     suspend fun getRecentSessions(daysBack: Int) = withContext(Dispatchers.IO) {
         exerciseDao.getSessionsSinceSync(sinceDate(daysBack))
     }

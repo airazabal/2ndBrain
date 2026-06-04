@@ -69,8 +69,11 @@ fun WellnessScreen(
                 WellnessTab.EXERCISE -> ExerciseScreen(
                     sessions = exerciseUiState.sessions,
                     weeklyConsistency = exerciseUiState.weeklyConsistency,
+                    todaySessionCount = exerciseUiState.todaySessionCount,
+                    todayTotalMinutes = exerciseUiState.todayTotalMinutes,
                     weeklySessionCount = exerciseUiState.weeklySessionCount,
                     weeklyTotalMinutes = exerciseUiState.weeklyTotalMinutes,
+                    totalSessionCount = exerciseUiState.totalSessionCount,
                     showLogSheet = exerciseUiState.showLogSheet,
                     selectedType = exerciseUiState.selectedType,
                     durationMinutes = exerciseUiState.durationMinutes,

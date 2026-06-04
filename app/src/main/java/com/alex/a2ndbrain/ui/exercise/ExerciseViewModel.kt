@@ -12,8 +12,11 @@ import kotlinx.coroutines.launch
 data class ExerciseUiState(
     val sessions: List<ExerciseSessionEntity> = emptyList(),
     val weeklyConsistency: List<Pair<String, Float>> = emptyList(),
+    val todaySessionCount: Int = 0,
+    val todayTotalMinutes: Int = 0,
     val weeklySessionCount: Int = 0,
     val weeklyTotalMinutes: Int = 0,
+    val totalSessionCount: Int = 0,
     val isLoading: Boolean = false,
     val showLogSheet: Boolean = false,
     val selectedType: ExerciseType = ExerciseType.WALKING,
@@ -49,8 +52,18 @@ class ExerciseViewModel(
 
     private fun refreshWeeklySummary() {
         viewModelScope.launch(Dispatchers.IO) {
-            val (count, minutes) = exerciseRepository.getWeeklySummary()
-            _uiState.update { it.copy(weeklySessionCount = count, weeklyTotalMinutes = minutes) }
+            val (todayCount, todayMins) = exerciseRepository.getTodaySummary()
+            val (weekCount, weekMins) = exerciseRepository.getWeeklySummary()
+            val total = exerciseRepository.getTotalSessionCount()
+            _uiState.update {
+                it.copy(
+                    todaySessionCount = todayCount,
+                    todayTotalMinutes = todayMins,
+                    weeklySessionCount = weekCount,
+                    weeklyTotalMinutes = weekMins,
+                    totalSessionCount = total
+                )
+            }
         }
     }
 
