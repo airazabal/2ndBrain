@@ -45,6 +45,9 @@ fun DashboardHeader(
     onExerciseClick: () -> Unit = {},
     themePreference: String = "SYSTEM",
     onThemeToggle: () -> Unit = {},
+    senseOfDayScore: Int = 0,
+    senseOfDayContext: String = "",
+    senseOfDayPillars: List<SenseOfDayPillar> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -99,7 +102,16 @@ fun DashboardHeader(
             }
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
+
+        // Sense of Day widget
+        SenseOfDayWidget(
+            score = senseOfDayScore,
+            context = senseOfDayContext,
+            pillars = senseOfDayPillars
+        )
+
+        Spacer(Modifier.height(12.dp))
 
         // Cards row
         Row(

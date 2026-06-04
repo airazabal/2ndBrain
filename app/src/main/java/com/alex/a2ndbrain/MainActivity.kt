@@ -557,6 +557,7 @@ class MainActivity : ComponentActivity() {
 
                                                     val senseOfDayScore by homeViewModel.senseOfDayScore.collectAsStateWithLifecycle()
                                                     val senseOfDayContext by homeViewModel.senseOfDayContext.collectAsStateWithLifecycle()
+                                                    val senseOfDayPillars by homeViewModel.senseOfDayPillars.collectAsStateWithLifecycle()
                                                     val todayTimelineEvents by homeViewModel.todayTimelineEvents.collectAsStateWithLifecycle()
                                                     val tomorrowTimelineEvents by homeViewModel.tomorrowTimelineEvents.collectAsStateWithLifecycle()
                                                     val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
@@ -605,6 +606,7 @@ class MainActivity : ComponentActivity() {
                                                         },
                                                         senseOfDayScore = senseOfDayScore,
                                                         senseOfDayContext = senseOfDayContext,
+                                                        senseOfDayPillars = senseOfDayPillars,
                                                         todayTimelineEvents = todayTimelineEvents,
                                                         tomorrowTimelineEvents = tomorrowTimelineEvents,
                                                         timelineConflicts = timelineConflicts,
@@ -676,10 +678,8 @@ class MainActivity : ComponentActivity() {
                                                         memories = memories,
                                                         searchQuery = searchQuery,
                                                         onSearchQueryChange = { memoryViewModel.setSearchQuery(it) },
-                                                        onCaptureClipboard = { clipboardCaptureManager.captureCurrentClipboard() },
                                                         onMarkAsRead = { ids -> memoryViewModel.markMultipleAsRead(ids) },
                                                         onMarkAsUnread = { ids -> memoryViewModel.markMultipleAsUnread(ids) },
-                                                        onClearAll = { memoryViewModel.clearAllMemories() },
                                                         monitoredApps = feedMonitoredApps,
                                                         onClearAppFilter = {
                                                             settingsManager.saveMonitoredApps(emptySet())
@@ -712,7 +712,6 @@ class MainActivity : ComponentActivity() {
                                                 }
 
                                                 AppTab.WELLNESS -> WellnessScreen(
-                                                    settingsManager = settingsManager,
                                                     initialTab = wellnessInitialTab
                                                 )
 

@@ -195,4 +195,17 @@ class CaptureSettingsManager(private val context: Context) {
     fun setCalendarSyncEnabled(enabled: Boolean) {
         prefs.edit().putBoolean("calendar_sync_enabled", enabled).apply()
     }
+
+    // ── Daily Goals (Sense of Day) ────────────────────────────────────────────
+    fun getStepsGoal(): Int = prefs.getInt("steps_goal", 10000)
+    fun setStepsGoal(goal: Int) { prefs.edit().putInt("steps_goal", goal).apply() }
+
+    fun getSleepGoalHours(): Float = prefs.getFloat("sleep_goal_hours", 7.5f)
+    fun setSleepGoalHours(hours: Float) { prefs.edit().putFloat("sleep_goal_hours", hours).apply() }
+
+    fun getExerciseGoalMinutes(): Int = prefs.getInt("exercise_goal_minutes", 30)
+    fun setExerciseGoalMinutes(minutes: Int) { prefs.edit().putInt("exercise_goal_minutes", minutes).apply() }
+
+    fun getDigitalFocusBaselineMinutes(): Int = prefs.getInt("digital_focus_baseline_minutes", 120)
+    fun setDigitalFocusBaselineMinutes(minutes: Int) { prefs.edit().putInt("digital_focus_baseline_minutes", minutes).apply() }
 }

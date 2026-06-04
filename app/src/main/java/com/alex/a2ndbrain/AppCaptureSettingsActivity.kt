@@ -46,6 +46,12 @@ import org.koin.android.ext.android.inject
 import androidx.lifecycle.lifecycleScope
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
+import com.alex.a2ndbrain.core.reflection.ModelDownloader
+import com.alex.a2ndbrain.core.reflection.ModelPicker
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import kotlinx.coroutines.Dispatchers
 
 class AppCaptureSettingsActivity : ComponentActivity() {
@@ -207,6 +213,63 @@ fun AppCaptureSettingsScreen(
             val enabled = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
             isListenerEnabled = enabled?.contains(context.packageName) == true
             kotlinx.coroutines.delay(2000)
+        }
+    }
+
+    // AI & Integrations state
+    val modelPicker = remember { ModelPicker(context) }
+    val modelDownloader = remember { ModelDownloader(context, scope) }
+    var selectedModel by remember { mutableStateOf(settingsManager.getPreferredModelType()) }
+    var availableModels by remember { mutableStateOf<List<ModelDownloader.LiteRTModel>>(emptyList()) }
+    var isLoadingModels by remember { mutableStateOf(false) }
+    var selectedLiteRTModel by remember { mutableStateOf(settingsManager.getSelectedLiteRTModel()) }
+    val downloadProgress by modelDownloader.downloadProgress.collectAsState()
+    val downloadingModelName by modelDownloader.downloadingModelName.collectAsState()
+    val downloadError by modelDownloader.downloadError.collectAsState()
+    var geminiApiKey by remember { mutableStateOf(settingsManager.getGeminiApiKey()) }
+    var geminiModel by remember { mutableStateOf(settingsManager.getGeminiModel()) }
+    var todoistApiToken by remember { mutableStateOf(settingsManager.getTodoistApiToken()) }
+
+    // Daily Goals state
+    var stepsGoalText by remember { mutableStateOf(settingsManager.getStepsGoal().toString()) }
+    var sleepGoalText by remember { mutableStateOf(settingsManager.getSleepGoalHours().let {
+        if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString()
+    }) }
+    var exerciseGoalText by remember { mutableStateOf(settingsManager.getExerciseGoalMinutes().toString()) }
+    var focusGoalText by remember { mutableStateOf(settingsManager.getDigitalFocusBaselineMinutes().toString()) }
+    var showAddCustomModelDialog by remember { mutableStateOf(false) }
+    var customModelName by remember { mutableStateOf("") }
+    var customModelUrl by remember { mutableStateOf("") }
+    var customModelDesc by remember { mutableStateOf("") }
+    var customModelSize by remember { mutableStateOf("") }
+    var showModelLibraryDialog by remember { mutableStateOf(false) }
+    var remoteRegistryModels by remember { mutableStateOf<List<ModelDownloader.LiteRTModel>>(emptyList()) }
+    var isLoadingRegistryModels by remember { mutableStateOf(false) }
+    val aiModes = remember { listOf("AUTO", "GEMINI_CLOUD", "LITERT_LOCAL") }
+
+    LaunchedEffect("models") {
+        isLoadingModels = true
+        availableModels = modelDownloader.fetchAvailableModels()
+        isLoadingModels = false
+    }
+
+    LaunchedEffect(downloadingModelName) {
+        if (downloadingModelName == null && downloadError == null && selectedLiteRTModel == "") {
+            val downloaded = availableModels.find { model ->
+                java.io.File(context.filesDir, "models/${model.name}.litertlm").exists()
+            }
+            if (downloaded != null) {
+                selectedLiteRTModel = downloaded.name
+                settingsManager.saveSelectedLiteRTModel(downloaded.name)
+            }
+        }
+    }
+
+    LaunchedEffect(showModelLibraryDialog) {
+        if (showModelLibraryDialog) {
+            isLoadingRegistryModels = true
+            remoteRegistryModels = modelDownloader.fetchRemoteRegistry()
+            isLoadingRegistryModels = false
         }
     }
 
@@ -386,6 +449,235 @@ fun AppCaptureSettingsScreen(
             }
         }
 
+        // ── AI & Integrations ─────────────────────────────────────────────────
+        item { SettingsSectionLabel("AI & Integrations") }
+
+        // Mode selector
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("AI Mode", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(aiModes) { mode ->
+                            FilterChip(
+                                selected = selectedModel == mode,
+                                onClick = {
+                                    selectedModel = mode
+                                    settingsManager.savePreferredModelType(mode)
+                                },
+                                label = { Text(mode.replace("_", " ")) },
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Gemini Cloud settings (shown only when GEMINI_CLOUD is selected)
+        if (selectedModel == "GEMINI_CLOUD") {
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Gemini Cloud Settings", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        OutlinedTextField(
+                            value = geminiApiKey,
+                            onValueChange = { geminiApiKey = it; settingsManager.saveGeminiApiKey(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("API Key") },
+                            placeholder = { Text("Paste your Gemini API key here") },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation()
+                        )
+                        OutlinedTextField(
+                            value = geminiModel,
+                            onValueChange = { geminiModel = it; settingsManager.saveGeminiModel(it) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Model") },
+                            placeholder = { Text("e.g. gemini-2.5-flash") },
+                            singleLine = true
+                        )
+                    }
+                }
+            }
+        }
+
+        // LiteRT local models (shown when LITERT_LOCAL or AUTO selects local)
+        if (selectedModel == "LITERT_LOCAL" || (selectedModel == "AUTO" && modelPicker.getBestModel() == ModelPicker.ModelType.LITERT_LOCAL)) {
+            item {
+                Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Local AI Models", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        if (isLoadingModels) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp).align(Alignment.CenterHorizontally))
+                        } else {
+                            availableModels.forEach { model ->
+                                val isDownloaded = remember(model.name, downloadProgress) {
+                                    java.io.File(context.filesDir, "models/${model.name}.litertlm").run { exists() && length() > 0 }
+                                }
+                                val isSelected = selectedLiteRTModel == model.name
+                                val isCustom = remember(model.name) {
+                                    modelDownloader.getCustomModels().any { it.name == model.name }
+                                }
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp).let {
+                                        if (isSelected) it.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)) else it
+                                    },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                                        else if (isDownloaded) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                        else MaterialTheme.colorScheme.surface
+                                    ),
+                                    onClick = {
+                                        if (isDownloaded) {
+                                            selectedLiteRTModel = model.name
+                                            settingsManager.saveSelectedLiteRTModel(model.name)
+                                        }
+                                    }
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = model.name,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(model.sizeLabel, style = MaterialTheme.typography.labelSmall)
+                                                if (isCustom) {
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    IconButton(
+                                                        onClick = {
+                                                            modelDownloader.removeCustomModel(model.name)
+                                                            scope.launch { availableModels = modelDownloader.fetchAvailableModels() }
+                                                        },
+                                                        modifier = Modifier.size(24.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.Delete, contentDescription = "Remove", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                        if (isDownloaded) {
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("✓ Ready", color = androidx.compose.ui.graphics.Color(0xFF2E7D32), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                                if (isSelected) {
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Surface(color = MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(4.dp)) {
+                                                        Text("ACTIVE", modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimary, fontSize = 8.sp)
+                                                    }
+                                                }
+                                            }
+                                        } else if (downloadingModelName == model.name) {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            LinearProgressIndicator(progress = { downloadProgress ?: 0f }, modifier = Modifier.fillMaxWidth())
+                                            Text("Downloading: ${((downloadProgress ?: 0f) * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+                                        } else {
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Button(onClick = { modelDownloader.startDownload(model) }, modifier = Modifier.height(32.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)) {
+                                                Text("Download", fontSize = 12.sp)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(onClick = { showModelLibraryDialog = true }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(12.dp)) {
+                                    Icon(Icons.Default.Search, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Browse Library")
+                                }
+                                OutlinedButton(onClick = { showAddCustomModelDialog = true }, modifier = Modifier.weight(0.7f), shape = RoundedCornerShape(12.dp)) {
+                                    Icon(Icons.Default.Add, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Custom")
+                                }
+                            }
+                        }
+                        downloadError?.let { Text("Error: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+                    }
+                }
+            }
+        }
+
+        // Todoist integration (always visible)
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Todoist", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "Get your API token from todoist.com → Settings → Integrations → Developer",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = todoistApiToken,
+                        onValueChange = { todoistApiToken = it; settingsManager.saveTodoistApiToken(it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("API Token") },
+                        placeholder = { Text("Paste your Todoist API token here") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation()
+                    )
+                }
+            }
+        }
+
+        // ── Daily Goals (Sense of Day) ────────────────────────────────────────
+        item { SettingsSectionLabel("Daily Goals") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        text = "Set your daily targets to power the Sense of Day score.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    GoalTextField(
+                        label = "Daily Steps Goal",
+                        value = stepsGoalText,
+                        unit = "steps",
+                        onValueChange = { stepsGoalText = it },
+                        onDone = {
+                            stepsGoalText.toIntOrNull()?.let { settingsManager.setStepsGoal(it) }
+                        }
+                    )
+                    GoalTextField(
+                        label = "Sleep Goal",
+                        value = sleepGoalText,
+                        unit = "hours",
+                        onValueChange = { sleepGoalText = it },
+                        onDone = {
+                            sleepGoalText.toFloatOrNull()?.let { settingsManager.setSleepGoalHours(it) }
+                        }
+                    )
+                    GoalTextField(
+                        label = "Daily Exercise Goal",
+                        value = exerciseGoalText,
+                        unit = "min",
+                        onValueChange = { exerciseGoalText = it },
+                        onDone = {
+                            exerciseGoalText.toIntOrNull()?.let { settingsManager.setExerciseGoalMinutes(it) }
+                        }
+                    )
+                    GoalTextField(
+                        label = "Digital Focus Baseline",
+                        value = focusGoalText,
+                        unit = "min/day",
+                        onValueChange = { focusGoalText = it },
+                        onDone = {
+                            focusGoalText.toIntOrNull()?.let { settingsManager.setDigitalFocusBaselineMinutes(it) }
+                        }
+                    )
+                }
+            }
+        }
+
         // ── Backup & Restore ──────────────────────────────────────────────────
         item { SettingsSectionLabel("Backup & Restore") }
         item {
@@ -482,6 +774,80 @@ fun AppCaptureSettingsScreen(
 
         item { Spacer(modifier = Modifier.height(24.dp)) }
     }
+
+    // Add Custom Model dialog
+    if (showAddCustomModelDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddCustomModelDialog = false },
+            title = { Text("Add Custom LiteRT Model") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = customModelName, onValueChange = { customModelName = it }, label = { Text("Model Name") }, placeholder = { Text("e.g. DeepSeek-Qwen-1.5B") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = customModelUrl, onValueChange = { customModelUrl = it }, label = { Text("Download URL") }, placeholder = { Text("https://huggingface.co/...") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = customModelDesc, onValueChange = { customModelDesc = it }, label = { Text("Description") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(value = customModelSize, onValueChange = { customModelSize = it }, label = { Text("Size Label") }, placeholder = { Text("e.g. 1.2GB") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    if (customModelName.isNotBlank() && customModelUrl.isNotBlank()) {
+                        modelDownloader.addCustomModel(ModelDownloader.LiteRTModel(name = customModelName.trim(), url = customModelUrl.trim(), description = customModelDesc.trim().ifBlank { "Custom registered LiteRT model." }, sizeLabel = customModelSize.trim().ifBlank { "Custom" }))
+                        scope.launch { availableModels = modelDownloader.fetchAvailableModels() }
+                        showAddCustomModelDialog = false
+                        customModelName = ""; customModelUrl = ""; customModelDesc = ""; customModelSize = ""
+                    }
+                }) { Text("Add") }
+            },
+            dismissButton = { TextButton(onClick = { showAddCustomModelDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    // Model Library dialog
+    if (showModelLibraryDialog) {
+        AlertDialog(
+            onDismissRequest = { showModelLibraryDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text("Compatible Model Library")
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth().heightIn(max = 400.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Browse and choose compatible local LiteRT models to add to your capture selection.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                    if (isLoadingRegistryModels) {
+                        Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    } else if (remoteRegistryModels.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { Text("No models found in registry.", color = MaterialTheme.colorScheme.error) }
+                    } else {
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                            items(remoteRegistryModels) { model ->
+                                val isAlreadyAdded = availableModels.any { it.name == model.name }
+                                Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = RoundedCornerShape(8.dp)) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(model.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                                Text(model.sizeLabel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                            }
+                                            if (isAlreadyAdded) {
+                                                Surface(color = androidx.compose.ui.graphics.Color(0xFFE8F5E9), shape = RoundedCornerShape(4.dp)) { Text("ADDED", modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = androidx.compose.ui.graphics.Color(0xFF2E7D32), fontWeight = FontWeight.Bold) }
+                                            } else {
+                                                Button(onClick = { modelDownloader.registerModel(model); scope.launch { availableModels = modelDownloader.fetchAvailableModels() } }, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp), modifier = Modifier.height(30.dp), shape = RoundedCornerShape(6.dp)) { Text("Choose", fontSize = 11.sp) }
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(model.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showModelLibraryDialog = false }) { Text("Close") } }
+        )
+    }
 }
 
 @Composable
@@ -494,6 +860,42 @@ private fun SettingsSectionLabel(text: String) {
         letterSpacing = 0.8.sp,
         modifier = Modifier.padding(start = 4.dp, top = 4.dp)
     )
+}
+
+@Composable
+private fun GoalTextField(
+    label: String,
+    value: String,
+    unit: String,
+    onValueChange: (String) -> Unit,
+    onDone: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+            Text(unit, style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.width(110.dp),
+            singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Done
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { onDone() }),
+            textStyle = androidx.compose.ui.text.TextStyle(
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+        )
+    }
 }
 
 @Composable

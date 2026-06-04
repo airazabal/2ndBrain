@@ -102,8 +102,9 @@ fun HomeScreen(
     meditationSessions: List<com.alex.a2ndbrain.core.meditation.MeditationSession> = emptyList(),
     meditationStreaks: com.alex.a2ndbrain.core.meditation.StreakResult = com.alex.a2ndbrain.core.meditation.StreakResult(0, 0, 0),
 
-    senseOfDayScore: Int = 75,
-    senseOfDayContext: String = "🎯 Calibrating your day...",
+    senseOfDayScore: Int = 0,
+    senseOfDayContext: String = "Calibrating your day...",
+    senseOfDayPillars: List<SenseOfDayPillar> = emptyList(),
     todayTimelineEvents: List<TimelineEvent> = emptyList(),
     tomorrowTimelineEvents: List<TimelineEvent> = emptyList(),
     timelineConflicts: List<TimelineConflict> = emptyList(),
@@ -193,7 +194,10 @@ fun HomeScreen(
                 exerciseTotalMinutesThisWeek = exerciseTotalMinutesThisWeek,
                 onExerciseClick       = onExerciseClick,
                 themePreference       = themePreference,
-                onThemeToggle         = onThemeToggle
+                onThemeToggle         = onThemeToggle,
+                senseOfDayScore       = senseOfDayScore,
+                senseOfDayContext     = senseOfDayContext,
+                senseOfDayPillars     = senseOfDayPillars
             )
         }
 

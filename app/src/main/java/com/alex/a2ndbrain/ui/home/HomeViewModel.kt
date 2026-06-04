@@ -36,6 +36,13 @@ import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
 import com.alex.a2ndbrain.core.todoist.TodoistTask
 
+data class SenseOfDayPillar(
+    val label: String,
+    val value: String,
+    val goalText: String,
+    val progress: Float
+)
+
 data class EmailTriageResult(
     val isLoading: Boolean = false,
     val critical: List<String> = emptyList(),   // ⚡ Urgent
@@ -338,6 +345,15 @@ Output format rules:
             }
             .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
+    val exerciseTodayMinutes: StateFlow<Int> =
+        exerciseRepository.getAllSessionsFlow()
+            .map { sessions ->
+                val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                sessions.filter { it.isDeleted == 0 && it.date == today }
+                    .sumOf { it.durationMinutes }
+            }
+            .stateIn(viewModelScope, SharingStarted.Lazily, 0)
+
     private val _vaultNotes = MutableStateFlow<List<DocumentFile>>(emptyList())
     val vaultNotes = _vaultNotes.asStateFlow()
 
@@ -358,11 +374,14 @@ Output format rules:
     private val _healthPermissionsGranted = MutableStateFlow(false)
     val healthPermissionsGranted = _healthPermissionsGranted.asStateFlow()
 
-    private val _senseOfDayScore = MutableStateFlow(75)
+    private val _senseOfDayScore = MutableStateFlow(0)
     val senseOfDayScore = _senseOfDayScore.asStateFlow()
 
-    private val _senseOfDayContext = MutableStateFlow("Calibrating your day. Log a few steps or meditate to update your Sense of Day index.")
+    private val _senseOfDayContext = MutableStateFlow("Calibrating your day...")
     val senseOfDayContext = _senseOfDayContext.asStateFlow()
+
+    private val _senseOfDayPillars = MutableStateFlow<List<SenseOfDayPillar>>(emptyList())
+    val senseOfDayPillars: StateFlow<List<SenseOfDayPillar>> = _senseOfDayPillars.asStateFlow()
 
     // Proactive Timeline & Schedule Extractor
     val todayTimelineEvents: StateFlow<List<TimelineEvent>> = combine(
@@ -891,49 +910,62 @@ Output format rules:
 
     private fun updateSenseOfDayScore() {
         viewModelScope.launch(Dispatchers.Default) {
+            val stepsGoal = settingsManager.getStepsGoal()
+            val sleepGoalHours = settingsManager.getSleepGoalHours()
+            val exerciseGoalMinutes = settingsManager.getExerciseGoalMinutes()
+            val digitalFocusBaseline = settingsManager.getDigitalFocusBaselineMinutes()
+
             val steps = _healthMetricsToday.value.steps
-            val stepsRatio = (steps.toFloat() / 10000f).coerceIn(0f, 1f)
+            val sleepMinutes = _healthMetricsToday.value.sleepMinutes
+            val todayExerciseMins = exerciseTodayMinutes.value
+
+            val stepsProgress = (steps.toFloat() / stepsGoal).coerceIn(0f, 1f)
+            val sleepProgress = (sleepMinutes / 60f / sleepGoalHours).coerceIn(0f, 1f)
+            val exerciseProgress = (todayExerciseMins.toFloat() / exerciseGoalMinutes).coerceIn(0f, 1f)
 
             var totalFocusMs = 0L
-            var totalSocialMs = 0L
             usageStats.value.forEach { stat ->
                 val pkg = stat.packageName.lowercase()
-                if (pkg.contains("todoist") || pkg.contains("calendar") || pkg.contains("chrome") || pkg.contains("keep") || pkg.contains("brain")) {
+                if (pkg.contains("todoist") || pkg.contains("calendar") || pkg.contains("chrome") ||
+                    pkg.contains("keep") || pkg.contains("brain") || pkg.contains("notion") ||
+                    pkg.contains("slack") || pkg.contains("gmail")) {
                     totalFocusMs += stat.totalTimeVisibleMs
-                } else if (pkg.contains("instagram") || pkg.contains("facebook") || pkg.contains("tiktok") || pkg.contains("youtube") || pkg.contains("twitter") || pkg.contains("x.android")) {
-                    totalSocialMs += stat.totalTimeVisibleMs
                 }
             }
-            val totalTime = totalFocusMs + totalSocialMs
-            val focusRatio = if (totalTime == 0L) {
-                1f
-            } else {
-                totalFocusMs.toFloat() / totalTime.toFloat()
-            }
+            val focusMinutes = (totalFocusMs / 60_000L).toInt()
+            val focusProgress = (focusMinutes.toFloat() / digitalFocusBaseline).coerceIn(0f, 1f)
 
-            val meditated = meditatedToday.value
-            val calculated = (stepsRatio * 50f) + (focusRatio * 30f) + (if (meditated) 20f else 0f)
-            _senseOfDayScore.value = calculated.toInt().coerceIn(10, 100)
+            val score = ((stepsProgress + sleepProgress + exerciseProgress + focusProgress) / 4f * 100f)
+                .toInt().coerceIn(0, 100)
+            _senseOfDayScore.value = score
+
+            val stepsDisplay = if (steps > 0) "%,d".format(steps) else "0"
+            val sleepH = sleepMinutes / 60
+            val sleepM = sleepMinutes % 60
+            val sleepDisplay = if (sleepMinutes > 0) "${sleepH}h ${sleepM}m" else "--"
+            val exerciseDisplay = "${todayExerciseMins}m"
+            val focusH = focusMinutes / 60
+            val focusM = focusMinutes % 60
+            val focusDisplay = if (focusMinutes >= 60) "${focusH}h ${focusM}m" else "${focusMinutes}m"
+
+            val sleepGoalDisplay = if (sleepGoalHours == sleepGoalHours.toInt().toFloat())
+                "${sleepGoalHours.toInt()}h" else "${sleepGoalHours}h"
+
+            _senseOfDayPillars.value = listOf(
+                SenseOfDayPillar("Steps", stepsDisplay, "/ %,d".format(stepsGoal), stepsProgress),
+                SenseOfDayPillar("Sleep", sleepDisplay, "/ $sleepGoalDisplay", sleepProgress),
+                SenseOfDayPillar("Exercise", exerciseDisplay, "/ ${exerciseGoalMinutes}m", exerciseProgress),
+                SenseOfDayPillar("Focus", focusDisplay, "/ ${digitalFocusBaseline / 60}h", focusProgress)
+            )
 
             val contextText = when {
-                meditated && stepsRatio >= 0.7f && focusRatio >= 0.7f -> {
-                    "A masterclass in balance! Meditated, physically active, and excellent focus."
-                }
-                stepsRatio >= 0.7f && focusRatio >= 0.7f -> {
-                    "A great day so far! High physical activity and excellent focus."
-                }
-                stepsRatio < 0.4f && focusRatio >= 0.7f -> {
-                    "Checked off focus work, but you've been stationary. Step away for a brisk 10-minute stretch!"
-                }
-                focusRatio < 0.4f -> {
-                    "Digital distractions are high today. Set a quick focus timer and reconnect with your space."
-                }
-                steps == 0L -> {
-                    "Calibrating your day. Log a few steps or meditate to update your Sense of Day index."
-                }
-                else -> {
-                    "Balanced progress! Keep a healthy physical-digital ratio."
-                }
+                score >= 85 -> "Outstanding balance across all pillars today."
+                score >= 70 -> "Great progress. Keep the pillars balanced."
+                stepsProgress < 0.3f && exerciseProgress < 0.3f -> "Movement is low. A short walk could flip your score."
+                sleepProgress < 0.5f -> "Poor sleep is dragging the score. Prioritize rest tonight."
+                focusProgress < 0.3f -> "Focus time is low. Try a 25-min deep-work block."
+                score < 20 -> "Calibrating... log some activity to update your Sense of Day."
+                else -> "Steady progress. Keep an eye on your lowest pillar."
             }
             _senseOfDayContext.value = contextText
         }
@@ -952,9 +984,9 @@ Output format rules:
             }
         }
 
-        // Recalculate score whenever metrics, usages, or meditation shifts
+        // Recalculate score whenever metrics, usages, meditation, or exercise shifts
         viewModelScope.launch {
-            combine(_healthMetricsToday, usageStats, meditatedToday) { _, _, _ -> }
+            combine(_healthMetricsToday, usageStats, meditatedToday, exerciseTodayMinutes) { _, _, _, _ -> }
                 .collect {
                     updateSenseOfDayScore()
                 }
