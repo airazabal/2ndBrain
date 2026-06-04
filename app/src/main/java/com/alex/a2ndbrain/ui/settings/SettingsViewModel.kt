@@ -101,7 +101,7 @@ class SettingsViewModel(
         val geminiKey = settingsManager.getGeminiApiKey()
 
         org.json.JSONObject().apply {
-            put("version", 3)
+            put("version", 4)
             put("exportedAt", System.currentTimeMillis())
             put("monitoredApps", appsArray)
             put("memories", memoriesArray)
@@ -109,6 +109,18 @@ class SettingsViewModel(
             put("healthSnapshots", healthArray)
             if (todoistToken.isNotBlank()) put("todoistApiToken", todoistToken)
             if (geminiKey.isNotBlank()) put("geminiApiKey", geminiKey)
+            // App preferences
+            put("geminiModel", settingsManager.getGeminiModel())
+            put("preferredModelType", settingsManager.getPreferredModelType())
+            put("selectedLiteRTModel", settingsManager.getSelectedLiteRTModel())
+            put("themePreference", settingsManager.getThemePreference())
+            put("refreshIntervalMinutes", settingsManager.getRefreshIntervalMinutes())
+            put("calendarSyncEnabled", settingsManager.isCalendarSyncEnabled())
+            // Daily Goals
+            put("stepsGoal", settingsManager.getStepsGoal())
+            put("sleepGoalHours", settingsManager.getSleepGoalHours())
+            put("exerciseGoalMinutes", settingsManager.getExerciseGoalMinutes())
+            put("digitalFocusBaselineMinutes", settingsManager.getDigitalFocusBaselineMinutes())
         }.toString(2)
     }
 
@@ -126,5 +138,29 @@ class SettingsViewModel(
 
         obj.optString("geminiApiKey").takeIf { it.isNotBlank() }
             ?.let { settingsManager.saveGeminiApiKey(it) }
+
+        // App preferences
+        obj.optString("geminiModel").takeIf { it.isNotBlank() }
+            ?.let { settingsManager.saveGeminiModel(it) }
+        obj.optString("preferredModelType").takeIf { it.isNotBlank() }
+            ?.let { settingsManager.savePreferredModelType(it) }
+        obj.optString("selectedLiteRTModel").takeIf { it.isNotBlank() }
+            ?.let { settingsManager.saveSelectedLiteRTModel(it) }
+        obj.optString("themePreference").takeIf { it.isNotBlank() }
+            ?.let { settingsManager.saveThemePreference(it) }
+        if (obj.has("refreshIntervalMinutes"))
+            settingsManager.setRefreshIntervalMinutes(obj.getInt("refreshIntervalMinutes"))
+        if (obj.has("calendarSyncEnabled"))
+            settingsManager.setCalendarSyncEnabled(obj.getBoolean("calendarSyncEnabled"))
+
+        // Daily Goals
+        if (obj.has("stepsGoal"))
+            settingsManager.setStepsGoal(obj.getInt("stepsGoal"))
+        if (obj.has("sleepGoalHours"))
+            settingsManager.setSleepGoalHours(obj.getDouble("sleepGoalHours").toFloat())
+        if (obj.has("exerciseGoalMinutes"))
+            settingsManager.setExerciseGoalMinutes(obj.getInt("exerciseGoalMinutes"))
+        if (obj.has("digitalFocusBaselineMinutes"))
+            settingsManager.setDigitalFocusBaselineMinutes(obj.getInt("digitalFocusBaselineMinutes"))
     }
 }
