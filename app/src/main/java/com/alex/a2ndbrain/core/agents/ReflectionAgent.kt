@@ -184,6 +184,54 @@ class ReflectionAgent {
             append("\n")
         }
 
+        // ── Exercise ──────────────────────────────────────────────────────
+        if (ctx.exercise.recentSessions.isNotEmpty()) {
+            when (type) {
+                ReflectionType.WEEKLY_CORRELATION -> {
+                    val sessions = ctx.exercise.recentSessions
+                    val totalMins = sessions.sumOf { it.durationMinutes }
+                    append("PAST 7 DAYS EXERCISE:\n")
+                    append("- Sessions: ${sessions.size}, total: ${totalMins / 60}h ${totalMins % 60}m\n")
+                    sessions.forEach { s ->
+                        val exType = runCatching {
+                            com.alex.a2ndbrain.core.exercise.ExerciseType.valueOf(s.type).displayName
+                        }.getOrDefault(s.type)
+                        val dur = if (s.durationMinutes >= 60) "${s.durationMinutes / 60}h ${s.durationMinutes % 60}m"
+                                  else "${s.durationMinutes}m"
+                        val notes = if (s.notes.isNotBlank()) " — ${s.notes}" else ""
+                        append("- ${s.date}: $exType $dur$notes\n")
+                    }
+                }
+                else -> {
+                    val todaySessions = ctx.exercise.recentSessions.filter { it.date == todayStr }
+                    if (todaySessions.isNotEmpty()) {
+                        val totalMins = todaySessions.sumOf { it.durationMinutes }
+                        append("EXERCISE TODAY:\n")
+                        todaySessions.forEach { s ->
+                            val exType = runCatching {
+                                com.alex.a2ndbrain.core.exercise.ExerciseType.valueOf(s.type).displayName
+                            }.getOrDefault(s.type)
+                            val dur = if (s.durationMinutes >= 60) "${s.durationMinutes / 60}h ${s.durationMinutes % 60}m"
+                                      else "${s.durationMinutes}m"
+                            val notes = if (s.notes.isNotBlank()) " — ${s.notes}" else ""
+                            append("- $exType $dur$notes\n")
+                        }
+                        append("- Total: ${totalMins / 60}h ${totalMins % 60}m\n")
+                    } else {
+                        val recentSession = ctx.exercise.recentSessions.firstOrNull()
+                        if (recentSession != null) {
+                            val exType = runCatching {
+                                com.alex.a2ndbrain.core.exercise.ExerciseType.valueOf(recentSession.type).displayName
+                            }.getOrDefault(recentSession.type)
+                            append("RECENT EXERCISE:\n")
+                            append("- Last session: ${recentSession.date} $exType ${recentSession.durationMinutes}m\n")
+                        }
+                    }
+                }
+            }
+            append("\n")
+        }
+
         // ── Meditation ────────────────────────────────────────────────────
         if (ctx.meditation.sessions.isNotEmpty()) {
             val streaks = ctx.meditation.streaks

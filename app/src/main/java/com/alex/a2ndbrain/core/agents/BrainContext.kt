@@ -1,6 +1,7 @@
 package com.alex.a2ndbrain.core.agents
 
 import com.alex.a2ndbrain.TimelineEvent
+import com.alex.a2ndbrain.core.exercise.ExerciseSessionEntity
 import com.alex.a2ndbrain.core.health.HealthMetrics
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
@@ -17,6 +18,7 @@ data class BrainContext(
     val health: HealthContext = HealthContext(),
     val usageStats: List<UsageStatEntity> = emptyList(),
     val meditation: MeditationContext = MeditationContext(),
+    val exercise: ExerciseContext = ExerciseContext(),
     val vaultNoteLines: List<String> = emptyList(),
     val timelineEvents: List<TimelineEvent> = emptyList(),
     val timestamp: Long = System.currentTimeMillis()
@@ -32,4 +34,8 @@ data class MeditationContext(
     val sessions: List<MeditationSession> = emptyList(),
     val streaks: StreakResult = StreakResult(0, 0, 0),
     val meditatedToday: Boolean = false
+)
+
+data class ExerciseContext(
+    val recentSessions: List<ExerciseSessionEntity> = emptyList()
 )

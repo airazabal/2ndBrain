@@ -42,6 +42,10 @@ fun ExerciseScreen(
     durationMinutes: Int,
     notes: String,
     isLoading: Boolean,
+    editingSession: ExerciseSessionEntity?,
+    editSelectedType: ExerciseType,
+    editDurationMinutes: Int,
+    editNotes: String,
     onShowLogSheet: () -> Unit,
     onHideLogSheet: () -> Unit,
     onSelectType: (ExerciseType) -> Unit,
@@ -49,6 +53,12 @@ fun ExerciseScreen(
     onSetNotes: (String) -> Unit,
     onLogSession: () -> Unit,
     onDeleteSession: (String) -> Unit,
+    onEditSession: (ExerciseSessionEntity) -> Unit,
+    onHideEditSheet: () -> Unit,
+    onSetEditType: (ExerciseType) -> Unit,
+    onSetEditDuration: (Int) -> Unit,
+    onSetEditNotes: (String) -> Unit,
+    onSaveEdit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -106,7 +116,8 @@ fun ExerciseScreen(
             items(sessions, key = { it.id }) { session ->
                 ExerciseSessionItem(
                     session = session,
-                    onDelete = { onDeleteSession(session.id) }
+                    onDelete = { onDeleteSession(session.id) },
+                    onEdit = { onEditSession(session) }
                 )
             }
         }
@@ -123,6 +134,20 @@ fun ExerciseScreen(
             onSetDuration = onSetDuration,
             onSetNotes = onSetNotes,
             onLogSession = onLogSession
+        )
+    }
+
+    if (editingSession != null) {
+        EditSessionBottomSheet(
+            selectedType = editSelectedType,
+            durationMinutes = editDurationMinutes,
+            notes = editNotes,
+            isLoading = isLoading,
+            onDismiss = onHideEditSheet,
+            onSelectType = onSetEditType,
+            onSetDuration = onSetEditDuration,
+            onSetNotes = onSetEditNotes,
+            onSave = onSaveEdit
         )
     }
 }
@@ -259,7 +284,8 @@ private fun ExerciseConsistencyBars(consistency: List<Pair<String, Float>>) {
 @Composable
 private fun ExerciseSessionItem(
     session: ExerciseSessionEntity,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onEdit: () -> Unit
 ) {
     val type = runCatching { ExerciseType.valueOf(session.type) }.getOrDefault(ExerciseType.OTHER)
     val dateLabel = runCatching {
@@ -312,6 +338,14 @@ private fun ExerciseSessionItem(
                         maxLines = 1
                     )
                 }
+            }
+            IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "Edit session",
+                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                    modifier = Modifier.size(18.dp)
+                )
             }
             IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
                 Icon(
@@ -429,6 +463,107 @@ private fun LogSessionBottomSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditSessionBottomSheet(
+    selectedType: ExerciseType,
+    durationMinutes: Int,
+    notes: String,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    onSelectType: (ExerciseType) -> Unit,
+    onSetDuration: (Int) -> Unit,
+    onSetNotes: (String) -> Unit,
+    onSave: () -> Unit
+) {
+    val focusManager = LocalFocusManager.current
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                "Edit Session",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+
+            ExerciseTypeChips(selected = selectedType, onSelect = onSelectType)
+
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "Duration",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    val h = durationMinutes / 60
+                    val m = durationMinutes % 60
+                    val label = when {
+                        h > 0 && m > 0 -> "${h}h ${m}m"
+                        h > 0 -> "${h}h"
+                        else -> "${m} min"
+                    }
+                    Text(
+                        label,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = accentGreen
+                    )
+                }
+                Slider(
+                    value = (durationMinutes / 5f),
+                    onValueChange = { onSetDuration((it.toInt() * 5).coerceAtLeast(5)) },
+                    valueRange = 1f..24f,
+                    steps = 22,
+                    colors = SliderDefaults.colors(
+                        thumbColor = accentGreen,
+                        activeTrackColor = accentGreen
+                    )
+                )
+            }
+
+            OutlinedTextField(
+                value = notes,
+                onValueChange = onSetNotes,
+                label = { Text("Notes (optional)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() })
+            )
+
+            Button(
+                onClick = {
+                    focusManager.clearFocus()
+                    onSave()
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isLoading,
+                colors = ButtonDefaults.buttonColors(containerColor = accentGreen)
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = Color.White,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text("Save Changes", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ExerciseTypeChips(
     selected: ExerciseType,
@@ -506,7 +641,7 @@ private fun exerciseIcon(type: ExerciseType): ImageVector = when (type) {
     ExerciseType.CYCLING -> Icons.AutoMirrored.Filled.DirectionsBike
     ExerciseType.SWIMMING -> Icons.Default.Pool
     ExerciseType.STRENGTH -> Icons.Default.FitnessCenter
-    ExerciseType.YOGA -> Icons.Default.SelfImprovement
+    ExerciseType.STRETCHING -> Icons.Default.AccessibilityNew
     ExerciseType.HIIT -> Icons.Default.Whatshot
     ExerciseType.OTHER -> Icons.Default.SportsHandball
 }

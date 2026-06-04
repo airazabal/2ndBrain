@@ -5,7 +5,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.ui.exercise.ExerciseScreen
 import com.alex.a2ndbrain.ui.exercise.ExerciseViewModel
 import com.alex.a2ndbrain.ui.health.HealthScreen
@@ -28,7 +27,6 @@ private enum class WellnessTab(val label: String) {
 
 @Composable
 fun WellnessScreen(
-    settingsManager: CaptureSettingsManager,
     initialTab: String = "HEALTH",
     modifier: Modifier = Modifier
 ) {
@@ -78,6 +76,10 @@ fun WellnessScreen(
                     durationMinutes = exerciseUiState.durationMinutes,
                     notes = exerciseUiState.notes,
                     isLoading = exerciseUiState.isLoading,
+                    editingSession = exerciseUiState.editingSession,
+                    editSelectedType = exerciseUiState.editSelectedType,
+                    editDurationMinutes = exerciseUiState.editDurationMinutes,
+                    editNotes = exerciseUiState.editNotes,
                     onShowLogSheet = exerciseViewModel::showLogSheet,
                     onHideLogSheet = exerciseViewModel::hideLogSheet,
                     onSelectType = exerciseViewModel::selectType,
@@ -85,13 +87,18 @@ fun WellnessScreen(
                     onSetNotes = exerciseViewModel::setNotes,
                     onLogSession = exerciseViewModel::logSession,
                     onDeleteSession = exerciseViewModel::deleteSession,
+                    onEditSession = exerciseViewModel::showEditSheet,
+                    onHideEditSheet = exerciseViewModel::hideEditSheet,
+                    onSetEditType = exerciseViewModel::setEditType,
+                    onSetEditDuration = exerciseViewModel::setEditDuration,
+                    onSetEditNotes = exerciseViewModel::setEditNotes,
+                    onSaveEdit = exerciseViewModel::saveEdit,
                     modifier = Modifier.fillMaxSize()
                 )
                 WellnessTab.MEDITATION -> MeditationScreen(sessions = sessions, streaks = streaks)
                 WellnessTab.ONLINE -> DigitalTimeScreen()
                 WellnessTab.REFLECT -> ReflectionScreen(
                     summaries = summaries,
-                    settingsManager = settingsManager,
                     isGenerating = isGenerating,
                     onGenerateReflection = { reflectionViewModel.generateReflection() },
                     onCancelReflection = { reflectionViewModel.cancelReflection() },

@@ -9,7 +9,7 @@ enum class ExerciseType(val displayName: String) {
     CYCLING("Cycling"),
     SWIMMING("Swimming"),
     STRENGTH("Strength"),
-    YOGA("Yoga"),
+    STRETCHING("Stretching"),
     HIIT("HIIT"),
     OTHER("Other")
 }

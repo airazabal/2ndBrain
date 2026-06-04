@@ -51,6 +51,10 @@ class ExerciseRepository(
         exerciseDao.softDelete(id)
     }
 
+    suspend fun updateSession(id: String, type: ExerciseType, durationMinutes: Int, notes: String) = withContext(Dispatchers.IO) {
+        exerciseDao.updateSession(id, type.name, durationMinutes, notes)
+    }
+
     fun getAllSessionsFlow(): Flow<List<ExerciseSessionEntity>> =
         exerciseDao.getAllSessionsFlow()
 
@@ -87,6 +91,10 @@ class ExerciseRepository(
     suspend fun getWeeklySummary(): Pair<Int, Int> = withContext(Dispatchers.IO) {
         val sessions = exerciseDao.getSessionsSinceSync(sinceDate(6))
         sessions.size to sessions.sumOf { it.durationMinutes }
+    }
+
+    suspend fun getRecentSessions(daysBack: Int) = withContext(Dispatchers.IO) {
+        exerciseDao.getSessionsSinceSync(sinceDate(daysBack))
     }
 
     suspend fun getModifiedSince(since: Long) = withContext(Dispatchers.IO) {

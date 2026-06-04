@@ -71,7 +71,7 @@ val appModule = module {
     single { ReflectionAgent() }
     single { ModelPicker(androidContext()) }
     single { ModelRouter(get(), get(), get()) }
-    single { OrchestratorAgent(get(), get(), get(), get(), get()) }
+    single { OrchestratorAgent(get(), get(), get(), get(), get(), get()) }
     // factory = new SessionMemory per Copilot session (not a global singleton)
     factory { SessionMemory() }
 

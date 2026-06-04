@@ -1,6 +1,7 @@
 package com.alex.a2ndbrain.core.agents
 
 import android.util.Log
+import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -28,7 +29,8 @@ class OrchestratorAgent(
     private val healthAgent: HealthAgent,
     private val reflectionAgent: ReflectionAgent,
     private val modelRouter: ModelRouter,
-    private val usageRepository: UsageRepository
+    private val usageRepository: UsageRepository,
+    private val exerciseRepository: ExerciseRepository
 ) {
 
     /**
@@ -43,9 +45,10 @@ class OrchestratorAgent(
         query: String = "",
         flags: DynamicContextFlags? = null
     ): BrainContext = withContext(Dispatchers.IO) {
-        val needsMemory = flags == null || flags.includeMemories
-        val needsHealth = flags == null || flags.includeHealth || flags.includeMeditation
-        val needsUsage  = flags == null || flags.includeUsage
+        val needsMemory   = flags == null || flags.includeMemories
+        val needsHealth   = flags == null || flags.includeHealth || flags.includeMeditation
+        val needsUsage    = flags == null || flags.includeUsage
+        val needsExercise = flags == null || flags.includeExercise
 
         coroutineScope {
             val memoriesDeferred = async {
@@ -61,16 +64,24 @@ class OrchestratorAgent(
                     catch (e: Exception) { emptyList() }
                 } else emptyList()
             }
+            val exerciseDeferred = async {
+                if (needsExercise) {
+                    try { exerciseRepository.getRecentSessions(7) }
+                    catch (e: Exception) { emptyList() }
+                } else emptyList()
+            }
 
             val memories = memoriesDeferred.await()
             val (healthCtx, meditationCtx) = healthPairDeferred.await()
             val usage = usageDeferred.await()
+            val exerciseSessions = exerciseDeferred.await()
 
             BrainContext(
                 memories = memories,
                 health = healthCtx,
                 usageStats = usage,
-                meditation = meditationCtx
+                meditation = meditationCtx,
+                exercise = ExerciseContext(recentSessions = exerciseSessions)
             )
         }
     }
@@ -189,6 +200,22 @@ class OrchestratorAgent(
             }
         }
 
+        if (flags.includeExercise && ctx.exercise.recentSessions.isNotEmpty()) {
+            val sessions = ctx.exercise.recentSessions
+            val totalMins = sessions.sumOf { it.durationMinutes }
+            append("EXERCISE (last 7 days):\n")
+            append("- Sessions: ${sessions.size}, total time: ${totalMins / 60}h ${totalMins % 60}m\n")
+            sessions.take(5).forEach { s ->
+                val type = runCatching { com.alex.a2ndbrain.core.exercise.ExerciseType.valueOf(s.type).displayName }
+                    .getOrDefault(s.type)
+                val dur = if (s.durationMinutes >= 60) "${s.durationMinutes / 60}h ${s.durationMinutes % 60}m"
+                          else "${s.durationMinutes}m"
+                val notes = if (s.notes.isNotBlank()) " — ${s.notes}" else ""
+                append("- ${s.date}: $type $dur$notes\n")
+            }
+            append("\n")
+        }
+
         if (flags.includeMeditation && ctx.meditation.sessions.isNotEmpty()) {
             val streaks = ctx.meditation.streaks
             append("MEDITATION (Zendence):\n")
@@ -235,6 +262,7 @@ data class DynamicContextFlags(
     val includeUsage: Boolean,
     val includeMeditation: Boolean,
     val includeMemories: Boolean,
+    val includeExercise: Boolean,
     val isGeneral: Boolean
 ) {
     companion object {
@@ -243,15 +271,17 @@ data class DynamicContextFlags(
             val health = listOf("step", "sleep", "heart", "bpm", "walk", "physical", "active", "health", "run", "fit", "calories").any { lower.contains(it) }
             // "spend/spent" removed — too ambiguous; finance keywords below catch money questions
             val usage = listOf("screen time", "app time", "screen", "usage", "youtube", "chrome", "social", "distract", "phone", "tablet", "device", "online", "digital", "how long").any { lower.contains(it) }
-            val meditation = listOf("meditat", "zendence", "streak", "session", "mindful", "calm", "insight", "breath", "relax", "practice", "mantra", "sit").any { lower.contains(it) }
+            val meditation = listOf("meditat", "zendence", "streak", "mindful", "calm", "insight", "breath", "relax", "practice", "mantra", "sit").any { lower.contains(it) }
+            val exercise = listOf("exercise", "workout", "gym", "training", "fitness", "jog", "lift", "weightlift", "cycling", "swimming", "hiit", "stretching").any { lower.contains(it) }
             // Finance keywords route to memories (bank/payment notifications captured there)
             val finance = listOf("money", "spend", "spent", "paid", "pay", "payment", "bank", "transaction", "cost", "price", "purchase", "budget", "expense", "shop", "bought", "dollar", "financ", "bill", "invoice", "charge", "receipt").any { lower.contains(it) }
             val memories = finance || listOf("notification", "clipboard", "log", "memory", "captured", "tag", "remember", "text", "copy", "message", "email", "chat", "gmail", "slack", "whatsapp").any { lower.contains(it) }
-            val general = !health && !usage && !meditation && !memories
+            val general = !health && !usage && !meditation && !exercise && !memories
             return DynamicContextFlags(
                 includeHealth = health || general,
                 includeUsage = usage || general,
                 includeMeditation = meditation || general,
+                includeExercise = exercise || general,
                 includeMemories = memories || general,
                 isGeneral = general
             )

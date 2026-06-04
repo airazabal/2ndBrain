@@ -19,7 +19,11 @@ data class ExerciseUiState(
     val selectedType: ExerciseType = ExerciseType.WALKING,
     val durationMinutes: Int = 30,
     val notes: String = "",
-    val startedAt: Long = 0L
+    val startedAt: Long = 0L,
+    val editingSession: ExerciseSessionEntity? = null,
+    val editSelectedType: ExerciseType = ExerciseType.WALKING,
+    val editDurationMinutes: Int = 30,
+    val editNotes: String = ""
 )
 
 class ExerciseViewModel(
@@ -85,6 +89,36 @@ class ExerciseViewModel(
     fun deleteSession(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
             exerciseRepository.deleteSession(id)
+            refreshWeeklySummary()
+        }
+    }
+
+    fun showEditSheet(session: ExerciseSessionEntity) = _uiState.update {
+        val type = runCatching { ExerciseType.valueOf(session.type) }.getOrDefault(ExerciseType.OTHER)
+        it.copy(
+            editingSession = session,
+            editSelectedType = type,
+            editDurationMinutes = session.durationMinutes,
+            editNotes = session.notes
+        )
+    }
+
+    fun hideEditSheet() = _uiState.update {
+        it.copy(editingSession = null, editSelectedType = ExerciseType.WALKING, editDurationMinutes = 30, editNotes = "")
+    }
+
+    fun setEditType(type: ExerciseType) = _uiState.update { it.copy(editSelectedType = type) }
+    fun setEditDuration(minutes: Int) = _uiState.update { it.copy(editDurationMinutes = minutes) }
+    fun setEditNotes(text: String) = _uiState.update { it.copy(editNotes = text) }
+
+    fun saveEdit() {
+        val state = _uiState.value
+        val session = state.editingSession ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiState.update { it.copy(isLoading = true) }
+            exerciseRepository.updateSession(session.id, state.editSelectedType, state.editDurationMinutes, state.editNotes)
+            _uiState.update { it.copy(isLoading = false) }
+            hideEditSheet()
             refreshWeeklySummary()
         }
     }
