@@ -48,6 +48,7 @@ fun DashboardHeader(
     senseOfDayScore: Int = 0,
     senseOfDayContext: String = "",
     senseOfDayPillars: List<SenseOfDayPillar> = emptyList(),
+    onPillarClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -108,7 +109,8 @@ fun DashboardHeader(
         SenseOfDayWidget(
             score = senseOfDayScore,
             context = senseOfDayContext,
-            pillars = senseOfDayPillars
+            pillars = senseOfDayPillars,
+            onPillarClick = onPillarClick
         )
 
         Spacer(Modifier.height(12.dp))

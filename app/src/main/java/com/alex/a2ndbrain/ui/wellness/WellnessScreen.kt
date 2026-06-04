@@ -13,6 +13,8 @@ import com.alex.a2ndbrain.ui.home.HomeViewModel
 import com.alex.a2ndbrain.ui.meditation.MeditationScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionViewModel
+import com.alex.a2ndbrain.ui.todoist.TodoistScreen
+import com.alex.a2ndbrain.ui.todoist.TodoistViewModel
 import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
@@ -20,6 +22,7 @@ import org.koin.androidx.compose.koinViewModel
 private enum class WellnessTab(val label: String) {
     HEALTH("Health"),
     EXERCISE("Exercise"),
+    TASKS("Tasks"),
     MEDITATION("Meditation"),
     ONLINE("Online"),
     REFLECT("Reflect")
@@ -34,8 +37,10 @@ fun WellnessScreen(
     val homeViewModel: HomeViewModel = koinViewModel()
     val reflectionViewModel: ReflectionViewModel = koinViewModel()
     val exerciseViewModel: ExerciseViewModel = koinViewModel()
+    val todoistViewModel: TodoistViewModel = koinViewModel()
 
     val sessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
+    val todoistUiState by todoistViewModel.uiState.collectAsStateWithLifecycle()
     val streaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
     val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
     val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
@@ -66,6 +71,14 @@ fun WellnessScreen(
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (selectedTab) {
                 WellnessTab.HEALTH -> HealthScreen(viewModel = healthViewModel, modifier = Modifier.fillMaxSize())
+                WellnessTab.TASKS -> TodoistScreen(
+                    completions = todoistUiState.completions,
+                    weeklyActivity = todoistUiState.weeklyActivity,
+                    todayCount = todoistUiState.todayCount,
+                    weeklyCount = todoistUiState.weeklyCount,
+                    totalCount = todoistUiState.totalCount,
+                    modifier = Modifier.fillMaxSize()
+                )
                 WellnessTab.EXERCISE -> ExerciseScreen(
                     sessions = exerciseUiState.sessions,
                     weeklyConsistency = exerciseUiState.weeklyConsistency,

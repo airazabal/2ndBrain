@@ -642,7 +642,10 @@ fun AppCaptureSettingsScreen(
                         label = "Daily Steps Goal",
                         value = stepsGoalText,
                         unit = "steps",
-                        onValueChange = { stepsGoalText = it },
+                        onValueChange = {
+                            stepsGoalText = it
+                            it.toIntOrNull()?.let { v -> settingsManager.setStepsGoal(v) }
+                        },
                         onDone = {
                             stepsGoalText.toIntOrNull()?.let { settingsManager.setStepsGoal(it) }
                         }
@@ -651,7 +654,10 @@ fun AppCaptureSettingsScreen(
                         label = "Sleep Goal",
                         value = sleepGoalText,
                         unit = "hours",
-                        onValueChange = { sleepGoalText = it },
+                        onValueChange = {
+                            sleepGoalText = it
+                            it.toFloatOrNull()?.let { v -> settingsManager.setSleepGoalHours(v) }
+                        },
                         onDone = {
                             sleepGoalText.toFloatOrNull()?.let { settingsManager.setSleepGoalHours(it) }
                         }
@@ -660,7 +666,10 @@ fun AppCaptureSettingsScreen(
                         label = "Daily Exercise Goal",
                         value = exerciseGoalText,
                         unit = "min",
-                        onValueChange = { exerciseGoalText = it },
+                        onValueChange = {
+                            exerciseGoalText = it
+                            it.toIntOrNull()?.let { v -> settingsManager.setExerciseGoalMinutes(v) }
+                        },
                         onDone = {
                             exerciseGoalText.toIntOrNull()?.let { settingsManager.setExerciseGoalMinutes(it) }
                         }
@@ -669,7 +678,10 @@ fun AppCaptureSettingsScreen(
                         label = "Digital Focus Baseline",
                         value = focusGoalText,
                         unit = "min/day",
-                        onValueChange = { focusGoalText = it },
+                        onValueChange = {
+                            focusGoalText = it
+                            it.toIntOrNull()?.let { v -> settingsManager.setDigitalFocusBaselineMinutes(v) }
+                        },
                         onDone = {
                             focusGoalText.toIntOrNull()?.let { settingsManager.setDigitalFocusBaselineMinutes(it) }
                         }

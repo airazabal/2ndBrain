@@ -3,12 +3,14 @@ package com.alex.a2ndbrain.ui.home
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -31,6 +33,7 @@ fun SenseOfDayWidget(
     score: Int,
     context: String,
     pillars: List<SenseOfDayPillar>,
+    onPillarClick: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val animatedScore by animateFloatAsState(
@@ -41,6 +44,13 @@ fun SenseOfDayWidget(
 
     val hue = (animatedScore / 100f * 120f).coerceIn(0f, 120f)
     val scoreColor = Color.hsv(hue, 0.72f, 0.88f)
+
+    // Animate each pillar's progress independently
+    val animP0 by animateFloatAsState(targetValue = pillars.getOrNull(0)?.progress ?: 0f, animationSpec = tween(700), label = "p0")
+    val animP1 by animateFloatAsState(targetValue = pillars.getOrNull(1)?.progress ?: 0f, animationSpec = tween(700), label = "p1")
+    val animP2 by animateFloatAsState(targetValue = pillars.getOrNull(2)?.progress ?: 0f, animationSpec = tween(700), label = "p2")
+    val animP3 by animateFloatAsState(targetValue = pillars.getOrNull(3)?.progress ?: 0f, animationSpec = tween(700), label = "p3")
+    val animatedProgresses = listOf(animP0, animP1, animP2, animP3)
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -88,28 +98,36 @@ fun SenseOfDayWidget(
                         val arcSize = Size(size.width - strokePx, size.height - strokePx)
                         val topLeft = Offset(inset, inset)
 
-                        // Background track
-                        drawArc(
-                            color = Color.Gray.copy(alpha = 0.18f),
-                            startAngle = 135f,
-                            sweepAngle = 270f,
-                            useCenter = false,
-                            topLeft = topLeft,
-                            size = arcSize,
-                            style = Stroke(width = strokePx, cap = StrokeCap.Round)
-                        )
-                        // Score arc
-                        val sweep = (animatedScore / 100f * 270f).coerceIn(0f, 270f)
-                        if (sweep > 0f) {
+                        val totalArc = 270f
+                        val gapDeg = 4f
+                        val segmentDeg = (totalArc - 3 * gapDeg) / 4f  // ~64.5°
+
+                        pillarColors.forEachIndexed { i, color ->
+                            val segStart = 135f + i * (segmentDeg + gapDeg)
+                            val progress = animatedProgresses.getOrElse(i) { 0f }
+                            // Dim background track for this segment
                             drawArc(
-                                color = scoreColor,
-                                startAngle = 135f,
-                                sweepAngle = sweep,
+                                color = color.copy(alpha = 0.18f),
+                                startAngle = segStart,
+                                sweepAngle = segmentDeg,
                                 useCenter = false,
                                 topLeft = topLeft,
                                 size = arcSize,
                                 style = Stroke(width = strokePx, cap = StrokeCap.Round)
                             )
+                            // Progress fill
+                            val fillSweep = progress * segmentDeg
+                            if (fillSweep > 0f) {
+                                drawArc(
+                                    color = color,
+                                    startAngle = segStart,
+                                    sweepAngle = fillSweep,
+                                    useCenter = false,
+                                    topLeft = topLeft,
+                                    size = arcSize,
+                                    style = Stroke(width = strokePx, cap = StrokeCap.Round)
+                                )
+                            }
                         }
                     }
 
@@ -150,6 +168,7 @@ fun SenseOfDayWidget(
                         PillarIndicator(
                             pillar = pillar,
                             color = pillarColors.getOrElse(i) { Color.Gray },
+                            onClick = { onPillarClick(pillar.label) },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -163,6 +182,7 @@ fun SenseOfDayWidget(
 private fun PillarIndicator(
     pillar: SenseOfDayPillar,
     color: Color,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val animatedProgress by animateFloatAsState(
@@ -171,7 +191,12 @@ private fun PillarIndicator(
         label = "pillar_${pillar.label}"
     )
 
-    Column(modifier = modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(4.dp)
+    ) {
         Text(
             text = pillar.label.uppercase(),
             fontSize = 8.sp,

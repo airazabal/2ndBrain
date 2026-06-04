@@ -660,6 +660,13 @@ class MainActivity : ComponentActivity() {
                                                         exerciseSessionsThisWeek = exerciseWeekSessions,
                                                         exerciseTotalMinutesThisWeek = exerciseTotalMinutes,
                                                         onExerciseClick = { navViewModel.navigateToWellness("EXERCISE") },
+                                                        onPillarClick = { label ->
+                                                            when (label) {
+                                                                "Steps", "Sleep" -> navViewModel.navigateToWellness("HEALTH")
+                                                                "Exercise" -> navViewModel.navigateToWellness("EXERCISE")
+                                                                "Focus" -> navViewModel.navigateToWellness("ONLINE")
+                                                            }
+                                                        },
                                                         themePreference = themePreference,
                                                         onThemeToggle = {
                                                             val next = if (themePreference == "DARK") "LIGHT" else "DARK"

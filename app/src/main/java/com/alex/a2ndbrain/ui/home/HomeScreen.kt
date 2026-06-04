@@ -133,6 +133,7 @@ fun HomeScreen(
     exerciseSessionsThisWeek: Int = 0,
     exerciseTotalMinutesThisWeek: Int = 0,
     onExerciseClick: () -> Unit = {},
+    onPillarClick: (String) -> Unit = {},
     themePreference: String = "SYSTEM",
     onThemeToggle: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -193,6 +194,7 @@ fun HomeScreen(
                 exerciseSessionsThisWeek = exerciseSessionsThisWeek,
                 exerciseTotalMinutesThisWeek = exerciseTotalMinutesThisWeek,
                 onExerciseClick       = onExerciseClick,
+                onPillarClick         = onPillarClick,
                 themePreference       = themePreference,
                 onThemeToggle         = onThemeToggle,
                 senseOfDayScore       = senseOfDayScore,

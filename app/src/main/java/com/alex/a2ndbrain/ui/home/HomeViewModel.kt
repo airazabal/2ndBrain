@@ -34,6 +34,7 @@ import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
 import com.alex.a2ndbrain.core.todoist.TaskLatencyTracker
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
+import com.alex.a2ndbrain.core.todoist.TodoistStatsRepository
 import com.alex.a2ndbrain.core.todoist.TodoistTask
 
 data class SenseOfDayPillar(
@@ -61,7 +62,8 @@ class HomeViewModel(
     private val healthRepository: HealthRepository,
     private val modelRouter: ModelRouter,
     private val todoistRepository: TodoistRepository,
-    private val exerciseRepository: ExerciseRepository
+    private val exerciseRepository: ExerciseRepository,
+    private val todoistStatsRepository: TodoistStatsRepository
 ) : ViewModel() {
     val healthConnectManager get() = healthRepository.healthConnectManager
 
@@ -175,9 +177,13 @@ class HomeViewModel(
     fun completeTodoistTask(taskId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val task = _overdueTasks.value.find { it.id == taskId }
+                ?: _todoistTasks.value.find { it.id == taskId }
             val ok = todoistRepository.closeTask(taskId)
             if (ok) {
-                if (task != null) taskLatencyTracker.recordCompletion(task)
+                if (task != null) {
+                    taskLatencyTracker.recordCompletion(task)
+                    todoistStatsRepository.saveCompletion(task.id, task.content)
+                }
                 _todoistTasks.value = _todoistTasks.value.filter { it.id != taskId }
                 _overdueTasks.value = _overdueTasks.value.filter { it.id != taskId }
                 _taskLatencyStats.value = taskLatencyTracker.getStats(_overdueTasks.value)
@@ -1025,6 +1031,8 @@ Output format rules:
     fun checkHealthPermissionsAndSync() {
         _lastRefreshedAt.value = System.currentTimeMillis()
         refreshMonitoredApps()
+        // Re-read goals from settings in case they were changed while the user was in Settings
+        updateSenseOfDayScore()
         viewModelScope.launch(Dispatchers.IO) {
             val hcMetrics = healthRepository.getHCMetricsIfWearable()
             if (hcMetrics != null) {
