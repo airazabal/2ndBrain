@@ -22,10 +22,12 @@
 - **Multi-Color Segmented Arc**: The arc ring is split into 4 per-pillar colored segments — blue (Steps), purple (Sleep), green (Exercise), orange (Focus) — each filling proportionally to that pillar's progress so you can see at a glance which dimensions are complete and which need work.
 - **4 Pillar Indicators**: Four animated progress bars track each dimension of your day — **Steps** (blue), **Sleep** (purple), **Exercise** (green), and **Digital Focus** (orange) — each showing current value vs. your personal goal.
 - **Tappable Pillars**: Tap any pillar to jump directly to the relevant screen — Steps/Sleep → Health, Exercise → Exercise, Focus → Online.
+- **Goal-Met Checkmarks**: A colored checkmark appears on each pillar label the moment you hit or exceed its goal.
 - **Reactive Score Engine**: Score recomputes automatically whenever Health Connect data, usage stats, exercise logs, or meditation status changes, without requiring a manual refresh.
 - **Always-Synced Goals**: Goals updated in Settings are reflected on the Home screen immediately on next resume — no stale values.
 - **Contextual Narrative**: A one-line advisory beneath the ring explains the weakest pillar and suggests a corrective action.
 - **Configurable Goals**: Set your personal daily targets in Settings → Daily Goals: step count, sleep hours, exercise minutes, and digital focus baseline.
+- **Trends History** (Wellness → Trends tab): Daily snapshots are persisted automatically. The Trends tab shows Today / 7-day / 30-day average score cards, a 14-day daily bar chart (bars colored red→yellow→green by score), an 8-week weekly averages chart, and pillar average rings showing your 14-day mean completion per pillar.
 
 ### ⌚ Smartwatch & Physical Wellness (Health Connect)
 - **Central Health Sync**: Integrates with Android **Health Connect** to seamlessly read smartwatch wellness data (e.g., Google Fit, Samsung Health, Zepp/Amazfit).
@@ -126,6 +128,8 @@
 - `core/meditation/`: Zendence content provider bridge and meditation session repository.
 - `core/todoist/`: Todoist REST API client (`TodoistRepository`), data model, `TaskLatencyTracker` for overdue staleness and completion stats, `TodoistStatsRepository` + `TodoistCompletionEntity` for local completion history, and `TodoistReminderWorker` for hourly background reminders.
 - `ui/todoist/`: `TodoistScreen` and `TodoistViewModel` — daily/weekly/total stats, 7-day bar chart, and collapsible completion history.
+- `ui/trends/`: `SenseOfDayTrendsScreen` and `SenseOfDayTrendsViewModel` — Sense of Day history graphs and pillar averages.
+- `core/senseofday/`: `SenseOfDaySnapshotEntity`, `SenseOfDaySnapshotDao`, `SenseOfDayHistoryRepository` — daily snapshot persistence and aggregation queries.
 
 ---
 
