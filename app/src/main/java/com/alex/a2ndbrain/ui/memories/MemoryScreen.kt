@@ -12,9 +12,6 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Refresh
-import com.alex.a2ndbrain.AppCaptureSettingsActivity
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MergedMemory
 import com.alex.a2ndbrain.core.memory.deduplicateMemories
+import com.alex.a2ndbrain.ui.home.GrandCentralResult
 import com.alex.a2ndbrain.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -54,10 +52,8 @@ fun MemoryScreen(
     memories: List<MemoryEntity>,
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
-    onCaptureClipboard: () -> Unit,
     onMarkAsRead: (List<Long>) -> Unit,
     onMarkAsUnread: (List<Long>) -> Unit = {},
-    onClearAll: () -> Unit,
     monitoredApps: Set<String> = emptySet(),
     onClearAppFilter: () -> Unit = {},
     initialFilter: String = "All",
@@ -65,12 +61,12 @@ fun MemoryScreen(
     onSaveVoiceNote: ((String, String) -> Unit)? = null,
     onDeepDiveCoPilot: (MemoryEntity) -> Unit = {},
     onNotesSelected: () -> Unit = {},
+    grandCentralResult: GrandCentralResult = GrandCentralResult(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     
-    var isScanning by remember { mutableStateOf(false) }
     val messagingChipNames = setOf("Messages", "WhatsApp", "Telegram", "Signal", "Messenger", "Viber", "SMS")
     val baseFilter = initialFilter.removeSuffix("+unread")
     val startsUnreadOnly = initialFilter.endsWith("+unread")
@@ -140,16 +136,31 @@ fun MemoryScreen(
 
         val sdf = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
 
-        fun buildDayGroup(label: String, dateStart: Long, rawMemories: List<MemoryEntity>): DayGroup {
+        fun buildDayGroup(label: String, dateStart: Long, rawMemories: List<MemoryEntity>, useAiCategories: Boolean = false): DayGroup {
             val sorted = rawMemories.sortedByDescending { it.timestamp }
             val merged = deduplicateMemories(sorted)
-            val grouped = merged.groupBy { item ->
-                getAppName(context, item.primary.packageName, item.primary.source)
+
+            val appGroups: List<AppGroup> = if (useAiCategories && grandCentralResult.idToCategoryMap.isNotEmpty()) {
+                // Group by AI category; fall back to app name for items not in the map
+                val byCategoryName = merged.groupBy { item ->
+                    grandCentralResult.idToCategoryMap[item.primary.id]
+                        ?: getAppName(context, item.primary.packageName, item.primary.source)
+                }
+                byCategoryName.map { (groupName, items) ->
+                    val rep = items.first().primary
+                    val emoji = grandCentralResult.categoryEmojiMap[groupName] ?: ""
+                    AppGroup(appName = groupName, packageName = rep.packageName, source = rep.source,
+                        memories = items, categoryEmoji = emoji)
+                }.sortedWith(compareByDescending<AppGroup> { it.categoryEmoji.isNotEmpty() }
+                    .thenByDescending { it.memories.maxOf { m -> m.primary.timestamp } })
+            } else {
+                merged.groupBy { item -> getAppName(context, item.primary.packageName, item.primary.source) }
+                    .map { (appName, items) ->
+                        val rep = items.first().primary
+                        AppGroup(appName = appName, packageName = rep.packageName, source = rep.source, memories = items)
+                    }.sortedByDescending { it.memories.maxOf { m -> m.primary.timestamp } }
             }
-            val appGroups = grouped.map { (appName, items) ->
-                val rep = items.first().primary
-                AppGroup(appName = appName, packageName = rep.packageName, source = rep.source, memories = items)
-            }.sortedByDescending { appGroup -> appGroup.memories.maxOf { it.primary.timestamp } }
+
             return DayGroup(
                 label = label, dateStart = dateStart, appGroups = appGroups,
                 memories = sorted, unreadCount = merged.count { !it.primary.isRead }
@@ -173,7 +184,7 @@ fun MemoryScreen(
                 1 -> "Yesterday"
                 else -> sdf.format(Date(dayBoundaries[i]))
             }
-            groups.add(buildDayGroup(label, dayBoundaries[i], dayMemories))
+            groups.add(buildDayGroup(label, dayBoundaries[i], dayMemories, useAiCategories = (i == 0)))
         }
         groups
         }
@@ -193,110 +204,26 @@ fun MemoryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        text = "Feed",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        softWrap = false
+                Text(
+                    text = "Feed",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    softWrap = false
+                )
+
+                IconButton(onClick = {
+                    val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context,
+                        android.Manifest.permission.RECORD_AUDIO
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    if (hasPermission) showRecordingDialog = true
+                    else permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Mic,
+                        contentDescription = "Quick Voice Capture",
+                        tint = MaterialTheme.colorScheme.primary
                     )
-                    if (isScanning) {
-                        Text("Updating...", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    IconButton(onClick = {
-                        val hasPermission = androidx.core.content.ContextCompat.checkSelfPermission(
-                            context,
-                            android.Manifest.permission.RECORD_AUDIO
-                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                        if (hasPermission) showRecordingDialog = true
-                        else permissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                    }) {
-                        Icon(
-                            imageVector = Icons.Filled.Mic,
-                            contentDescription = "Quick Voice Capture",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    TextButton(
-                        onClick = {
-                            context.startActivity(Intent(context, AppCaptureSettingsActivity::class.java))
-                        }
-                    ) {
-                        Text("SETUP", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    }
-
-                    var showMenu by remember { mutableStateOf(false) }
-
-                    Box {
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "More actions",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
-
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Capture Clipboard") },
-                                leadingIcon = { Text("📋", fontSize = 16.sp) },
-                                onClick = {
-                                    showMenu = false
-                                    onCaptureClipboard()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(if (isScanning) "Scanning..." else "Scan Active") },
-                                leadingIcon = {
-                                    if (isScanning) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                    } else {
-                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    }
-                                },
-                                enabled = !isScanning,
-                                onClick = {
-                                    showMenu = false
-                                    isScanning = true
-                                    val scanIntent = Intent(context, com.alex.a2ndbrain.core.capture.NotificationCaptureService::class.java).apply {
-                                        action = "CHECK_ACTIVE"
-                                    }
-                                    context.startService(scanIntent)
-                                    isScanning = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { 
-                                    Text(
-                                        text = "Clear Feed",
-                                        color = MaterialTheme.colorScheme.error
-                                    ) 
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Delete,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    onClearAll()
-                                }
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -491,6 +418,7 @@ fun MemoryScreen(
                                 unreadCount = appGroup.memories.count { !it.isRead },
                                 totalCount = appGroup.memories.size,
                                 isExpanded = isExpanded,
+                                categoryEmoji = appGroup.categoryEmoji,
                                 onToggleExpand = {
                                     expandedAppGroups = if (isExpanded) {
                                         expandedAppGroups - groupKey - appGroup.appName
@@ -552,7 +480,8 @@ data class AppGroup(
     val appName: String,
     val packageName: String?,
     val source: String,
-    val memories: List<MergedMemory>
+    val memories: List<MergedMemory>,
+    val categoryEmoji: String = ""  // non-empty = AI-derived category group
 )
 
 data class DayGroup(
@@ -665,8 +594,48 @@ private fun AppGroupHeader(
     isExpanded: Boolean,
     onToggleExpand: () -> Unit,
     onMarkAppAsRead: (() -> Unit)? = null,
+    categoryEmoji: String = "",
     modifier: Modifier = Modifier
 ) {
+    // Category group style (AI-derived)
+    if (categoryEmoji.isNotEmpty()) {
+        Row(
+            modifier = modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onToggleExpand() }
+                .padding(vertical = 7.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(categoryEmoji, fontSize = 15.sp)
+                Text(appName, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface)
+                if (unreadCount > 0) {
+                    Surface(color = PastelRed, shape = RoundedCornerShape(6.dp)) {
+                        Text("$unreadCount new", color = PastelRedText, fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                    }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (unreadCount > 0 && onMarkAppAsRead != null) {
+                    TextButton(onClick = onMarkAppAsRead,
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier.height(24.dp)
+                    ) { Text("Mark read", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary) }
+                }
+                Text("$totalCount", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                Icon(if (isExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null, modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.outline)
+            }
+        }
+        return
+    }
+
+    // Original app-name chip style
     val chipColor = when (source) {
         "clipboard" -> PastelPurple
         "voice" -> PastelGreen

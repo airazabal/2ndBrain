@@ -548,6 +548,7 @@ class MainActivity : ComponentActivity() {
                                         BoxWithConstraints(modifier = Modifier.weight(1f)) {
                                             val maxW = constraints.maxWidth.toFloat()
                                             val maxH = constraints.maxHeight.toFloat()
+                                            val grandCentralResult by homeViewModel.grandCentralResult.collectAsStateWithLifecycle()
                                             when (currentTab) {
                                                 AppTab.TODAY -> {
                                                     val healthMetrics by homeViewModel.healthMetricsToday.collectAsStateWithLifecycle()
@@ -575,7 +576,6 @@ class MainActivity : ComponentActivity() {
                                                     val unreadEmailCount by homeViewModel.unreadEmailCount.collectAsStateWithLifecycle()
                                                     val unreadMessageCount by homeViewModel.unreadMessageCount.collectAsStateWithLifecycle()
                                                     val meetingsTodayCount by homeViewModel.meetingsTodayCount.collectAsStateWithLifecycle()
-                                                    val emailTriageResult by homeViewModel.emailTriageResult.collectAsStateWithLifecycle()
                                                     val todoistTasks by homeViewModel.todoistTasks.collectAsStateWithLifecycle()
                                                     val overdueTasks by homeViewModel.overdueTasks.collectAsStateWithLifecycle()
                                                     val taskLatencyStats by homeViewModel.taskLatencyStats.collectAsStateWithLifecycle()
@@ -649,7 +649,7 @@ class MainActivity : ComponentActivity() {
                                                         unreadEmailCount = unreadEmailCount,
                                                         unreadMessageCount = unreadMessageCount,
                                                         meetingsTodayCount = meetingsTodayCount,
-                                                        emailTriageResult = emailTriageResult,
+                                                        grandCentralResult = grandCentralResult,
                                                         todoistTasks = todoistTasks,
                                                         overdueTasks = overdueTasks,
                                                         taskLatencyStats = taskLatencyStats,
@@ -714,7 +714,8 @@ class MainActivity : ComponentActivity() {
                                                     """.trimIndent()
                                                             navViewModel.triggerCopilotQuery(query)
                                                         },
-                                                        onNotesSelected = { navViewModel.setTab(AppTab.NOTES) }
+                                                        onNotesSelected = { navViewModel.setTab(AppTab.NOTES) },
+                                                        grandCentralResult = grandCentralResult
                                                     )
                                                 }
 

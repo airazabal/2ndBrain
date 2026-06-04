@@ -44,11 +44,8 @@ data class SenseOfDayPillar(
     val progress: Float
 )
 
-data class EmailTriageResult(
-    val isLoading: Boolean = false,
-    val critical: List<String> = emptyList(),   // ⚡ Urgent
-    val overdue: List<String> = emptyList()     // 📝 Action Required
-)
+// Legacy alias kept so callers not yet migrated still compile
+typealias EmailTriageResult = GrandCentralResult
 
 @OptIn(FlowPreview::class)
 class HomeViewModel(
@@ -226,8 +223,10 @@ class HomeViewModel(
     private val _meditationSessions = MutableStateFlow<List<MeditationSession>>(emptyList())
     val meditationSessions: StateFlow<List<MeditationSession>> = _meditationSessions.asStateFlow()
 
-    private val _emailTriageResult = MutableStateFlow(EmailTriageResult())
-    val emailTriageResult: StateFlow<EmailTriageResult> = _emailTriageResult.asStateFlow()
+    private val _grandCentralResult = MutableStateFlow(GrandCentralResult())
+    val grandCentralResult: StateFlow<GrandCentralResult> = _grandCentralResult.asStateFlow()
+    // Legacy alias
+    val emailTriageResult: StateFlow<GrandCentralResult> = _grandCentralResult
 
     init {
         refreshMeditationSessions()
@@ -238,7 +237,7 @@ class HomeViewModel(
                 refreshMeditationSessions()
             }
         }
-        // Auto-triage unread emails whenever the set changes
+        // Grand Central: triage ALL unread notifications from today whenever they change
         viewModelScope.launch {
             combine(allMemoriesForHome, _monitoredAppsState) { memories, monitored ->
                 val startOfToday = Calendar.getInstance().apply {
@@ -247,65 +246,137 @@ class HomeViewModel(
                 }.timeInMillis
                 memories.filter { m ->
                     m.source == "notification" && m.timestamp >= startOfToday && !m.isRead &&
-                    emailPackages.any { pkg -> m.packageName == pkg || m.packageName?.startsWith("$pkg.") == true } &&
                     (monitored.isEmpty() || monitored.contains(m.packageName))
                 }
             }
             .debounce(3_000L)
-            .distinctUntilChangedBy { emails -> emails.map { it.id }.toSet() }
-            .collect { emails -> triageEmails(emails) }
+            .distinctUntilChangedBy { items -> items.map { it.id }.toSet() }
+            .collect { notifications -> triageAllNotifications(notifications) }
         }
     }
 
-    private suspend fun triageEmails(emails: List<com.alex.a2ndbrain.core.memory.MemoryEntity>) {
-        if (emails.isEmpty()) {
-            _emailTriageResult.value = EmailTriageResult()
+    private suspend fun triageAllNotifications(notifications: List<com.alex.a2ndbrain.core.memory.MemoryEntity>) {
+        if (notifications.isEmpty()) {
+            _grandCentralResult.value = GrandCentralResult()
             return
         }
-        _emailTriageResult.value = EmailTriageResult(isLoading = true)
-        val snippets = emails.take(20).joinToString("\n") { m ->
-            val sender = (m.title ?: "Unknown").take(40)
-            val body = (m.content).take(80)
-            "- From: $sender | $body"
-        }
-        val prompt = """
-You are an elite executive assistant specializing in email triage, organization, and inbox management. Your sole purpose is to analyze the emails below and categorize them into a clean, highly scannable summary organized strictly into these four categories:
+        _grandCentralResult.value = GrandCentralResult(isLoading = true)
 
-1. ⚡ **Urgent:** Time-sensitive matters requiring immediate attention (e.g., critical family logistics, pressing medical updates, or high-stakes financial issues).
-2. 📝 **Action Required:** Tasks, requests, or decisions that need a response or action, but are not immediate emergencies (e.g., items to review, invitations requiring an RSVP, or project follow-ups).
-3. ℹ️ **FYI (For Your Information):** Order confirmations, status updates, receipts, or informative updates that require zero action or response.
-4. 🚫 **SPAM:** Marketing fluff, newsletters, and promotional junk.
-
-Emails (${emails.size} unread):
-$snippets
-
-Output format rules:
-- Use the exact category headers above.
-- Each item is a bullet: "- Sender Name: core topic"
-- If a category is empty, write "None." under its header.
-- No intro, no outro, no filler. Dive straight into the categorization.
-        """.trimIndent()
-        try {
-            val (response, _) = modelRouter.run(prompt, ModelRouter.Complexity.MEDIUM, timeoutMs = 20_000L)
-            val critical = mutableListOf<String>()
-            val overdue = mutableListOf<String>()
-            var currentSection = ""
-            response.lines().forEach { line ->
-                val trimmed = line.trim()
+        val pm = applicationContext.packageManager
+        fun appLabel(pkg: String?): String {
+            if (pkg.isNullOrEmpty()) return "App"
+            return try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }
+            catch (e: Exception) {
+                val lp = pkg.lowercase()
                 when {
-                    trimmed.contains("Urgent", ignoreCase = true) && trimmed.contains("⚡") -> currentSection = "urgent"
-                    trimmed.contains("Action Required", ignoreCase = true) && trimmed.contains("📝") -> currentSection = "action"
-                    trimmed.contains("FYI", ignoreCase = true) || trimmed.contains("SPAM", ignoreCase = true) -> currentSection = "ignore"
-                    trimmed.startsWith("-") && currentSection == "urgent" && !trimmed.equals("- None.", ignoreCase = true) ->
-                        critical.add(trimmed.removePrefix("-").trim())
-                    trimmed.startsWith("-") && currentSection == "action" && !trimmed.equals("- None.", ignoreCase = true) ->
-                        overdue.add(trimmed.removePrefix("-").trim())
+                    lp.contains("gmail") -> "Gmail"; lp.contains("whatsapp") -> "WhatsApp"
+                    lp.contains("messaging") -> "Messages"; lp.contains("instagram") -> "Instagram"
+                    lp.contains("slack") -> "Slack"; lp.contains("telegram") -> "Telegram"
+                    lp.contains("twitter") || lp.contains("x.android") -> "X"
+                    lp.contains("facebook") -> "Facebook"; lp.contains("discord") -> "Discord"
+                    else -> pkg.substringAfterLast(".").replaceFirstChar { it.uppercase() }
                 }
             }
-            _emailTriageResult.value = EmailTriageResult(isLoading = false, critical = critical, overdue = overdue)
+        }
+
+        val items = notifications.take(40)
+        val snippets = items.joinToString("\n") { m ->
+            val app = appLabel(m.packageName)
+            val sender = (m.title ?: "Unknown").take(50)
+            val body = m.content.take(80).replace("\n", " ")
+            "#${m.id} | $app | $sender | $body"
+        }
+
+        val prompt = """
+You are a personal intelligence assistant. Analyze today's notifications and organize them clearly.
+
+Notifications (id | source app | sender | content):
+$snippets
+
+Output EXACTLY in this format — no extra text, no markdown bold, no preamble:
+
+ACTIONS:
+#<id>: <one-line action summary>
+
+CATEGORIES:
+[<Category Name>] <single emoji>
+#<id>: <Source App> — <one-line summary>
+
+Rules:
+- ACTIONS: list only items that genuinely need a response or decision (1–5 items max). If none, write "none".
+- CATEGORIES: group ALL notifications into 3–7 contextual topic categories derived from content. Every notification must appear in exactly one category.
+- Category names should be specific and descriptive (e.g. "Financial Management", "Purchases & Deliveries", "Family & Personal", "Home & Property", "Social & Messaging", "Health & Wellness", "Work & School").
+- Each category line: [Category Name] single-emoji, then items below it as #id: App — summary.
+- No item should appear more than once.
+        """.trimIndent()
+
+        try {
+            val (response, _) = modelRouter.run(prompt, ModelRouter.Complexity.MEDIUM, timeoutMs = 25_000L)
+
+            val suggestedActions = mutableListOf<CategorizedNotification>()
+            val categories = mutableListOf<NotificationCategory>()
+            val idToCategory = mutableMapOf<Long, String>()
+            val categoryEmojiMap = mutableMapOf<String, String>()
+
+            // Build a quick lookup: id -> MemoryEntity for source app label
+            val idToEntity = items.associateBy { it.id }
+
+            var section = ""
+            var currentCategoryName = ""
+            var currentEmoji = ""
+            var currentItems = mutableListOf<CategorizedNotification>()
+
+            val categoryHeaderRegex = Regex("""^\[(.+)]\s*(\S+)\s*$""")
+            val itemRegex = Regex("""^#(\d+):\s*(.+)$""")
+
+            fun flushCategory() {
+                if (currentCategoryName.isNotEmpty() && currentItems.isNotEmpty()) {
+                    categories.add(NotificationCategory(currentCategoryName, currentEmoji, currentItems.toList()))
+                    categoryEmojiMap[currentCategoryName] = currentEmoji
+                }
+                currentItems = mutableListOf()
+            }
+
+            response.lines().forEach { raw ->
+                val line = raw.trim()
+                when {
+                    line.equals("ACTIONS:", ignoreCase = true) -> { flushCategory(); section = "actions" }
+                    line.equals("CATEGORIES:", ignoreCase = true) -> { flushCategory(); section = "categories"; currentCategoryName = "" }
+                    line.equals("none", ignoreCase = true) -> { /* skip */ }
+                    section == "categories" && categoryHeaderRegex.matches(line) -> {
+                        flushCategory()
+                        val match = categoryHeaderRegex.find(line)!!
+                        currentCategoryName = match.groupValues[1].trim()
+                        currentEmoji = match.groupValues[2].trim()
+                        categoryEmojiMap[currentCategoryName] = currentEmoji
+                    }
+                    itemRegex.matches(line) -> {
+                        val match = itemRegex.find(line)!!
+                        val id = match.groupValues[1].toLongOrNull() ?: return@forEach
+                        val summary = match.groupValues[2].trim()
+                        val sourceApp = appLabel(idToEntity[id]?.packageName)
+                        val item = CategorizedNotification(id, summary, sourceApp)
+                        if (section == "actions") {
+                            suggestedActions.add(item)
+                        } else if (section == "categories" && currentCategoryName.isNotEmpty()) {
+                            currentItems.add(item)
+                            idToCategory[id] = currentCategoryName
+                        }
+                    }
+                }
+            }
+            flushCategory()
+
+            _grandCentralResult.value = GrandCentralResult(
+                isLoading = false,
+                suggestedActions = suggestedActions,
+                categories = categories,
+                idToCategoryMap = idToCategory,
+                categoryEmojiMap = categoryEmojiMap
+            )
         } catch (e: Exception) {
-            android.util.Log.w("HomeViewModel", "Email triage failed", e)
-            _emailTriageResult.value = EmailTriageResult(isLoading = false)
+            android.util.Log.w("HomeViewModel", "Grand Central triage failed", e)
+            _grandCentralResult.value = GrandCentralResult(isLoading = false)
         }
     }
 

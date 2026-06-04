@@ -76,11 +76,14 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.filled.Hub
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.Calendar
 import java.util.Date
-import com.alex.a2ndbrain.ui.home.EmailTriageResult
+import com.alex.a2ndbrain.ui.home.GrandCentralResult
+import com.alex.a2ndbrain.ui.home.NotificationCategory
+import com.alex.a2ndbrain.ui.home.CategorizedNotification
 import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
 import com.alex.a2ndbrain.core.todoist.TodoistTask
 
@@ -122,7 +125,7 @@ fun HomeScreen(
     unreadEmailCount: Int = 0,
     unreadMessageCount: Int = 0,
     meetingsTodayCount: Int = 0,
-    emailTriageResult: EmailTriageResult = EmailTriageResult(),
+    grandCentralResult: GrandCentralResult = GrandCentralResult(),
     todoistTasks: List<TodoistTask> = emptyList(),
     overdueTasks: List<TodoistTask> = emptyList(),
     taskLatencyStats: TaskLatencyStats = TaskLatencyStats(),
@@ -203,16 +206,15 @@ fun HomeScreen(
             )
         }
 
-        // Needs Attention Now section
+        // Grand Central
         item {
-            NeedsAttentionCard(
+            GrandCentralCard(
+                grandCentralResult = grandCentralResult,
                 todayEvents        = todayTimelineEvents,
                 timelineConflicts  = timelineConflicts,
                 healthMetrics      = healthMetrics,
                 unreadEmailCount   = unreadEmailCount,
                 unreadMessageCount = unreadMessageCount,
-                emailTriageResult  = emailTriageResult,
-                latestReflection   = latestReflection,
                 onTasksClick       = {
                     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -228,7 +230,8 @@ fun HomeScreen(
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     try { context.startActivity(intent) } catch (e: Exception) { onNavigateToFeedWithFilter("Messages+unread") }
                 },
-                onHealthClick      = { onNavigateToTab(AppTab.WELLNESS) }
+                onHealthClick      = { onNavigateToTab(AppTab.WELLNESS) },
+                onFeedClick        = { onNavigateToFeedWithFilter("All") }
             )
         }
 
@@ -459,197 +462,212 @@ fun HomeScreen(
 }
 
 @Composable
-private fun NeedsAttentionCard(
+private fun GrandCentralCard(
+    grandCentralResult: GrandCentralResult,
     todayEvents: List<TimelineEvent>,
     timelineConflicts: List<TimelineConflict>,
     healthMetrics: com.alex.a2ndbrain.core.health.HealthMetrics,
     unreadEmailCount: Int,
     unreadMessageCount: Int,
-    emailTriageResult: EmailTriageResult,
-    latestReflection: DailySummaryEntity?,
+    latestReflection: DailySummaryEntity? = null,
     onTasksClick: () -> Unit,
     onEmailClick: () -> Unit,
     onMessagesClick: () -> Unit,
     onHealthClick: () -> Unit,
+    onFeedClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    data class AttentionItem(
-        val label: String,
-        val detail: String,
-        val urgency: Int, // 0=urgent(red), 1=warning(amber), 2=healthy(green)
-        val onClick: () -> Unit
-    )
-
+    // ── Local time-sensitive alerts (computed without AI) ────────────────────
+    data class LocalAlert(val label: String, val urgency: Int, val onClick: () -> Unit)
     val now = Calendar.getInstance()
     val currentMinutes = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
     val currentHour = now.get(Calendar.HOUR_OF_DAY)
-
     val calendarEvents = todayEvents.filter { it.sourcePackage == "calendar" }
 
-    val items = buildList<AttentionItem> {
-        // ── Imminent: calendar event starting within 15 min → red ────────────
-        val imminent = calendarEvents
-            .filter { it.minutesFromMidnight in currentMinutes..(currentMinutes + 15) }
-            .minByOrNull { it.minutesFromMidnight }
+    val localAlerts = buildList<LocalAlert> {
+        val imminent = calendarEvents.filter { it.minutesFromMidnight in currentMinutes..(currentMinutes + 15) }.minByOrNull { it.minutesFromMidnight }
         if (imminent != null) {
-            val minsAway = imminent.minutesFromMidnight - currentMinutes
-            val label = if (minsAway <= 0) "Starting now: ${imminent.title}"
-                        else "Starting in ${minsAway}m: ${imminent.title}"
-            add(AttentionItem(label, "Tap to see your schedule.", 0, onTasksClick))
-        }
-
-        // ── Upcoming: calendar event starting in 16–60 min → amber ───────────
-        if (imminent == null) {
-            val upcoming = calendarEvents
-                .filter { it.minutesFromMidnight in (currentMinutes + 16)..(currentMinutes + 60) }
-                .minByOrNull { it.minutesFromMidnight }
-            if (upcoming != null) {
-                val minsAway = upcoming.minutesFromMidnight - currentMinutes
-                add(AttentionItem(
-                    "In ${minsAway}m: ${upcoming.title}",
-                    "Tap to see your full schedule.",
-                    1, onTasksClick
-                ))
-            }
-        }
-
-        // ── Timeline conflicts → amber (WARNING) or red (ALERT) ──────────────
-        timelineConflicts.forEach { conflict ->
-            add(AttentionItem(
-                conflict.title,
-                conflict.description,
-                if (conflict.severity == ConflictSeverity.ALERT) 0 else 1,
-                onTasksClick
-            ))
-        }
-
-        // ── Sleep deficit: shown only before noon ─────────────────────────────
-        if (currentHour < 12 && healthMetrics.sleepMinutes in 1..359) {
-            val h = healthMetrics.sleepMinutes / 60
-            val m = healthMetrics.sleepMinutes % 60
-            val detail = if (h == 0) "${m}m sleep — consider a rest break today." else "${h}h ${m}m — less than the 6h target."
-            add(AttentionItem("Short sleep last night.", detail, 1, onHealthClick))
-        }
-
-        // ── Elevated resting heart rate → amber ───────────────────────────────
-        if (healthMetrics.avgHeartRate > 100) {
-            add(AttentionItem(
-                "Elevated heart rate: ${healthMetrics.avgHeartRate} bpm avg.",
-                "Tap to check your wellness.",
-                1, onHealthClick
-            ))
-        }
-
-        // ── Low steps by late afternoon (after 17:00) → amber ────────────────
-        if (currentHour >= 17 && healthMetrics.steps in 1..2499) {
-            add(AttentionItem(
-                "Only ${healthMetrics.steps.toInt()} steps so far.",
-                "A short walk could close the gap.",
-                1, onHealthClick
-            ))
-        }
-
-        // ── Gemini email triage ───────────────────────────────────────────────
-        if (emailTriageResult.isLoading && unreadEmailCount > 0) {
-            add(AttentionItem("Scanning $unreadEmailCount email(s)…", "Gemini is checking for urgent items.", 1, onEmailClick))
+            val mins = imminent.minutesFromMidnight - currentMinutes
+            add(LocalAlert(if (mins <= 0) "⏰ Starting now: ${imminent.title}" else "⏰ In ${mins}m: ${imminent.title}", 0, onTasksClick))
         } else {
-            emailTriageResult.critical.forEach { desc ->
-                add(AttentionItem("⚡ $desc", "Tap to open inbox.", 0, onEmailClick))
-            }
-            emailTriageResult.overdue.forEach { desc ->
-                add(AttentionItem("📝 $desc", "Tap to open inbox.", 1, onEmailClick))
-            }
-            // Fallback count when triage found nothing but inbox is overloaded
-            if (emailTriageResult.critical.isEmpty() && emailTriageResult.overdue.isEmpty() && unreadEmailCount > 25) {
-                add(AttentionItem("$unreadEmailCount unread emails.", "Your inbox needs attention.", 1, onEmailClick))
-            }
+            val upcoming = calendarEvents.filter { it.minutesFromMidnight in (currentMinutes + 16)..(currentMinutes + 60) }.minByOrNull { it.minutesFromMidnight }
+            if (upcoming != null) add(LocalAlert("⏰ In ${upcoming.minutesFromMidnight - currentMinutes}m: ${upcoming.title}", 1, onTasksClick))
         }
-
-        // ── Message overload: >10 → amber ─────────────────────────────────────
-        if (unreadMessageCount > 10) {
-            add(AttentionItem("$unreadMessageCount unread messages.", "Tap to review.", 1, onMessagesClick))
+        timelineConflicts.forEach { add(LocalAlert("⚠ ${it.title}", if (it.severity == ConflictSeverity.ALERT) 0 else 1, onTasksClick)) }
+        if (currentHour < 12 && healthMetrics.sleepMinutes in 1..359) {
+            val h = healthMetrics.sleepMinutes / 60; val m = healthMetrics.sleepMinutes % 60
+            add(LocalAlert("🛌 Short sleep: ${if (h > 0) "${h}h " else ""}${m}m last night", 1, onHealthClick))
         }
+        if (healthMetrics.avgHeartRate > 100) add(LocalAlert("❤ Elevated HR: ${healthMetrics.avgHeartRate} bpm avg", 1, onHealthClick))
+        if (currentHour >= 17 && healthMetrics.steps in 1..2499) add(LocalAlert("👟 Only ${healthMetrics.steps.toInt()} steps so far", 1, onHealthClick))
+    }
 
-        // ── All clear → green ─────────────────────────────────────────────────
-        if (isEmpty()) {
-            add(AttentionItem("All clear!", "No overdue actions or urgent items right now.", 2) {})
-        }
-    }.distinctBy { it.label }
-
-    val hasUrgent = items.any { it.urgency == 0 }
-    val bgColor = when {
-        hasUrgent -> Color(0xFFEF5350).copy(alpha = 0.08f)
-        items.all { it.urgency == 2 } -> Color(0xFF66BB6A).copy(alpha = 0.08f)
-        else -> Color(0xFFFF9800).copy(alpha = 0.08f)
-    }
-    val borderColor = when {
-        hasUrgent -> Color(0xFFEF5350).copy(alpha = 0.25f)
-        items.all { it.urgency == 2 } -> Color(0xFF66BB6A).copy(alpha = 0.25f)
-        else -> Color(0xFFFF9800).copy(alpha = 0.25f)
-    }
-    val titleColor = when {
-        hasUrgent -> Color(0xFFD32F2F)
-        items.all { it.urgency == 2 } -> Color(0xFF388E3C)
-        else -> Color(0xFFE65100)
-    }
+    // ── AI category expand state ──────────────────────────────────────────────
+    var expandedCategories by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = bgColor),
-        border = BorderStroke(1.dp, borderColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Icons.Default.NotificationsActive, contentDescription = null,
-                    tint = titleColor, modifier = Modifier.size(18.dp))
-                Text(
-                    text = if (items.all { it.urgency == 2 }) "All Clear" else "Needs Your Attention Now",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = titleColor
-                )
-            }
-            Spacer(Modifier.height(10.dp))
-            items.forEach { item ->
-                val itemColor = when (item.urgency) {
-                    0 -> Color(0xFFD32F2F)
-                    1 -> Color(0xFFE65100)
-                    else -> Color(0xFF388E3C)
+
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.Hub, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                    Text("GRAND CENTRAL", fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min)
-                        .padding(vertical = 4.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.7f))
-                        .clickable { item.onClick() },
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .fillMaxHeight()
-                            .background(itemColor)
-                    )
-                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                        Text(
-                            text = item.label,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                            color = itemColor
-                        )
-                        if (item.detail.isNotBlank()) {
-                            Text(
-                                text = item.detail,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
-                            )
+                if (grandCentralResult.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.primary)
+                } else if (grandCentralResult.categories.isNotEmpty()) {
+                    Text("${grandCentralResult.categories.sumOf { it.items.size }} notifications",
+                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                }
+            }
+
+            // ── Right Now (local alerts) ──────────────────────────────────────
+            if (localAlerts.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text("RIGHT NOW", fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp, color = Color(0xFFE65100).copy(alpha = 0.8f))
+                Spacer(Modifier.height(6.dp))
+                localAlerts.forEach { alert ->
+                    val color = if (alert.urgency == 0) Color(0xFFD32F2F) else Color(0xFFE65100)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
+                            .padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
+                            .background(color.copy(alpha = 0.08f)).clickable { alert.onClick() },
+                    ) {
+                        Box(Modifier.width(3.dp).fillMaxHeight().background(color))
+                        Text(alert.label, modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, color = color)
+                    }
+                    Spacer(Modifier.height(2.dp))
+                }
+            }
+
+            // ── Loading placeholder ───────────────────────────────────────────
+            if (grandCentralResult.isLoading) {
+                Spacer(Modifier.height(12.dp))
+                Text("Analyzing your notifications…", fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
+            }
+
+            // ── Suggested Actions ─────────────────────────────────────────────
+            if (grandCentralResult.suggestedActions.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("SUGGESTED ACTIONS", fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp, color = Color(0xFF1E88E5).copy(alpha = 0.8f))
+                Spacer(Modifier.height(6.dp))
+                grandCentralResult.suggestedActions.forEach { action ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)
+                            .padding(vertical = 2.dp).clip(RoundedCornerShape(6.dp))
+                            .background(Color(0xFF1E88E5).copy(alpha = 0.06f))
+                            .clickable(onClick = onFeedClick),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.width(3.dp).fillMaxHeight().background(Color(0xFF1E88E5)))
+                        Column(modifier = Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 7.dp)) {
+                            Text(action.summary, style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface)
+                            Text(action.sourceApp, fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f))
                         }
                     }
+                    Spacer(Modifier.height(2.dp))
                 }
-                if (item != items.last()) Spacer(Modifier.height(4.dp))
+            }
+
+            // ── Topic Categories ──────────────────────────────────────────────
+            if (grandCentralResult.categories.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("CATEGORIES", fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.5.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                Spacer(Modifier.height(6.dp))
+                grandCentralResult.categories.forEach { category ->
+                    val isExpanded = expandedCategories.contains(category.name)
+                    Column {
+                        Row(
+                            modifier = Modifier.fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    expandedCategories = if (isExpanded)
+                                        expandedCategories - category.name
+                                    else expandedCategories + category.name
+                                }
+                                .padding(vertical = 7.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(category.emoji, fontSize = 16.sp)
+                                Text(category.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text("${category.items.size}", fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                                Icon(
+                                    if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null, modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                                )
+                            }
+                        }
+                        if (isExpanded) {
+                            category.items.forEach { item ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .padding(start = 28.dp, bottom = 4.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                        .clickable(onClick = onFeedClick)
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.Top,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(item.summary, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface,
+                                            lineHeight = 16.sp)
+                                    }
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(item.sourceApp, fontSize = 9.sp,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                                    }
+                                }
+                            }
+                        }
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                            thickness = 0.5.dp, modifier = Modifier.padding(vertical = 2.dp))
+                    }
+                }
+            }
+
+            // ── All clear ─────────────────────────────────────────────────────
+            if (!grandCentralResult.isLoading && grandCentralResult.categories.isEmpty() && localAlerts.isEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null,
+                        tint = Color(0xFF388E3C), modifier = Modifier.size(16.dp))
+                    Text("All clear — nothing to review right now.", fontSize = 13.sp,
+                        color = Color(0xFF388E3C))
+                }
             }
 
             val reflectionSnippet = remember(latestReflection) {
@@ -741,7 +759,7 @@ private fun NeedsAttentionCard(
                 Spacer(Modifier.height(6.dp))
                 Text(
                     text = buildAnnotatedString {
-                        reflectionSnippet.split("\n").forEachIndexed { idx, line ->
+                        reflectionSnippet!!.split("\n").forEachIndexed { idx, line ->
                             if (idx > 0) append("\n")
                             // Split only on ": " or " - " / " — " (space-surrounded dash), never on a
                             // bare hyphen inside a word like "Re-energize".
