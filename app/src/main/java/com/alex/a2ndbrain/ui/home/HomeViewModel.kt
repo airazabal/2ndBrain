@@ -701,7 +701,13 @@ Rules:
     }
 
     val meetingsTodayCount: StateFlow<Int> = combine(todayTimelineEvents, _todoistTasks) { events, tasks ->
-        events.count { it.sourcePackage == "calendar" && !it.appName.contains("todoist", ignoreCase = true) } + tasks.size
+        val taskTitles = tasks.map { it.content.trim().lowercase() }.toSet()
+        val calCount = events.count { event ->
+            event.sourcePackage == "calendar" &&
+            !event.appName.contains("todoist", ignoreCase = true) &&
+            event.title.trim().lowercase() !in taskTitles
+        }
+        calCount + tasks.size
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     companion object {
