@@ -163,9 +163,9 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
                 connectTimeout = 10_000
                 readTimeout = 10_000
             }
-            val ok = conn.responseCode == 204
+            val code = conn.responseCode
             conn.disconnect()
-            ok
+            code in 200..299
         } catch (e: Exception) {
             Log.e("Todoist", "closeTask $taskId failed", e)
             false
