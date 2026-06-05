@@ -86,10 +86,14 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
                             val pastDue = localTaskMinutes != null && localTaskMinutes < nowMinutes
                             if (pastDue) overdueList.add(task) else todayList.add(task)
                         }
-                        // Recurring tasks often show the NEXT occurrence (tomorrow) when
-                        // today's slot was created after the scheduled time or was just set up.
-                        // Include tomorrow's occurrences in today's list so they're always visible.
-                        localDateOnly == tomorrowStr -> todayList.add(task)
+                        // Recurring tasks sometimes surface tomorrow's occurrence alongside
+                        // today's. Only include tomorrow's entry if today's list has no task
+                        // with the same content, to prevent daily recurring tasks appearing twice.
+                        localDateOnly == tomorrowStr -> {
+                            if (todayList.none { it.content.equals(task.content, ignoreCase = true) }) {
+                                todayList.add(task)
+                            }
+                        }
                         // Genuinely future tasks (2+ days out) are not surfaced on the home screen.
                     }
                 }
