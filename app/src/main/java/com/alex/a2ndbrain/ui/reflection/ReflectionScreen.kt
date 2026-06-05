@@ -290,29 +290,45 @@ fun ReflectionScreen(
                                 Text("Enable Health Connect to track weekly steps", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
                             }
                         } else {
-                            Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
-                                val maxSteps = (weeklyHealthTrends.maxOfOrNull { it.second.steps } ?: 0L).coerceAtLeast(10000L).toFloat()
-                                val width = size.width
-                                val height = size.height
-                                val barCount = weeklyHealthTrends.size
-                                if (barCount > 0) {
-                                    val barWidth = (width / barCount) * 0.6f
-                                    val spacing = (width / barCount) * 0.4f
-                                    weeklyHealthTrends.forEachIndexed { index, pair ->
-                                        val x = (index * (barWidth + spacing)) + (spacing / 2)
-                                        val barHeight = (pair.second.steps.toFloat() / maxSteps) * height
-                                        val y = height - barHeight
-                                        drawRoundRect(
-                                            brush = Brush.verticalGradient(listOf(Color(0xFF80C2FF), Color(0xFF3399FF))),
-                                            topLeft = androidx.compose.ui.geometry.Offset(x, y),
-                                            size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
-                                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f)
-                                        )
+                            val maxSteps = (weeklyHealthTrends.maxOfOrNull { it.second.steps } ?: 0L).coerceAtLeast(10000L)
+                            val midSteps = maxSteps / 2
+                            val stepsLabel: (Long) -> String = { v ->
+                                if (v >= 1000) "${v / 1000}k" else "$v"
+                            }
+                            Row(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+                                Column(
+                                    modifier = Modifier.width(28.dp).fillMaxHeight().padding(bottom = 2.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween,
+                                    horizontalAlignment = Alignment.End
+                                ) {
+                                    Text(stepsLabel(maxSteps), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, fontSize = 9.sp)
+                                    Text(stepsLabel(midSteps), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, fontSize = 9.sp)
+                                    Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, fontSize = 9.sp)
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Canvas(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                    val width = size.width
+                                    val height = size.height
+                                    val barCount = weeklyHealthTrends.size
+                                    if (barCount > 0) {
+                                        val barWidth = (width / barCount) * 0.6f
+                                        val spacing = (width / barCount) * 0.4f
+                                        weeklyHealthTrends.forEachIndexed { index, pair ->
+                                            val x = (index * (barWidth + spacing)) + (spacing / 2)
+                                            val barHeight = (pair.second.steps.toFloat() / maxSteps.toFloat()) * height
+                                            val y = height - barHeight
+                                            drawRoundRect(
+                                                brush = Brush.verticalGradient(listOf(Color(0xFF80C2FF), Color(0xFF3399FF))),
+                                                topLeft = androidx.compose.ui.geometry.Offset(x, y),
+                                                size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f)
+                                            )
+                                        }
                                     }
                                 }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(start = 32.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                 weeklyHealthTrends.forEach { pair ->
                                     val label = try {
                                         val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(pair.first)
@@ -343,39 +359,53 @@ fun ReflectionScreen(
                                 Text("Enable Health Connect to track weekly sleep duration", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline)
                             }
                         } else {
-                            Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
-                                val maxSleep = (weeklyHealthTrends.maxOfOrNull { it.second.sleepMinutes } ?: 0).coerceAtLeast(480).toFloat()
-                                val width = size.width
-                                val height = size.height
-                                val pointCount = weeklyHealthTrends.size
-                                if (pointCount > 1) {
-                                    val stepX = width / (pointCount - 1)
-                                    val points = weeklyHealthTrends.mapIndexed { index, pair ->
-                                        val x = index * stepX
-                                        val y = height - ((pair.second.sleepMinutes.toFloat() / maxSleep) * height)
-                                        androidx.compose.ui.geometry.Offset(x, y)
-                                    }
-                                    val path = Path()
-                                    path.moveTo(points[0].x, points[0].y)
-                                    for (i in 1 until points.size) {
-                                        path.lineTo(points[i].x, points[i].y)
-                                    }
-                                    drawPath(
-                                        path = path,
-                                        color = Color(0xFF81C784),
-                                        style = Stroke(width = 4.dp.toPx())
-                                    )
-                                    points.forEach { point ->
-                                        drawCircle(
-                                            color = Color(0xFF4CAF50),
-                                            radius = 6.dp.toPx(),
-                                            center = point
+                            val maxSleepMins = (weeklyHealthTrends.maxOfOrNull { it.second.sleepMinutes } ?: 0).coerceAtLeast(480)
+                            val midSleepH = maxSleepMins / 2 / 60
+                            val maxSleepH = maxSleepMins / 60
+                            Row(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+                                Column(
+                                    modifier = Modifier.width(28.dp).fillMaxHeight().padding(bottom = 2.dp),
+                                    verticalArrangement = Arrangement.SpaceBetween,
+                                    horizontalAlignment = Alignment.End
+                                ) {
+                                    Text("${maxSleepH}h", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, fontSize = 9.sp)
+                                    Text("${midSleepH}h", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, fontSize = 9.sp)
+                                    Text("0h", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline, fontSize = 9.sp)
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Canvas(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                    val width = size.width
+                                    val height = size.height
+                                    val pointCount = weeklyHealthTrends.size
+                                    if (pointCount > 1) {
+                                        val stepX = width / (pointCount - 1)
+                                        val points = weeklyHealthTrends.mapIndexed { index, pair ->
+                                            val x = index * stepX
+                                            val y = height - ((pair.second.sleepMinutes.toFloat() / maxSleepMins.toFloat()) * height)
+                                            androidx.compose.ui.geometry.Offset(x, y)
+                                        }
+                                        val path = Path()
+                                        path.moveTo(points[0].x, points[0].y)
+                                        for (i in 1 until points.size) {
+                                            path.lineTo(points[i].x, points[i].y)
+                                        }
+                                        drawPath(
+                                            path = path,
+                                            color = Color(0xFF81C784),
+                                            style = Stroke(width = 4.dp.toPx())
                                         )
+                                        points.forEach { point ->
+                                            drawCircle(
+                                                color = Color(0xFF4CAF50),
+                                                radius = 6.dp.toPx(),
+                                                center = point
+                                            )
+                                        }
                                     }
                                 }
                             }
                             Spacer(modifier = Modifier.height(8.dp))
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Row(modifier = Modifier.fillMaxWidth().padding(start = 32.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                 weeklyHealthTrends.forEach { pair ->
                                     val label = try {
                                         val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(pair.first)

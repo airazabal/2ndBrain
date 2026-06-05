@@ -80,11 +80,18 @@ class ReflectionAgent {
     fun buildPrompt(type: ReflectionType, ctx: BrainContext): String = buildString {
         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
         val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val todayStr = dateFormat.format(Date())
+        val now = Calendar.getInstance()
+        val todayStr = dateFormat.format(now.time)
+        val greeting = when (type) {
+            ReflectionType.MORNING_BRIEFING -> "Good morning"
+            ReflectionType.EVENING_REFLECTION -> "Good evening"
+            ReflectionType.WEEKLY_CORRELATION -> "Good morning"
+        }
 
         // ── System instruction ────────────────────────────────────────────
         append("You are a 'Second Brain' AI assistant. ")
         append("Analyze the data below and provide a concise, personal, and highly intelligent synthesis.\n\n")
+        append("Always open with \"$greeting, Alex\" (never use a different time-of-day greeting).\n\n")
 
         // ── Mode-specific task ────────────────────────────────────────────
         when (type) {
@@ -95,7 +102,7 @@ class ReflectionAgent {
                     - Review yesterday's unfinished business from Todoist or clipboard.
                     - Suggest which tasks are most realistic given the meeting schedule.
                     - Warn about potential conflicts (e.g., back-to-back meetings with deep-work tasks).
-                    
+
                 """.trimIndent())
             }
             ReflectionType.EVENING_REFLECTION -> {
