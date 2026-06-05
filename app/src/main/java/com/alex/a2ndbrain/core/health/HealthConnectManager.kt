@@ -161,9 +161,27 @@ class HealthConnectManager(private val context: Context) {
                 timeRangeFilter = TimeRangeFilter.between(sleepQueryStart, endTime)
             )
             val sleepResponse = client.readRecords(sleepRequest)
+            // Zepp (and most watches) write sleep stages into SleepSessionRecord.stages.
+            // Summing only the actual-sleep stages (light, deep, REM, generic sleeping)
+            // excludes awake/out-of-bed periods and matches what Zepp reports.
+            // Fall back to full session duration only when no stage data is present.
+            val sleepStageTypes = setOf(
+                SleepSessionRecord.STAGE_TYPE_SLEEPING,
+                SleepSessionRecord.STAGE_TYPE_LIGHT,
+                SleepSessionRecord.STAGE_TYPE_DEEP,
+                SleepSessionRecord.STAGE_TYPE_REM
+            )
             val totalSleepDuration = sleepResponse.records
                 .filter { it.endTime.isAfter(startTime) }
-                .sumOf { record -> ChronoUnit.MINUTES.between(record.startTime, record.endTime) }
+                .sumOf { record ->
+                    if (record.stages.isNotEmpty()) {
+                        record.stages
+                            .filter { it.stage in sleepStageTypes }
+                            .sumOf { stage -> ChronoUnit.MINUTES.between(stage.startTime, stage.endTime) }
+                    } else {
+                        ChronoUnit.MINUTES.between(record.startTime, record.endTime)
+                    }
+                }
             totalSleepMins = totalSleepDuration.toInt()
         } catch (e: Exception) {
             // Ignore
