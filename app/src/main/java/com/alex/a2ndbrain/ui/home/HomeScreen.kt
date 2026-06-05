@@ -86,6 +86,9 @@ import com.alex.a2ndbrain.ui.home.NotificationCategory
 import com.alex.a2ndbrain.ui.home.CategorizedNotification
 import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
 import com.alex.a2ndbrain.core.todoist.TodoistTask
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 
 
 
@@ -154,7 +157,16 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         onRefreshHealth()
     }
-    
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) onRefreshTodoistTasks()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             ttsManager.stop()

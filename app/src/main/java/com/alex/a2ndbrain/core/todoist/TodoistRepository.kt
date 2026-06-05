@@ -37,8 +37,6 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
         val localFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
         val nowCal = java.util.Calendar.getInstance()
         val todayStr = localFmt.format(nowCal.time)
-        val tomorrowCal = (nowCal.clone() as java.util.Calendar).also { it.add(java.util.Calendar.DAY_OF_YEAR, 1) }
-        val tomorrowStr = localFmt.format(tomorrowCal.time)
         val nowMinutes = nowCal.get(java.util.Calendar.HOUR_OF_DAY) * 60 + nowCal.get(java.util.Calendar.MINUTE)
 
         val todayList = mutableListOf<TodoistTask>()
@@ -86,15 +84,10 @@ class TodoistRepository(private val settingsManager: CaptureSettingsManager) {
                             val pastDue = localTaskMinutes != null && localTaskMinutes < nowMinutes
                             if (pastDue) overdueList.add(task) else todayList.add(task)
                         }
-                        // Recurring tasks sometimes surface tomorrow's occurrence alongside
-                        // today's. Only include tomorrow's entry if today's list has no task
-                        // with the same content, to prevent daily recurring tasks appearing twice.
-                        localDateOnly == tomorrowStr -> {
-                            if (todayList.none { it.content.equals(task.content, ignoreCase = true) }) {
-                                todayList.add(task)
-                            }
-                        }
-                        // Genuinely future tasks (2+ days out) are not surfaced on the home screen.
+                        // Future tasks (tomorrow or later) are not surfaced on the home screen.
+                        // Previously, tomorrow's recurring-task instance was added when no today
+                        // instance existed — but this caused completed recurring tasks to reappear
+                        // immediately (Todoist creates tomorrow's instance on completion).
                     }
                 }
                 cursor = root.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
