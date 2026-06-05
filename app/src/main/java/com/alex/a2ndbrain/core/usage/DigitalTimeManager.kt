@@ -78,11 +78,8 @@ class DigitalTimeManager(
             return
         }
 
-        val monitoredApps = settingsManager.getMonitoredApps()
         stats.forEach { stat ->
             val packageName = stat.packageName
-            val isMonitored = monitoredApps.isEmpty() || monitoredApps.contains(packageName)
-            if (!isMonitored) return@forEach
 
             val timeSpent = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                 stat.totalTimeVisible

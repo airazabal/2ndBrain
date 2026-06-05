@@ -2,32 +2,48 @@ package com.alex.a2ndbrain.core.capture
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.io.File
 
 class CaptureSettingsManager(private val context: Context) {
     private val prefs: SharedPreferences = context.getSharedPreferences("capture_settings", Context.MODE_PRIVATE)
 
-    private val securePrefs: SharedPreferences by lazy {
+    private val securePrefs: SharedPreferences by lazy { createSecurePrefs() }
+
+    private fun createSecurePrefs(): SharedPreferences {
         val masterKey = MasterKey.Builder(context)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        val sp = EncryptedSharedPreferences.create(
-            context,
-            "secure_capture_settings",
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-        )
-        // Migrate key if exists in old unencrypted prefs
-        if (prefs.contains("gemini_api_key")) {
-            val oldKey = prefs.getString("gemini_api_key", "")?.trim() ?: ""
-            if (oldKey.isNotBlank()) {
-                sp.edit().putString("gemini_api_key", oldKey).apply()
+        return try {
+            val sp = EncryptedSharedPreferences.create(
+                context,
+                "secure_capture_settings",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+            // Migrate key if exists in old unencrypted prefs
+            if (prefs.contains("gemini_api_key")) {
+                val oldKey = prefs.getString("gemini_api_key", "")?.trim() ?: ""
+                if (oldKey.isNotBlank()) sp.edit().putString("gemini_api_key", oldKey).apply()
+                prefs.edit().remove("gemini_api_key").apply()
             }
-            prefs.edit().remove("gemini_api_key").apply()
+            sp
+        } catch (e: Exception) {
+            // Keystore key was lost (e.g. after reinstall with backup restore).
+            // Wipe the stale encrypted file and start fresh — user will need to re-enter keys.
+            Log.w("CaptureSettingsManager", "EncryptedSharedPreferences corrupt, resetting: ${e.message}")
+            File(context.filesDir.parent, "shared_prefs/secure_capture_settings.xml").delete()
+            EncryptedSharedPreferences.create(
+                context,
+                "secure_capture_settings",
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
         }
-        sp
     }
 
     fun isPackageAllowed(packageName: String): Boolean {
