@@ -20,6 +20,7 @@ import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import com.alex.a2ndbrain.ConsolidatedUsage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -47,7 +48,7 @@ data class SenseOfDayPillar(
 // Legacy alias kept so callers not yet migrated still compile
 typealias EmailTriageResult = GrandCentralResult
 
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val memoryRepository: MemoryRepository,
     private val usageRepository: UsageRepository,
@@ -79,7 +80,16 @@ class HomeViewModel(
     val summaries = memoryRepository.getAllSummariesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    val usageStats: StateFlow<List<UsageStatEntity>> = usageRepository.getUsageStatsForToday()
+    // Ticks every minute so time-sensitive UI (conflict expiry, date rollover) stays current
+    private val _minuteTicker: StateFlow<Long> = flow {
+        while (true) { emit(System.currentTimeMillis()); kotlinx.coroutines.delay(60_000L) }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, System.currentTimeMillis())
+
+    // Re-queries the DB each time the calendar date changes (handles ViewModel surviving midnight)
+    val usageStats: StateFlow<List<UsageStatEntity>> = _minuteTicker
+        .map { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+        .distinctUntilChanged()
+        .flatMapLatest { today -> usageRepository.getUsageStatsForDate(today) }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     val consolidatedUsage: StateFlow<List<ConsolidatedUsage>> = usageStats
@@ -100,11 +110,6 @@ class HomeViewModel(
 
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
-
-    // Ticks every minute so time-sensitive UI (conflict expiry, etc.) stays current
-    private val _minuteTicker: StateFlow<Long> = flow {
-        while (true) { emit(System.currentTimeMillis()); kotlinx.coroutines.delay(60_000L) }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, System.currentTimeMillis())
 
     // ── Todoist ──────────────────────────────────────────────────────────────
     private val _todoistTasks = MutableStateFlow<List<TodoistTask>>(emptyList())
@@ -400,7 +405,7 @@ Rules:
     // ── Exercise ─────────────────────────────────────────────────────────────
     val exerciseWeekSessions: StateFlow<Int> =
         exerciseRepository.getAllSessionsFlow()
-            .map { sessions ->
+            .combine(_minuteTicker) { sessions, _ ->
                 val cutoff = run {
                     val cal = Calendar.getInstance()
                     cal.add(Calendar.DAY_OF_YEAR, -6)
@@ -412,7 +417,7 @@ Rules:
 
     val exerciseTotalMinutesThisWeek: StateFlow<Int> =
         exerciseRepository.getAllSessionsFlow()
-            .map { sessions ->
+            .combine(_minuteTicker) { sessions, _ ->
                 val cutoff = run {
                     val cal = Calendar.getInstance()
                     cal.add(Calendar.DAY_OF_YEAR, -6)
@@ -425,7 +430,7 @@ Rules:
 
     val exerciseTodayMinutes: StateFlow<Int> =
         exerciseRepository.getAllSessionsFlow()
-            .map { sessions ->
+            .combine(_minuteTicker) { sessions, _ ->
                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                 sessions.filter { it.isDeleted == 0 && it.date == today }
                     .sumOf { it.durationMinutes }

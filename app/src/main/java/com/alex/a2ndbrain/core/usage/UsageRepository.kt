@@ -14,6 +14,9 @@ class UsageRepository(private val memoryDao: MemoryDao) {
         return memoryDao.getUsageStatsForDate(today)
     }
 
+    fun getUsageStatsForDate(date: String): Flow<List<UsageStatEntity>> =
+        memoryDao.getUsageStatsForDate(date)
+
     suspend fun getUsageStatsForTodaySync(): List<UsageStatEntity> {
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
         return memoryDao.getUsageStatsForDateSync(today)
