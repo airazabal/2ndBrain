@@ -12,9 +12,12 @@ import com.alex.a2ndbrain.core.agents.AgentMessage
 
 class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
 
-    companion object {
-        private var cachedModel: Pair<String, String>? = null
+    // Instance-scoped — each GeminiAgent instance tracks its own last-good model.
+    // Previously a companion object var, which caused silent model downgrade to persist
+    // across the entire app lifetime after any transient failure.
+    private var cachedModel: Pair<String, String>? = null
 
+    companion object {
         var fallbackModels = listOf(
             "gemini-2.5-flash-lite" to "v1beta",
             "gemini-2.5-flash" to "v1beta",
@@ -22,11 +25,13 @@ class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
         )
     }
 
-    private fun createModel(name: String, version: String) = GenerativeModel(
-        modelName = name.trim(),
-        apiKey = settingsManager.getGeminiApiKey().trim(),
-        requestOptions = RequestOptions(apiVersion = version)
-    )
+    private fun createModel(name: String, version: String, systemInstruction: String? = null) =
+        GenerativeModel(
+            modelName = name.trim(),
+            apiKey = settingsManager.getGeminiApiKey().trim(),
+            systemInstruction = systemInstruction?.let { content { text(it) } },
+            requestOptions = RequestOptions(apiVersion = version)
+        )
 
     suspend fun summarizeMemories(
         memoriesText: String, 
@@ -156,10 +161,11 @@ class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
     }
 
     suspend fun chatInference(
-        prompt: String, 
+        prompt: String,
         preferredModel: String? = null,
         lastSuccessfulModel: String? = null,
-        onSuccessModel: ((String) -> Unit)? = null
+        onSuccessModel: ((String) -> Unit)? = null,
+        systemInstruction: String? = null
     ): SummaryResult = withContext(Dispatchers.IO) {
         val apiKey = settingsManager.getGeminiApiKey()
         if (apiKey.isBlank()) {
@@ -184,7 +190,7 @@ class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
         for ((name, version) in attempts) {
             try {
                 Log.d("GeminiAgent", "Chat attempt $name with $version")
-                val model = createModel(name, version)
+                val model = createModel(name, version, systemInstruction)
                 val response = model.generateContent(prompt)
                 val result = response.text
                 if (!result.isNullOrBlank()) {
@@ -209,7 +215,8 @@ class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
         history: List<AgentMessage>,
         preferredModel: String? = null,
         lastSuccessfulModel: String? = null,
-        onSuccessModel: ((String) -> Unit)? = null
+        onSuccessModel: ((String) -> Unit)? = null,
+        systemInstruction: String? = null
     ): SummaryResult = withContext(Dispatchers.IO) {
         val apiKey = settingsManager.getGeminiApiKey()
         if (apiKey.isBlank()) {
@@ -241,7 +248,7 @@ class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
         for ((name, version) in attempts) {
             try {
                 Log.d("GeminiAgent", "Multi-turn attempt $name prior=${priorTurns.size} turns")
-                val model = createModel(name, version)
+                val model = createModel(name, version, systemInstruction)
                 val chat = model.startChat(history = chatHistory)
                 val response = chat.sendMessage(lastMessage.content)
                 val result = response.text

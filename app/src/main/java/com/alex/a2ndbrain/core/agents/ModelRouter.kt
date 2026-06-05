@@ -83,7 +83,8 @@ class ModelRouter(
     suspend fun runWithHistory(
         history: List<AgentMessage>,
         complexity: Complexity = Complexity.LOW,
-        timeoutMs: Long = 30_000L
+        timeoutMs: Long = 30_000L,
+        systemInstruction: String? = null
     ): Pair<String, String> {
         if (history.isEmpty()) {
             return "No message to respond to." to "Empty"
@@ -116,7 +117,8 @@ class ModelRouter(
                             history = history,
                             preferredModel = preferredModel,
                             lastSuccessfulModel = lastSuccessful,
-                            onSuccessModel = { settingsManager.saveLastSuccessfulModel(it) }
+                            onSuccessModel = { settingsManager.saveLastSuccessfulModel(it) },
+                            systemInstruction = systemInstruction
                         )
                         val elapsed = "%.1fs".format((System.currentTimeMillis() - start) / 1000f)
                         result.text to "${result.modelName} ($elapsed)"

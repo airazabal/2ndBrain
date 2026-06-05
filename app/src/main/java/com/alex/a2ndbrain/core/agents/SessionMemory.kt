@@ -33,12 +33,6 @@ class SessionMemory(private val maxTokens: Int = 4000) {
      */
     fun getHistory(): List<AgentMessage> = history.toList()
 
-    /**
-     * Returns only the user-visible display messages (not the enriched
-     * system-context portions injected into the first user turn).
-     */
-    fun getDisplayMessages(): List<AgentMessage> = history.toList()
-
     fun isEmpty(): Boolean = history.isEmpty()
 
     fun clear() = history.clear()

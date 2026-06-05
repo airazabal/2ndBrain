@@ -24,6 +24,11 @@ import java.util.Calendar
  * CLAUDE.md data flow rule: "UI screens receive only plain data and lambda
  * callbacks — no ViewModel references are passed into composables."
  */
+private const val COPILOT_SYSTEM_PROMPT =
+    "You are the user's personal 2ndBrain assistant. Answer accurately, concisely, and friendly.\n" +
+    "Focus ONLY on the section most relevant to the user's question — ignore unrelated data sections.\n" +
+    "If the data below doesn't contain relevant details, say so politely."
+
 class OrchestratorAgent(
     private val memoryAgent: MemoryAgent,
     private val healthAgent: HealthAgent,
@@ -106,7 +111,7 @@ class OrchestratorAgent(
 
             val critique = reflectionAgent.critique(draft, type, ctx)
             if (critique != null) {
-                Log.d("OrchestratorAgent", "reflect($type) — retry: $critique")
+                Log.w("OrchestratorAgent", "reflect($type) — critique failed, retrying. Reason: $critique")
                 val revisedPrompt = buildString {
                     append(prompt)
                     append("\n\n---\nPREVIOUS DRAFT (do not repeat it verbatim):\n")
@@ -114,7 +119,13 @@ class OrchestratorAgent(
                     append("\n\nCRITIQUE: $critique\n")
                     append("Address the critique above and produce an improved response.")
                 }
-                modelRouter.run(revisedPrompt, complexity)
+                Log.d("OrchestratorAgent", "reflect($type) — retry prompt size: ${revisedPrompt.length} chars")
+                if (revisedPrompt.length > 15_000) {
+                    Log.w("OrchestratorAgent", "reflect($type) — retry prompt exceeds 15k chars, returning draft")
+                    draft to modelName
+                } else {
+                    modelRouter.run(revisedPrompt, complexity)
+                }
             } else {
                 draft to modelName
             }
@@ -153,7 +164,8 @@ class OrchestratorAgent(
 
             val (replyText, modelName) = modelRouter.runWithHistory(
                 history = historyForInference,
-                complexity = ModelRouter.Complexity.LOW
+                complexity = ModelRouter.Complexity.LOW,
+                systemInstruction = COPILOT_SYSTEM_PROMPT
             )
 
             sessionMemory.add(AgentMessage("model", replyText))
@@ -170,10 +182,6 @@ class OrchestratorAgent(
         ctx: BrainContext,
         flags: DynamicContextFlags
     ): String = buildString {
-        append("You are the user's personal 2ndBrain assistant. Answer accurately, concisely, and friendly.\n")
-        append("Focus ONLY on the section most relevant to the user's question — ignore unrelated data sections.\n")
-        append("If the data below doesn't contain relevant details, say so politely.\n\n")
-
         if (flags.includeHealth && ctx.health.isAvailable) {
             val m = ctx.health.metrics
             append("PHYSICAL HEALTH TODAY:\n")
@@ -232,7 +240,7 @@ class OrchestratorAgent(
 
         if (flags.includeMemories && ctx.memories.isNotEmpty()) {
             val lower = userMessage.lowercase(java.util.Locale.getDefault())
-            val isFinanceQuery = listOf("money", "spend", "spent", "paid", "pay", "payment", "bank", "transaction", "cost", "price", "purchase", "budget", "expense", "shop", "bought", "dollar", "financ", "bill", "invoice", "charge", "receipt").any { lower.contains(it) }
+            val isFinanceQuery = DynamicContextFlags.FINANCE_KEYWORDS.any { lower.matchesKeyword(it) }
             val header = if (isFinanceQuery)
                 "CAPTURED MEMORIES (search ALL sources — notifications, SMS, email, clipboard — for bank/payment/shopping entries):\n"
             else
@@ -266,16 +274,24 @@ data class DynamicContextFlags(
     val isGeneral: Boolean
 ) {
     companion object {
+        // Single source of truth for finance keyword matching.
+        // Referenced by both fromMessage() and buildCopilotPrompt() to prevent drift.
+        val FINANCE_KEYWORDS = listOf(
+            "money", "spend", "spent", "paid", "pay", "payment", "bank", "transaction",
+            "cost", "price", "purchase", "budget", "expense", "shop", "bought", "dollar",
+            "financ", "bill", "invoice", "charge", "receipt"
+        )
+
         fun fromMessage(message: String): DynamicContextFlags {
             val lower = message.lowercase(java.util.Locale.getDefault())
-            val health = listOf("step", "sleep", "heart", "bpm", "walk", "physical", "active", "health", "run", "fit", "calories").any { lower.contains(it) }
             // "spend/spent" removed — too ambiguous; finance keywords below catch money questions
-            val usage = listOf("screen time", "app time", "screen", "usage", "youtube", "chrome", "social", "distract", "phone", "tablet", "device", "online", "digital", "how long").any { lower.contains(it) }
-            val meditation = listOf("meditat", "zendence", "streak", "mindful", "calm", "insight", "breath", "relax", "practice", "mantra", "sit").any { lower.contains(it) }
-            val exercise = listOf("exercise", "workout", "gym", "training", "fitness", "jog", "lift", "weightlift", "cycling", "swimming", "hiit", "stretching").any { lower.contains(it) }
+            val health = listOf("step", "sleep", "heart", "bpm", "walk", "physical", "active", "health", "run", "fit", "calories").any { lower.matchesKeyword(it) }
+            val usage = listOf("screen time", "app time", "screen", "usage", "youtube", "chrome", "social", "distract", "phone", "tablet", "device", "online", "digital", "how long").any { lower.matchesKeyword(it) }
+            val meditation = listOf("meditat", "zendence", "streak", "mindful", "calm", "insight", "breath", "relax", "practice", "mantra", "sit").any { lower.matchesKeyword(it) }
+            val exercise = listOf("exercise", "workout", "gym", "training", "fitness", "jog", "lift", "weightlift", "cycling", "swimming", "hiit", "stretching").any { lower.matchesKeyword(it) }
             // Finance keywords route to memories (bank/payment notifications captured there)
-            val finance = listOf("money", "spend", "spent", "paid", "pay", "payment", "bank", "transaction", "cost", "price", "purchase", "budget", "expense", "shop", "bought", "dollar", "financ", "bill", "invoice", "charge", "receipt").any { lower.contains(it) }
-            val memories = finance || listOf("notification", "clipboard", "log", "memory", "captured", "tag", "remember", "text", "copy", "message", "email", "chat", "gmail", "slack", "whatsapp").any { lower.contains(it) }
+            val finance = FINANCE_KEYWORDS.any { lower.matchesKeyword(it) }
+            val memories = finance || listOf("notification", "clipboard", "log", "memory", "captured", "tag", "remember", "text", "copy", "message", "email", "chat", "gmail", "slack", "whatsapp").any { lower.matchesKeyword(it) }
             val general = !health && !usage && !meditation && !exercise && !memories
             return DynamicContextFlags(
                 includeHealth = health || general,
@@ -288,3 +304,8 @@ data class DynamicContextFlags(
         }
     }
 }
+
+// Left-boundary word match: \bkeyword allows prefix matches ("run" → "running", "meditat" → "meditation")
+// but prevents interior matches ("fit" no longer matches "outfit", "run" no longer matches "overrun").
+private fun String.matchesKeyword(keyword: String): Boolean =
+    Regex("\\b${Regex.escape(keyword)}").containsMatchIn(this)

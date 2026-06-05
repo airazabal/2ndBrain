@@ -7,6 +7,7 @@ import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
 import com.google.ai.edge.litertlm.ConversationConfig
 import com.google.ai.edge.litertlm.SamplerConfig
+import android.util.Log
 import java.io.File
 
 class ModelPicker(private val context: Context) {
@@ -59,7 +60,10 @@ class ModelPicker(private val context: Context) {
                 maxNumTokens = 1024
             )
 
-            // Truncate the input to a safe character limit to avoid exceeding maximum token restrictions
+            // Truncate to on-device token limit. Log so caller knows context was discarded.
+            if (prompt.length > 1000) {
+                Log.w("ModelPicker", "LiteRT prompt truncated: ${prompt.length} chars → 1000 (on-device limit). Switch to cloud model for full context.")
+            }
             val safePrompt = if (prompt.length > 1000) prompt.take(1000) + "... [truncated]" else prompt
 
             // Chat template wrapping based on model architecture
