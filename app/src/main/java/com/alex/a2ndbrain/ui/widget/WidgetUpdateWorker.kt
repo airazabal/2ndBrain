@@ -14,7 +14,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.alex.a2ndbrain.core.memory.MemoryDao
 import com.alex.a2ndbrain.core.health.HealthRepository
-import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
+import com.alex.a2ndbrain.core.meditation.MeditationRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -34,7 +34,7 @@ class WidgetUpdateWorker(
     private val healthRepository: HealthRepository by inject()
     private val memoryDao: MemoryDao by inject()
     private val usageRepository: UsageRepository by inject()
-    private val meditationRepository: ZendenceMeditationRepository by inject()
+    private val meditationRepository: MeditationRepository by inject()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
