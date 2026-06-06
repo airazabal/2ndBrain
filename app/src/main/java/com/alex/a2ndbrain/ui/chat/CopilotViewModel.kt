@@ -3,8 +3,8 @@ package com.alex.a2ndbrain.ui.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.ChatMessage
-import com.alex.a2ndbrain.core.agents.OrchestratorAgent
 import com.alex.a2ndbrain.core.agents.SessionMemory
+import com.alex.a2ndbrain.core.domain.ChatWithCopilotUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,11 +20,10 @@ import kotlinx.coroutines.launch
  *      SessionMemory maintains a rolling conversation window so multi-turn
  *      exchanges like "What did I eat yesterday?" → "Compare to last week" work.
  *
- * Constructor reduced from 6 injected deps to 2.
  * CLAUDE.md data flow: UI receives plain data only — no DAO/Manager refs here.
  */
 class CopilotViewModel(
-    private val orchestrator: OrchestratorAgent,
+    private val chatWithCopilot: ChatWithCopilotUseCase,
     private val sessionMemory: SessionMemory
 ) : ViewModel() {
 
@@ -51,10 +50,7 @@ class CopilotViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val (replyText, modelUsed) = orchestrator.chat(
-                    userMessage = message,
-                    sessionMemory = sessionMemory
-                )
+                val (replyText, modelUsed) = chatWithCopilot(message, sessionMemory)
                 _chatMessages.value = _chatMessages.value + ChatMessage(
                     text = replyText,
                     isUser = false,
