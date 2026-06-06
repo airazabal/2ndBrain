@@ -82,7 +82,7 @@ class TodoistRepositoryImpl(private val settingsManager: CaptureSettingsManager)
                 page++
             } while (cursor != null)
             Log.d("Todoist", "Done: ${todayList.size} today, ${overdueList.size} overdue across $page page(s)")
-            SplitTasks(todayList, overdueList)
+            SplitTasks(todayList.distinctBy { it.id }, overdueList.distinctBy { it.id })
         } catch (e: Exception) {
             Log.e("Todoist", "fetchTodayAndOverdue failed", e)
             SplitTasks(emptyList(), emptyList())
