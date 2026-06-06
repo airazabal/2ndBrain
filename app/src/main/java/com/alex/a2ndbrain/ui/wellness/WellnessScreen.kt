@@ -9,7 +9,7 @@ import com.alex.a2ndbrain.ui.exercise.ExerciseScreen
 import com.alex.a2ndbrain.ui.exercise.ExerciseViewModel
 import com.alex.a2ndbrain.ui.health.HealthScreen
 import com.alex.a2ndbrain.ui.health.HealthViewModel
-import com.alex.a2ndbrain.ui.home.HomeViewModel
+import com.alex.a2ndbrain.ui.home.WellnessViewModel
 import com.alex.a2ndbrain.ui.meditation.MeditationScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionViewModel
@@ -37,16 +37,16 @@ fun WellnessScreen(
     modifier: Modifier = Modifier
 ) {
     val healthViewModel: HealthViewModel = koinViewModel()
-    val homeViewModel: HomeViewModel = koinViewModel()
+    val wellnessViewModel: WellnessViewModel = koinViewModel()
     val reflectionViewModel: ReflectionViewModel = koinViewModel()
     val exerciseViewModel: ExerciseViewModel = koinViewModel()
     val todoistViewModel: TodoistViewModel = koinViewModel()
     val trendsViewModel: SenseOfDayTrendsViewModel = koinViewModel()
 
-    val sessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
+    val sessions by wellnessViewModel.meditationSessions.collectAsStateWithLifecycle()
     val todoistUiState by todoistViewModel.uiState.collectAsStateWithLifecycle()
     val trendsUiState by trendsViewModel.uiState.collectAsStateWithLifecycle()
-    val streaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
+    val streaks by wellnessViewModel.meditationStreaks.collectAsStateWithLifecycle()
     val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
     val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
     val weeklyHealthTrends by reflectionViewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
