@@ -27,7 +27,7 @@ class TodoistReminderWorker(
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         if (hour < 7 || hour >= 22) return Result.success()
 
-        val repository = TodoistRepository(CaptureSettingsManager(context))
+        val repository = TodoistRepositoryImpl(CaptureSettingsManager(context))
 
         val tasks = try {
             repository.getTodayTasks()

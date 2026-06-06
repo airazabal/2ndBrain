@@ -9,10 +9,14 @@ import com.alex.a2ndbrain.core.reflection.GeminiAgent
 import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.health.HealthRepository
+import com.alex.a2ndbrain.core.health.HealthRepositoryImpl
 import com.alex.a2ndbrain.core.sync.CloudHealthSyncManager
 import com.alex.a2ndbrain.core.memory.MemoryRepository
+import com.alex.a2ndbrain.core.memory.MemoryRepositoryImpl
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
+import com.alex.a2ndbrain.core.usage.UsageRepositoryImpl
+import com.alex.a2ndbrain.core.meditation.MeditationRepository
 import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
 import com.alex.a2ndbrain.core.agents.HealthAgent
 import com.alex.a2ndbrain.core.agents.MemoryAgent
@@ -31,11 +35,15 @@ import org.koin.dsl.module
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.exercise.ExerciseDao
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
+import com.alex.a2ndbrain.core.exercise.ExerciseRepositoryImpl
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
+import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepositoryImpl
 import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotDao
 import com.alex.a2ndbrain.core.todoist.TodoistDao
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
+import com.alex.a2ndbrain.core.todoist.TodoistRepositoryImpl
 import com.alex.a2ndbrain.core.todoist.TodoistStatsRepository
+import com.alex.a2ndbrain.core.todoist.TodoistStatsRepositoryImpl
 import com.alex.a2ndbrain.ui.exercise.ExerciseViewModel
 import com.alex.a2ndbrain.ui.todoist.TodoistViewModel
 import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsViewModel
@@ -50,11 +58,11 @@ val appModule = module {
     single<SenseOfDaySnapshotDao> { get<AppDatabase>().senseOfDaySnapshotDao() }
 
     // Repositories
-    single { MemoryRepository(get()) }
-    single { ExerciseRepository(get(), androidContext()) }
-    single { TodoistStatsRepository(get()) }
-    single { SenseOfDayHistoryRepository(get()) }
-    single { UsageRepository(get()) }
+    single<MemoryRepository> { MemoryRepositoryImpl(get()) }
+    single<ExerciseRepository> { ExerciseRepositoryImpl(get(), androidContext()) }
+    single<TodoistStatsRepository> { TodoistStatsRepositoryImpl(get()) }
+    single<SenseOfDayHistoryRepository> { SenseOfDayHistoryRepositoryImpl(get()) }
+    single<UsageRepository> { UsageRepositoryImpl(get()) }
 
     // Managers
     single { CaptureSettingsManager(androidContext()) }
@@ -64,15 +72,15 @@ val appModule = module {
     single { ReflectionManager(androidContext(), get(), get(), get(), get(), get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
-    single { HealthRepository(get(), get()) }
+    single<HealthRepository> { HealthRepositoryImpl(get(), get()) }
     // Wire cloud sync back into the repository after both are created (breaks circular dep)
     single {
         CloudHealthSyncManager(androidContext(), get<HealthRepository>()).also {
-            get<HealthRepository>().cloudSync = it
+            get<HealthRepository>().setCloudSync(it)
         }
     }
-    single { ZendenceMeditationRepository(androidContext()) }
-    single { TodoistRepository(get()) }
+    single<MeditationRepository> { ZendenceMeditationRepository(androidContext()) }
+    single<TodoistRepository> { TodoistRepositoryImpl(get()) }
     single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get()) }
 
     // Agent layer (Phase 1-3 migration)

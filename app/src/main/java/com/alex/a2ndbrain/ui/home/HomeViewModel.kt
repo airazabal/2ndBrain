@@ -29,7 +29,7 @@ import java.util.*
 import com.alex.a2ndbrain.core.meditation.MeditationManager
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
-import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
+import com.alex.a2ndbrain.core.meditation.MeditationRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
 import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
 import com.alex.a2ndbrain.core.todoist.TaskLatencyTracker
@@ -56,7 +56,7 @@ class HomeViewModel(
     private val reflectionManager: ReflectionManager,
     private val applicationContext: Context,
     private val nearbySyncManager: NearbySyncManager,
-    private val zendenceMeditationRepository: ZendenceMeditationRepository,
+    private val zendenceMeditationRepository: MeditationRepository,
     private val healthRepository: HealthRepository,
     private val modelRouter: ModelRouter,
     private val todoistRepository: TodoistRepository,
