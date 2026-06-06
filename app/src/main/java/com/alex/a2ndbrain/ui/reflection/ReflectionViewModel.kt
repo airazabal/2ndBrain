@@ -9,11 +9,11 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.health.HealthMetrics
-import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
-import com.alex.a2ndbrain.core.reflection.ReflectionManager
+import com.alex.a2ndbrain.core.domain.GenerateWeeklyInsightUseCase
+import com.alex.a2ndbrain.core.domain.GetWeeklyHealthTrendsUseCase
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -24,8 +24,8 @@ import java.util.*
 class ReflectionViewModel(
     private val memoryRepository: MemoryRepository,
     private val usageRepository: UsageRepository,
-    private val reflectionManager: ReflectionManager,
-    private val healthRepository: HealthRepository,
+    private val getWeeklyHealthTrends: GetWeeklyHealthTrendsUseCase,
+    private val generateWeeklyInsight: GenerateWeeklyInsightUseCase,
     private val settingsManager: CaptureSettingsManager,
     private val applicationContext: Context
 ) : ViewModel() {
@@ -61,7 +61,7 @@ class ReflectionViewModel(
     fun loadWeeklyHealthTrends() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                _weeklyHealthTrends.value = healthRepository.getWeeklyTrends()
+                _weeklyHealthTrends.value = getWeeklyHealthTrends()
             } catch (e: Exception) {
                 android.util.Log.e("ReflectionViewModel", "loadWeeklyHealthTrends failed", e)
             }
@@ -97,10 +97,7 @@ class ReflectionViewModel(
         _isGeneratingWeeklyInsight.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                // ReflectionManager.generateWeeklyCorrelation() now handles the full
-                // agent stack internally: HealthAgent.fetchWeeklyTrends(), MemoryAgent,
-                // ReflectionAgent prompt construction, and ModelRouter inference.
-                reflectionManager.generateWeeklyCorrelation()
+                generateWeeklyInsight()
             } catch (e: Exception) {
                 android.util.Log.e("2ndBrain", "Failed to generate weekly insight", e)
             } finally {

@@ -44,6 +44,11 @@ import com.alex.a2ndbrain.core.todoist.TodoistRepository
 import com.alex.a2ndbrain.core.todoist.TodoistRepositoryImpl
 import com.alex.a2ndbrain.core.todoist.TodoistStatsRepository
 import com.alex.a2ndbrain.core.todoist.TodoistStatsRepositoryImpl
+import com.alex.a2ndbrain.core.domain.BuildBrainContextUseCase
+import com.alex.a2ndbrain.core.domain.ChatWithCopilotUseCase
+import com.alex.a2ndbrain.core.domain.GenerateWeeklyInsightUseCase
+import com.alex.a2ndbrain.core.domain.GetWeeklyHealthTrendsUseCase
+import com.alex.a2ndbrain.core.domain.RetrieveMemoriesUseCase
 import com.alex.a2ndbrain.ui.exercise.ExerciseViewModel
 import com.alex.a2ndbrain.ui.todoist.TodoistViewModel
 import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsViewModel
@@ -83,7 +88,7 @@ val appModule = module {
     single<TodoistRepository> { TodoistRepositoryImpl(get()) }
     single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get()) }
 
-    // Agent layer (Phase 1-3 migration)
+    // Agent layer
     single { MemoryAgent(get()) }
     single { HealthAgent(get(), get()) }
     single { ReflectionAgent() }
@@ -92,6 +97,13 @@ val appModule = module {
     single { OrchestratorAgent(get(), get(), get(), get(), get(), get()) }
     // factory = new SessionMemory per Copilot session (not a global singleton)
     factory { SessionMemory() }
+
+    // Use cases
+    single { ChatWithCopilotUseCase(get()) }
+    single { BuildBrainContextUseCase(get()) }
+    single { RetrieveMemoriesUseCase(get()) }
+    single { GetWeeklyHealthTrendsUseCase(get()) }
+    single { GenerateWeeklyInsightUseCase(get()) }
 
     // ViewModels
     viewModel { com.alex.a2ndbrain.NavigationViewModel() }
