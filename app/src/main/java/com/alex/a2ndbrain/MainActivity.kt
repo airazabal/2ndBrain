@@ -313,6 +313,9 @@ class MainActivity : ComponentActivity() {
 
                         val navViewModel: NavigationViewModel = koinViewModel()
                         val homeViewModel: HomeViewModel = koinViewModel()
+                        val homeTasksViewModel: com.alex.a2ndbrain.ui.home.HomeTasksViewModel = koinViewModel()
+                        val grandCentralViewModel: com.alex.a2ndbrain.ui.home.GrandCentralViewModel = koinViewModel()
+                        val wellnessViewModel: com.alex.a2ndbrain.ui.home.WellnessViewModel = koinViewModel()
                         val memoryViewModel: MemoryViewModel = koinViewModel()
                         val copilotViewModel: CopilotViewModel = koinViewModel()
 
@@ -320,11 +323,11 @@ class MainActivity : ComponentActivity() {
                         val requestHealthPermissionLauncher = rememberLauncherForActivityResult(
                             contract = PermissionController.createRequestPermissionResultContract()
                         ) {
-                            homeViewModel.checkHealthPermissionsAndSync()
+                            wellnessViewModel.checkHealthPermissionsAndSync()
                         }
 
                         val hasHealthConnect =
-                            remember(resumeKey) { homeViewModel.healthPermissionsGranted.value }
+                            remember(resumeKey) { wellnessViewModel.healthPermissionsGranted.value }
 
                         val currentTab by navViewModel.currentTab.collectAsStateWithLifecycle()
                         val error by navViewModel.errorFlow.collectAsStateWithLifecycle()
@@ -334,7 +337,10 @@ class MainActivity : ComponentActivity() {
                         // syncs are picked up without relaunching the app.
                         LaunchedEffect(resumeKey) {
                             if (resumeKey > 0) {
-                                homeViewModel.checkHealthPermissionsAndSync()
+                                homeViewModel.markRefreshed()
+                                homeViewModel.refreshMonitoredApps()
+                                grandCentralViewModel.refreshMonitoredApps()
+                                wellnessViewModel.checkHealthPermissionsAndSync()
                             }
                         }
 
@@ -424,7 +430,7 @@ class MainActivity : ComponentActivity() {
                                         actionLabel = "Connect",
                                         onAction = {
                                             requestHealthPermissionLauncher.launch(
-                                                homeViewModel.healthConnectManager.permissions
+                                                wellnessViewModel.healthConnectManager.permissions
                                             )
                                         }
                                     ),
@@ -548,17 +554,17 @@ class MainActivity : ComponentActivity() {
                                         BoxWithConstraints(modifier = Modifier.weight(1f)) {
                                             val maxW = constraints.maxWidth.toFloat()
                                             val maxH = constraints.maxHeight.toFloat()
-                                            val grandCentralResult by homeViewModel.grandCentralResult.collectAsStateWithLifecycle()
+                                            val grandCentralResult by grandCentralViewModel.grandCentralResult.collectAsStateWithLifecycle()
                                             when (currentTab) {
                                                 AppTab.TODAY -> {
-                                                    val healthMetrics by homeViewModel.healthMetricsToday.collectAsStateWithLifecycle()
-                                                    val healthPermissionGranted by homeViewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
+                                                    val healthMetrics by wellnessViewModel.healthMetricsToday.collectAsStateWithLifecycle()
+                                                    val healthPermissionGranted by wellnessViewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
                                                     val healthConnectAvailable =
-                                                        homeViewModel.healthConnectManager.isAvailable()
+                                                        wellnessViewModel.healthConnectManager.isAvailable()
 
-                                                    val senseOfDayScore by homeViewModel.senseOfDayScore.collectAsStateWithLifecycle()
-                                                    val senseOfDayContext by homeViewModel.senseOfDayContext.collectAsStateWithLifecycle()
-                                                    val senseOfDayPillars by homeViewModel.senseOfDayPillars.collectAsStateWithLifecycle()
+                                                    val senseOfDayScore by wellnessViewModel.senseOfDayScore.collectAsStateWithLifecycle()
+                                                    val senseOfDayContext by wellnessViewModel.senseOfDayContext.collectAsStateWithLifecycle()
+                                                    val senseOfDayPillars by wellnessViewModel.senseOfDayPillars.collectAsStateWithLifecycle()
                                                     val todayTimelineEvents by homeViewModel.todayTimelineEvents.collectAsStateWithLifecycle()
                                                     val tomorrowTimelineEvents by homeViewModel.tomorrowTimelineEvents.collectAsStateWithLifecycle()
                                                     val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
@@ -566,24 +572,37 @@ class MainActivity : ComponentActivity() {
                                                     val inlineCopilotLoading by homeViewModel.inlineCopilotLoading.collectAsStateWithLifecycle()
 
                                                     val allMemoriesForHome by homeViewModel.allMemoriesForHome.collectAsStateWithLifecycle()
-                                                    val meditationSessions by homeViewModel.meditationSessions.collectAsStateWithLifecycle()
-                                                    val meditationStreaks by homeViewModel.meditationStreaks.collectAsStateWithLifecycle()
+                                                    val meditationSessions by wellnessViewModel.meditationSessions.collectAsStateWithLifecycle()
+                                                    val meditationStreaks by wellnessViewModel.meditationStreaks.collectAsStateWithLifecycle()
                                                     val vaultNotes by homeViewModel.vaultNotes.collectAsStateWithLifecycle()
                                                     val consolidatedUsage by homeViewModel.consolidatedUsage.collectAsStateWithLifecycle()
                                                     val summaries by homeViewModel.summaries.collectAsStateWithLifecycle()
                                                     val lastRefreshedAt by homeViewModel.lastRefreshedAt.collectAsStateWithLifecycle()
                                                     val refreshIntervalMinutes by homeViewModel.refreshIntervalMinutes.collectAsStateWithLifecycle()
-                                                    val unreadEmailCount by homeViewModel.unreadEmailCount.collectAsStateWithLifecycle()
-                                                    val unreadMessageCount by homeViewModel.unreadMessageCount.collectAsStateWithLifecycle()
-                                                    val meetingsTodayCount by homeViewModel.meetingsTodayCount.collectAsStateWithLifecycle()
-                                                    val todoistTasks by homeViewModel.todoistTasks.collectAsStateWithLifecycle()
-                                                    val overdueTasks by homeViewModel.overdueTasks.collectAsStateWithLifecycle()
-                                                    val taskLatencyStats by homeViewModel.taskLatencyStats.collectAsStateWithLifecycle()
-                                                    val todoistLoading by homeViewModel.todoistLoading.collectAsStateWithLifecycle()
-                                                    val exerciseWeekSessions by homeViewModel.exerciseWeekSessions.collectAsStateWithLifecycle()
-                                                    val exerciseTotalMinutes by homeViewModel.exerciseTotalMinutesThisWeek.collectAsStateWithLifecycle()
+                                                    val unreadEmailCount by grandCentralViewModel.unreadEmailCount.collectAsStateWithLifecycle()
+                                                    val unreadMessageCount by grandCentralViewModel.unreadMessageCount.collectAsStateWithLifecycle()
+                                                    val todoistTasks by homeTasksViewModel.todoistTasks.collectAsStateWithLifecycle()
+                                                    val overdueTasks by homeTasksViewModel.overdueTasks.collectAsStateWithLifecycle()
+                                                    val taskLatencyStats by homeTasksViewModel.taskLatencyStats.collectAsStateWithLifecycle()
+                                                    val todoistLoading by homeTasksViewModel.todoistLoading.collectAsStateWithLifecycle()
+                                                    val exerciseWeekSessions by wellnessViewModel.exerciseWeekSessions.collectAsStateWithLifecycle()
+                                                    val exerciseTotalMinutes by wellnessViewModel.exerciseTotalMinutesThisWeek.collectAsStateWithLifecycle()
+                                                    val meetingsTodayCount by remember(todoistTasks, todayTimelineEvents) {
+                                                        derivedStateOf {
+                                                            val taskTitles = todoistTasks.map { it.content.trim().lowercase() }.toSet()
+                                                            val calCount = todayTimelineEvents.count { event ->
+                                                                event.sourcePackage == "calendar" &&
+                                                                !event.appName.contains("todoist", ignoreCase = true) &&
+                                                                event.title.trim().lowercase() !in taskTitles
+                                                            }
+                                                            calCount + todoistTasks.size
+                                                        }
+                                                    }
                                                     LaunchedEffect(Unit) {
-                                                        homeViewModel.checkHealthPermissionsAndSync()
+                                                        homeViewModel.markRefreshed()
+                                                        homeViewModel.refreshMonitoredApps()
+                                                        grandCentralViewModel.refreshMonitoredApps()
+                                                        wellnessViewModel.checkHealthPermissionsAndSync()
                                                         homeViewModel.loadVaultNotes()
                                                     }
 
@@ -601,7 +620,7 @@ class MainActivity : ComponentActivity() {
                                                         healthConnectAvailable = healthConnectAvailable,
                                                         onConnectHealth = {
                                                             requestHealthPermissionLauncher.launch(
-                                                                homeViewModel.healthConnectManager.permissions
+                                                                wellnessViewModel.healthConnectManager.permissions
                                                             )
                                                         },
                                                         senseOfDayScore = senseOfDayScore,
@@ -634,7 +653,10 @@ class MainActivity : ComponentActivity() {
                                                                 time
                                                             )
                                                         },
-                                                        onRefreshHealth = { homeViewModel.checkHealthPermissionsAndSync() },
+                                                        onRefreshHealth = {
+                                                            homeViewModel.markRefreshed()
+                                                            wellnessViewModel.checkHealthPermissionsAndSync()
+                                                        },
                                                         onDeepDiveCoPilot = { event ->
                                                             val query = """
                                                         Analyze my memories, notes, and habits for today's event: "${event.title}" scheduled at ${event.time} (${event.appName}). Please provide a cohesive context correlation summary to help me prepare.
@@ -654,8 +676,8 @@ class MainActivity : ComponentActivity() {
                                                         overdueTasks = overdueTasks,
                                                         taskLatencyStats = taskLatencyStats,
                                                         todoistLoading = todoistLoading,
-                                                        onCompleteTodoistTask = { id -> homeViewModel.completeTodoistTask(id) },
-                                                        onRefreshTodoistTasks = { homeViewModel.refreshTodoistTasks() },
+                                                        onCompleteTodoistTask = { id -> homeTasksViewModel.completeTodoistTask(id) },
+                                                        onRefreshTodoistTasks = { homeTasksViewModel.refreshTodoistTasks() },
                                                         onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
                                                         exerciseSessionsThisWeek = exerciseWeekSessions,
                                                         exerciseTotalMinutesThisWeek = exerciseTotalMinutes,
@@ -692,6 +714,7 @@ class MainActivity : ComponentActivity() {
                                                             settingsManager.saveMonitoredApps(emptySet())
                                                             feedMonitoredApps = emptySet()
                                                             homeViewModel.refreshMonitoredApps()
+                                                            grandCentralViewModel.refreshMonitoredApps()
                                                         },
                                                         initialFilter = feedFilter,
                                                         vaultUri = settingsManager.getObsidianVaultUri(),
@@ -736,6 +759,7 @@ class MainActivity : ComponentActivity() {
                                                         onBack = {
                                                             navViewModel.setTab(AppTab.TODAY)
                                                             homeViewModel.refreshMonitoredApps()
+                                                            grandCentralViewModel.refreshMonitoredApps()
                                                         },
                                                         onRestartService = {
                                                             val componentName =
