@@ -6,11 +6,11 @@ import android.net.Uri
 
 class ZendenceMeditationRepository(
     private val context: Context
-) {
+) : MeditationRepository {
     private val contentUri: Uri =
         Uri.parse("content://com.alex.zendence.meditationprovider/meditations")
 
-    fun loadSessions(): List<MeditationSession> {
+    override fun loadSessions(): List<MeditationSession> {
         val cr = context.contentResolver
         val sessions = mutableListOf<MeditationSession>()
 
@@ -41,7 +41,7 @@ class ZendenceMeditationRepository(
         return sessions
     }
 
-    fun insertSession(session: MeditationSession) {
+    override fun insertSession(session: MeditationSession) {
         val cr = context.contentResolver
         val values = ContentValues().apply {
             put("id", session.id)

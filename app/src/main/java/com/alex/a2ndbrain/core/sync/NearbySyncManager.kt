@@ -36,7 +36,7 @@ class NearbySyncManager(
     private val context: Context,
     private val usageRepository: UsageRepository,
     private val scope: CoroutineScope,
-    private val meditationRepository: com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository,
+    private val meditationRepository: com.alex.a2ndbrain.core.meditation.MeditationRepository,
     private val healthRepository: HealthRepository,
     private val digitalTimeManager: com.alex.a2ndbrain.core.usage.DigitalTimeManager,
     private val exerciseRepository: ExerciseRepository

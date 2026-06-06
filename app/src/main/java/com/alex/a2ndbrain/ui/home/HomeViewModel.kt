@@ -29,7 +29,7 @@ import java.util.*
 import com.alex.a2ndbrain.core.meditation.MeditationManager
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
-import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
+import com.alex.a2ndbrain.core.meditation.MeditationRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
 import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
 import com.alex.a2ndbrain.core.todoist.TaskLatencyTracker
@@ -56,7 +56,7 @@ class HomeViewModel(
     private val reflectionManager: ReflectionManager,
     private val applicationContext: Context,
     private val nearbySyncManager: NearbySyncManager,
-    private val zendenceMeditationRepository: ZendenceMeditationRepository,
+    private val zendenceMeditationRepository: MeditationRepository,
     private val healthRepository: HealthRepository,
     private val modelRouter: ModelRouter,
     private val todoistRepository: TodoistRepository,
@@ -251,7 +251,11 @@ class HomeViewModel(
                 }.timeInMillis
                 memories.filter { m ->
                     m.source == "notification" && m.timestamp >= startOfToday && !m.isRead &&
-                    (monitored.isEmpty() || monitored.contains(m.packageName))
+                    (monitored.isEmpty() || monitored.contains(m.packageName)) &&
+                    // Calendar notifications are already surfaced by local conflict detection;
+                    // excluding them prevents Grand Central from duplicating "Schedule Crunch"
+                    m.packageName?.contains("calendar") != true &&
+                    m.packageName?.contains("agenda") != true
                 }
             }
             .debounce(3_000L)
@@ -284,7 +288,7 @@ class HomeViewModel(
             }
         }
 
-        val items = notifications.take(40)
+        val items = deduplicateMemories(notifications).map { it.primary }.take(40)
         val snippets = items.joinToString("\n") { m ->
             val app = appLabel(m.packageName)
             val sender = (m.title ?: "Unknown").take(50)
@@ -322,6 +326,7 @@ Rules:
             val categories = mutableListOf<NotificationCategory>()
             val idToCategory = mutableMapOf<Long, String>()
             val categoryEmojiMap = mutableMapOf<String, String>()
+            val seenIds = mutableSetOf<Long>()
 
             // Build a quick lookup: id -> MemoryEntity for source app label
             val idToEntity = items.associateBy { it.id }
@@ -358,6 +363,7 @@ Rules:
                     itemRegex.matches(line) -> {
                         val match = itemRegex.find(line)!!
                         val id = match.groupValues[1].toLongOrNull() ?: return@forEach
+                        if (!seenIds.add(id)) return@forEach
                         val summary = match.groupValues[2].trim()
                         val sourceApp = appLabel(idToEntity[id]?.packageName)
                         val item = CategorizedNotification(id, summary, sourceApp)
@@ -813,26 +819,34 @@ Rules:
         val nowCal = Calendar.getInstance()
         val currentMinutes = nowCal.get(Calendar.HOUR_OF_DAY) * 60 + nowCal.get(Calendar.MINUTE)
 
-        // 1. Overlap Detection (only explicit calendar and manual events within 45 mins)
+        // 1. Overlap Detection — surface only the tightest upcoming pair to avoid
+        //    showing duplicate "Schedule Crunch" alerts when 3+ events are close together.
         val sortedEvents = events.filter { it.sourcePackage == "calendar" || it.sourcePackage == "manual" }.sortedBy { it.minutesFromMidnight }
+        var worstDiff = Int.MAX_VALUE
+        var worstEv1: TimelineEvent? = null
+        var worstEv2: TimelineEvent? = null
         for (i in 0 until sortedEvents.size - 1) {
             val ev1 = sortedEvents[i]
-            val ev2 = sortedEvents[i+1]
+            val ev2 = sortedEvents[i + 1]
             val diff = ev2.minutesFromMidnight - ev1.minutesFromMidnight
-            // Skip if both events are already in the past — conflict is no longer actionable
-            if (diff in 0..45 && ev2.minutesFromMidnight >= currentMinutes) {
-                conflicts.add(
-                    TimelineConflict(
-                        id = "overlap_${ev1.id}_${ev2.id}",
-                        type = ConflictType.OVERLAP,
-                        severity = if (diff < 15) ConflictSeverity.ALERT else ConflictSeverity.WARNING,
-                        title = "Schedule Crunch",
-                        description = "You have '${ev1.title}' and '${ev2.title}' scheduled within ${diff} minutes.",
-                        deepDivePrompt = "I have a schedule overlap today between '${ev1.title}' at ${ev1.time} and '${ev2.title}' at ${ev2.time}. Please suggest a strategy to manage this crunch and prioritize my time.",
-                        relatedEventIds = listOf(ev1.id, ev2.id)
-                    )
-                )
+            if (diff in 0..45 && ev2.minutesFromMidnight >= currentMinutes && diff < worstDiff) {
+                worstDiff = diff
+                worstEv1 = ev1
+                worstEv2 = ev2
             }
+        }
+        if (worstEv1 != null && worstEv2 != null) {
+            conflicts.add(
+                TimelineConflict(
+                    id = "overlap_${worstEv1.id}_${worstEv2.id}",
+                    type = ConflictType.OVERLAP,
+                    severity = if (worstDiff < 15) ConflictSeverity.ALERT else ConflictSeverity.WARNING,
+                    title = "Schedule Crunch",
+                    description = "You have '${worstEv1.title}' and '${worstEv2.title}' scheduled within ${worstDiff} minutes.",
+                    deepDivePrompt = "I have a schedule overlap today between '${worstEv1.title}' at ${worstEv1.time} and '${worstEv2.title}' at ${worstEv2.time}. Please suggest a strategy to manage this crunch and prioritize my time.",
+                    relatedEventIds = listOf(worstEv1.id, worstEv2.id)
+                )
+            )
         }
 
         // 2. Distraction Gap Detection

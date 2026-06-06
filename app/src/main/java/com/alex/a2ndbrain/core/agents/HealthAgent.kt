@@ -6,7 +6,7 @@ import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.meditation.MeditationManager
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
-import com.alex.a2ndbrain.core.meditation.ZendenceMeditationRepository
+import com.alex.a2ndbrain.core.meditation.MeditationRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -23,7 +23,7 @@ import java.util.Locale
  */
 class HealthAgent(
     private val healthRepository: HealthRepository,
-    private val meditationRepository: ZendenceMeditationRepository
+    private val meditationRepository: MeditationRepository
 ) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
