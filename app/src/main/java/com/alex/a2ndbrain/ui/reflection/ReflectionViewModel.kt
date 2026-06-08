@@ -14,6 +14,7 @@ import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.domain.GenerateWeeklyInsightUseCase
 import com.alex.a2ndbrain.core.domain.GetWeeklyHealthTrendsUseCase
+import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
@@ -27,7 +28,8 @@ class ReflectionViewModel(
     private val getWeeklyHealthTrends: GetWeeklyHealthTrendsUseCase,
     private val generateWeeklyInsight: GenerateWeeklyInsightUseCase,
     private val settingsManager: CaptureSettingsManager,
-    private val applicationContext: Context
+    private val applicationContext: Context,
+    private val reflectionManager: ReflectionManager
 ) : ViewModel() {
 
     val summaries: StateFlow<List<DailySummaryEntity>> = memoryRepository.getAllSummariesFlow()
@@ -53,6 +55,9 @@ class ReflectionViewModel(
 
     private val _isGeneratingWeeklyInsight = MutableStateFlow(false)
     val isGeneratingWeeklyInsight = _isGeneratingWeeklyInsight.asStateFlow()
+
+    private val _isGeneratingTomorrowForecast = MutableStateFlow(false)
+    val isGeneratingTomorrowForecast = _isGeneratingTomorrowForecast.asStateFlow()
 
     init {
         loadWeeklyHealthTrends()
@@ -97,11 +102,24 @@ class ReflectionViewModel(
         _isGeneratingWeeklyInsight.value = true
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                generateWeeklyInsight()
+                generateWeeklyInsight.invoke()  // explicit invoke — avoids calling this function recursively
             } catch (e: Exception) {
                 android.util.Log.e("2ndBrain", "Failed to generate weekly insight", e)
             } finally {
                 _isGeneratingWeeklyInsight.value = false
+            }
+        }
+    }
+
+    fun generateTomorrowForecast() {
+        _isGeneratingTomorrowForecast.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                reflectionManager.generateTomorrowForecast()
+            } catch (e: Exception) {
+                android.util.Log.e("2ndBrain", "Failed to generate tomorrow forecast", e)
+            } finally {
+                _isGeneratingTomorrowForecast.value = false
             }
         }
     }

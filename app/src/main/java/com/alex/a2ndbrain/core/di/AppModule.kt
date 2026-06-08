@@ -88,7 +88,7 @@ val appModule = module {
     single { ClipboardCaptureManager(androidContext(), get()) }
     single { DigitalTimeManager(androidContext(), get(), get()) }
     single { GeminiAgent(get()) }
-    single { ReflectionManager(androidContext(), get(), get(), get(), get(), get(), get(), get()) }
+    single { ReflectionManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
     single<HealthRepository> { HealthRepositoryImpl(get(), get()) }
@@ -108,7 +108,7 @@ val appModule = module {
     single { ReflectionAgent() }
     single { ModelPicker(androidContext()) }
     single { ModelRouter(get(), get(), get()) }
-    single { OrchestratorAgent(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { OrchestratorAgent(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     // factory = new SessionMemory per Copilot session (not a global singleton)
     factory { SessionMemory() }
 
@@ -131,7 +131,7 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.ui.home.WellnessViewModel(get(), get(), get(), get(), get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext(), get()) }
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }

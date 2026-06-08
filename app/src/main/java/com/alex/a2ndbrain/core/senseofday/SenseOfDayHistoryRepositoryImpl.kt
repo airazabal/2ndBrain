@@ -71,4 +71,10 @@ class SenseOfDayHistoryRepositoryImpl(private val dao: SenseOfDaySnapshotDao) : 
         }
         return result
     }
+
+    override suspend fun getRecentSnapshots(days: Int): List<SenseOfDaySnapshotEntity> {
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, -days)
+        return dao.getSince(sdf.format(cal.time))
+    }
 }

@@ -4,10 +4,13 @@ import android.content.Context
 import android.util.Log
 import androidx.work.*
 import com.alex.a2ndbrain.core.agents.BrainContext
+import com.alex.a2ndbrain.core.agents.DriftContext
 import com.alex.a2ndbrain.core.agents.HealthAgent
 import com.alex.a2ndbrain.core.agents.MemoryAgent
 import com.alex.a2ndbrain.core.agents.ModelRouter
+import com.alex.a2ndbrain.core.agents.PillarAverages
 import com.alex.a2ndbrain.core.agents.ReflectionAgent
+import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryDao
@@ -47,7 +50,8 @@ class ReflectionManager(
     private val memoryAgent: MemoryAgent,
     private val healthAgent: HealthAgent,
     private val modelRouter: ModelRouter,
-    private val usageRepository: UsageRepository
+    private val usageRepository: UsageRepository,
+    private val senseOfDayRepository: SenseOfDayHistoryRepository
 ) {
 
     // ── WorkManager scheduling ────────────────────────────────────────────
@@ -224,6 +228,39 @@ class ReflectionManager(
 
     // ── Private helpers ───────────────────────────────────────────────────
 
+    // ── Tomorrow Forecast ─────────────────────────────────────────────────
+
+    suspend fun generateTomorrowForecast(): String? = withContext(Dispatchers.IO) {
+        val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Calendar.getInstance().time)
+
+        val ctx = try {
+            buildContext(isMorning = false)
+        } catch (e: Exception) {
+            Log.e("ReflectionManager", "buildContext (tomorrow) failed", e)
+            return@withContext "Failed to gather context for tomorrow forecast."
+        }
+
+        val reflectionAgent = ReflectionAgent()
+        val prompt = reflectionAgent.buildPrompt(ReflectionAgent.ReflectionType.TOMORROW_FORECAST, ctx)
+        val (summaryText, modelUsed) = try {
+            modelRouter.run(prompt, ModelRouter.Complexity.MEDIUM)
+        } catch (e: Exception) {
+            Log.e("ReflectionManager", "ModelRouter (tomorrow) failed", e)
+            "Tomorrow forecast failed: ${e.message}" to "Error"
+        }
+
+        memoryDao.insertSummary(DailySummaryEntity(
+            date = todayStr,
+            type = "tomorrow_forecast",
+            summary = summaryText,
+            timestamp = System.currentTimeMillis(),
+            modelName = modelUsed
+        ))
+        return@withContext null
+    }
+
+    // ── Private helpers ───────────────────────────────────────────────────
+
     private suspend fun buildContext(isMorning: Boolean): BrainContext {
         val calendar = Calendar.getInstance()
         calendar.set(Calendar.HOUR_OF_DAY, 0)
@@ -231,7 +268,6 @@ class ReflectionManager(
         calendar.set(Calendar.SECOND, 0)
         calendar.set(Calendar.MILLISECOND, 0)
         val startOfToday = calendar.timeInMillis
-        // Morning briefing looks 12h back to include yesterday's unread context
         val searchStart = if (isMorning) startOfToday - (12 * 60 * 60 * 1000L) else startOfToday
 
         return coroutineScope {
@@ -240,16 +276,44 @@ class ReflectionManager(
             val usageDeferred = async {
                 try { usageRepository.getUsageStatsForTodaySync() } catch (e: Exception) { emptyList() }
             }
+            val driftDeferred = async {
+                try {
+                    val snapshots = senseOfDayRepository.getRecentSnapshots(28)
+                    if (snapshots.size < 7) return@async DriftContext()
+                    val thisWeek = snapshots.takeLast(7)
+                    fun avg(fn: (com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity) -> Float, list: List<com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity>) =
+                        if (list.isEmpty()) 0f else list.map(fn).average().toFloat()
+                    DriftContext(
+                        currentWeek = PillarAverages(
+                            steps = avg({ it.stepsProgress }, thisWeek),
+                            sleep = avg({ it.sleepProgress }, thisWeek),
+                            exercise = avg({ it.exerciseProgress }, thisWeek),
+                            focus = avg({ it.focusProgress }, thisWeek),
+                            overall = avg({ it.score.toFloat() }, thisWeek)
+                        ),
+                        fourWeekRolling = PillarAverages(
+                            steps = avg({ it.stepsProgress }, snapshots),
+                            sleep = avg({ it.sleepProgress }, snapshots),
+                            exercise = avg({ it.exerciseProgress }, snapshots),
+                            focus = avg({ it.focusProgress }, snapshots),
+                            overall = avg({ it.score.toFloat() }, snapshots)
+                        ),
+                        hasEnoughData = snapshots.size >= 14
+                    )
+                } catch (e: Exception) { DriftContext() }
+            }
 
             val memories = memoriesDeferred.await()
             val (healthCtx, meditationCtx) = healthPairDeferred.await()
             val usage = usageDeferred.await()
+            val driftCtx = driftDeferred.await()
 
             BrainContext(
                 memories = memories,
                 health = healthCtx,
                 usageStats = usage,
-                meditation = meditationCtx
+                meditation = meditationCtx,
+                drift = driftCtx
             )
         }
     }

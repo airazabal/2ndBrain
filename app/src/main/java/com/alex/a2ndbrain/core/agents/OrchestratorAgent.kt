@@ -4,6 +4,7 @@ import android.util.Log
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.habits.HabitRepository
 import com.alex.a2ndbrain.core.mood.MoodRepository
+import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -41,7 +42,8 @@ class OrchestratorAgent(
     private val usageRepository: UsageRepository,
     private val exerciseRepository: ExerciseRepository,
     private val moodRepository: MoodRepository,
-    private val habitRepository: HabitRepository
+    private val habitRepository: HabitRepository,
+    private val senseOfDayRepository: SenseOfDayHistoryRepository
 ) {
 
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -56,7 +58,8 @@ class OrchestratorAgent(
      */
     suspend fun buildContext(
         query: String = "",
-        flags: DynamicContextFlags? = null
+        flags: DynamicContextFlags? = null,
+        tomorrowEvents: List<com.alex.a2ndbrain.TimelineEvent> = emptyList()
     ): BrainContext = withContext(Dispatchers.IO) {
         val needsMemory   = flags == null || flags.includeMemories
         val needsHealth   = flags == null || flags.includeHealth || flags.includeMeditation
@@ -113,12 +116,40 @@ class OrchestratorAgent(
                 } else HabitContext()
             }
 
+            val driftDeferred = async {
+                try {
+                    val snapshots = senseOfDayRepository.getRecentSnapshots(28)
+                    if (snapshots.size < 7) return@async DriftContext()
+                    val thisWeek = snapshots.takeLast(7)
+                    fun avg(fn: (com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity) -> Float, list: List<com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity>) =
+                        if (list.isEmpty()) 0f else list.map(fn).average().toFloat()
+                    DriftContext(
+                        currentWeek = PillarAverages(
+                            steps = avg({ it.stepsProgress }, thisWeek),
+                            sleep = avg({ it.sleepProgress }, thisWeek),
+                            exercise = avg({ it.exerciseProgress }, thisWeek),
+                            focus = avg({ it.focusProgress }, thisWeek),
+                            overall = avg({ it.score.toFloat() }, thisWeek)
+                        ),
+                        fourWeekRolling = PillarAverages(
+                            steps = avg({ it.stepsProgress }, snapshots),
+                            sleep = avg({ it.sleepProgress }, snapshots),
+                            exercise = avg({ it.exerciseProgress }, snapshots),
+                            focus = avg({ it.focusProgress }, snapshots),
+                            overall = avg({ it.score.toFloat() }, snapshots)
+                        ),
+                        hasEnoughData = snapshots.size >= 14
+                    )
+                } catch (e: Exception) { DriftContext() }
+            }
+
             val memories = memoriesDeferred.await()
             val (healthCtx, meditationCtx) = healthPairDeferred.await()
             val usage = usageDeferred.await()
             val exerciseSessions = exerciseDeferred.await()
             val moodCtx = moodDeferred.await()
             val habitCtx = habitsDeferred.await()
+            val driftCtx = driftDeferred.await()
 
             BrainContext(
                 memories = memories,
@@ -127,7 +158,9 @@ class OrchestratorAgent(
                 meditation = meditationCtx,
                 exercise = ExerciseContext(recentSessions = exerciseSessions),
                 mood = moodCtx,
-                habits = habitCtx
+                habits = habitCtx,
+                drift = driftCtx,
+                tomorrowEvents = tomorrowEvents
             )
         }
     }

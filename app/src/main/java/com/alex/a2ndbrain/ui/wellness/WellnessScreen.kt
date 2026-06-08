@@ -47,21 +47,7 @@ fun WellnessScreen(
     val todoistViewModel: TodoistViewModel = koinViewModel()
     val trendsViewModel: SenseOfDayTrendsViewModel = koinViewModel()
 
-    val sessions by wellnessViewModel.meditationSessions.collectAsStateWithLifecycle()
-    val todoistUiState by todoistViewModel.uiState.collectAsStateWithLifecycle()
-    val trendsUiState by trendsViewModel.uiState.collectAsStateWithLifecycle()
-    val streaks by wellnessViewModel.meditationStreaks.collectAsStateWithLifecycle()
-    val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
-    val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
-    val weeklyHealthTrends by reflectionViewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
-    val isGenerating by reflectionViewModel.isGeneratingReflection.collectAsStateWithLifecycle()
-    val isGeneratingWeekly by reflectionViewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
-    val exerciseUiState by exerciseViewModel.uiState.collectAsStateWithLifecycle()
-
-    LaunchedEffect(Unit) {
-        launch { healthViewModel.refresh() }
-        launch { reflectionViewModel.loadWeeklyHealthTrends() }
-    }
+    LaunchedEffect(Unit) { healthViewModel.refresh() }
 
     val startTab = WellnessTab.entries.firstOrNull { it.name == initialTab } ?: WellnessTab.HEALTH
     var selectedTab by remember { mutableStateOf(startTab) }
@@ -77,69 +63,99 @@ fun WellnessScreen(
             }
         }
 
+        // Each branch collects ONLY its own state — changes in one tab never recompose another.
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
             when (selectedTab) {
                 WellnessTab.HEALTH -> HealthScreen(viewModel = healthViewModel, modifier = Modifier.fillMaxSize())
-                WellnessTab.TASKS -> TodoistScreen(
-                    completions = todoistUiState.completions,
-                    weeklyActivity = todoistUiState.weeklyActivity,
-                    todayCount = todoistUiState.todayCount,
-                    weeklyCount = todoistUiState.weeklyCount,
-                    totalCount = todoistUiState.totalCount,
-                    modifier = Modifier.fillMaxSize()
-                )
+
+                WellnessTab.TASKS -> {
+                    val todoistUiState by todoistViewModel.uiState.collectAsStateWithLifecycle()
+                    TodoistScreen(
+                        completions = todoistUiState.completions,
+                        weeklyActivity = todoistUiState.weeklyActivity,
+                        todayCount = todoistUiState.todayCount,
+                        weeklyCount = todoistUiState.weeklyCount,
+                        totalCount = todoistUiState.totalCount,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
                 WellnessTab.HABITS -> HabitsScreen(modifier = Modifier.fillMaxSize())
+
                 WellnessTab.MOOD -> MoodScreen(modifier = Modifier.fillMaxSize())
-                WellnessTab.EXERCISE -> ExerciseScreen(
-                    sessions = exerciseUiState.sessions,
-                    weeklyConsistency = exerciseUiState.weeklyConsistency,
-                    todaySessionCount = exerciseUiState.todaySessionCount,
-                    todayTotalMinutes = exerciseUiState.todayTotalMinutes,
-                    weeklySessionCount = exerciseUiState.weeklySessionCount,
-                    weeklyTotalMinutes = exerciseUiState.weeklyTotalMinutes,
-                    totalSessionCount = exerciseUiState.totalSessionCount,
-                    showLogSheet = exerciseUiState.showLogSheet,
-                    selectedType = exerciseUiState.selectedType,
-                    durationMinutes = exerciseUiState.durationMinutes,
-                    notes = exerciseUiState.notes,
-                    isLoading = exerciseUiState.isLoading,
-                    editingSession = exerciseUiState.editingSession,
-                    editSelectedType = exerciseUiState.editSelectedType,
-                    editDurationMinutes = exerciseUiState.editDurationMinutes,
-                    editNotes = exerciseUiState.editNotes,
-                    onShowLogSheet = exerciseViewModel::showLogSheet,
-                    onHideLogSheet = exerciseViewModel::hideLogSheet,
-                    onSelectType = exerciseViewModel::selectType,
-                    onSetDuration = exerciseViewModel::setDuration,
-                    onSetNotes = exerciseViewModel::setNotes,
-                    onLogSession = exerciseViewModel::logSession,
-                    onDeleteSession = exerciseViewModel::deleteSession,
-                    onEditSession = exerciseViewModel::showEditSheet,
-                    onHideEditSheet = exerciseViewModel::hideEditSheet,
-                    onSetEditType = exerciseViewModel::setEditType,
-                    onSetEditDuration = exerciseViewModel::setEditDuration,
-                    onSetEditNotes = exerciseViewModel::setEditNotes,
-                    onSaveEdit = exerciseViewModel::saveEdit,
-                    modifier = Modifier.fillMaxSize()
-                )
-                WellnessTab.TRENDS -> SenseOfDayTrendsScreen(
-                    uiState = trendsUiState,
-                    modifier = Modifier.fillMaxSize()
-                )
-                WellnessTab.MEDITATION -> MeditationScreen(sessions = sessions, streaks = streaks)
+
+                WellnessTab.EXERCISE -> {
+                    val exerciseUiState by exerciseViewModel.uiState.collectAsStateWithLifecycle()
+                    ExerciseScreen(
+                        sessions = exerciseUiState.sessions,
+                        weeklyConsistency = exerciseUiState.weeklyConsistency,
+                        todaySessionCount = exerciseUiState.todaySessionCount,
+                        todayTotalMinutes = exerciseUiState.todayTotalMinutes,
+                        weeklySessionCount = exerciseUiState.weeklySessionCount,
+                        weeklyTotalMinutes = exerciseUiState.weeklyTotalMinutes,
+                        totalSessionCount = exerciseUiState.totalSessionCount,
+                        showLogSheet = exerciseUiState.showLogSheet,
+                        selectedType = exerciseUiState.selectedType,
+                        durationMinutes = exerciseUiState.durationMinutes,
+                        notes = exerciseUiState.notes,
+                        isLoading = exerciseUiState.isLoading,
+                        editingSession = exerciseUiState.editingSession,
+                        editSelectedType = exerciseUiState.editSelectedType,
+                        editDurationMinutes = exerciseUiState.editDurationMinutes,
+                        editNotes = exerciseUiState.editNotes,
+                        onShowLogSheet = exerciseViewModel::showLogSheet,
+                        onHideLogSheet = exerciseViewModel::hideLogSheet,
+                        onSelectType = exerciseViewModel::selectType,
+                        onSetDuration = exerciseViewModel::setDuration,
+                        onSetNotes = exerciseViewModel::setNotes,
+                        onLogSession = exerciseViewModel::logSession,
+                        onDeleteSession = exerciseViewModel::deleteSession,
+                        onEditSession = exerciseViewModel::showEditSheet,
+                        onHideEditSheet = exerciseViewModel::hideEditSheet,
+                        onSetEditType = exerciseViewModel::setEditType,
+                        onSetEditDuration = exerciseViewModel::setEditDuration,
+                        onSetEditNotes = exerciseViewModel::setEditNotes,
+                        onSaveEdit = exerciseViewModel::saveEdit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                WellnessTab.TRENDS -> {
+                    val trendsUiState by trendsViewModel.uiState.collectAsStateWithLifecycle()
+                    SenseOfDayTrendsScreen(uiState = trendsUiState, modifier = Modifier.fillMaxSize())
+                }
+
+                WellnessTab.MEDITATION -> {
+                    val sessions by wellnessViewModel.meditationSessions.collectAsStateWithLifecycle()
+                    val streaks by wellnessViewModel.meditationStreaks.collectAsStateWithLifecycle()
+                    MeditationScreen(sessions = sessions, streaks = streaks)
+                }
+
                 WellnessTab.ONLINE -> DigitalTimeScreen()
-                WellnessTab.REFLECT -> ReflectionScreen(
-                    summaries = summaries,
-                    isGenerating = isGenerating,
-                    onGenerateReflection = { reflectionViewModel.generateReflection() },
-                    onCancelReflection = { reflectionViewModel.cancelReflection() },
-                    onClearAll = { reflectionViewModel.clearAllSummaries() },
-                    onDeleteSummary = { id -> reflectionViewModel.deleteSummary(id) },
-                    weeklyUsageStats = weeklyUsageStats,
-                    weeklyHealthTrends = weeklyHealthTrends,
-                    isGeneratingWeeklyInsight = isGeneratingWeekly,
-                    onGenerateWeeklyInsight = { reflectionViewModel.generateWeeklyInsight() }
-                )
+
+                WellnessTab.REFLECT -> {
+                    val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
+                    val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
+                    val weeklyHealthTrends by reflectionViewModel.weeklyHealthTrends.collectAsStateWithLifecycle()
+                    val isGenerating by reflectionViewModel.isGeneratingReflection.collectAsStateWithLifecycle()
+                    val isGeneratingWeekly by reflectionViewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
+                    val isGeneratingTomorrowForecast by reflectionViewModel.isGeneratingTomorrowForecast.collectAsStateWithLifecycle()
+                    LaunchedEffect(Unit) { reflectionViewModel.loadWeeklyHealthTrends() }
+                    ReflectionScreen(
+                        summaries = summaries,
+                        isGenerating = isGenerating,
+                        onGenerateReflection = { reflectionViewModel.generateReflection() },
+                        onCancelReflection = { reflectionViewModel.cancelReflection() },
+                        onClearAll = { reflectionViewModel.clearAllSummaries() },
+                        onDeleteSummary = { id -> reflectionViewModel.deleteSummary(id) },
+                        weeklyUsageStats = weeklyUsageStats,
+                        weeklyHealthTrends = weeklyHealthTrends,
+                        isGeneratingWeeklyInsight = isGeneratingWeekly,
+                        onGenerateWeeklyInsight = { reflectionViewModel.generateWeeklyInsight() },
+                        isGeneratingTomorrowForecast = isGeneratingTomorrowForecast,
+                        onGenerateTomorrowForecast = { reflectionViewModel.generateTomorrowForecast() }
+                    )
+                }
             }
         }
     }

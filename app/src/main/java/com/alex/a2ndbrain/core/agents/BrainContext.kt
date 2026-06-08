@@ -24,8 +24,10 @@ data class BrainContext(
     val exercise: ExerciseContext = ExerciseContext(),
     val mood: MoodContext = MoodContext(),
     val habits: HabitContext = HabitContext(),
+    val drift: DriftContext = DriftContext(),
     val vaultNoteLines: List<String> = emptyList(),
     val timelineEvents: List<TimelineEvent> = emptyList(),
+    val tomorrowEvents: List<TimelineEvent> = emptyList(),
     val timestamp: Long = System.currentTimeMillis()
 )
 
@@ -55,3 +57,33 @@ data class HabitContext(
     val completedTodayIds: Set<String> = emptySet(),
     val recentCompletions: List<HabitCompletionEntity> = emptyList()   // last 7 days
 )
+
+data class PillarAverages(
+    val steps: Float = 0f,
+    val sleep: Float = 0f,
+    val exercise: Float = 0f,
+    val focus: Float = 0f,
+    val overall: Float = 0f
+)
+
+data class DriftContext(
+    val currentWeek: PillarAverages = PillarAverages(),
+    val fourWeekRolling: PillarAverages = PillarAverages(),
+    val hasEnoughData: Boolean = false
+) {
+    /** Returns pillars that are >20% below the 4-week rolling average, with their drop %. */
+    fun driftedPillars(threshold: Float = 0.20f): List<Pair<String, Int>> {
+        if (!hasEnoughData) return emptyList()
+        val result = mutableListOf<Pair<String, Int>>()
+        fun check(label: String, current: Float, baseline: Float) {
+            if (baseline > 0f && current < baseline * (1f - threshold)) {
+                result += label to ((baseline - current) / baseline * 100).toInt()
+            }
+        }
+        check("Steps", currentWeek.steps, fourWeekRolling.steps)
+        check("Sleep", currentWeek.sleep, fourWeekRolling.sleep)
+        check("Exercise", currentWeek.exercise, fourWeekRolling.exercise)
+        check("Focus", currentWeek.focus, fourWeekRolling.focus)
+        return result
+    }
+}
