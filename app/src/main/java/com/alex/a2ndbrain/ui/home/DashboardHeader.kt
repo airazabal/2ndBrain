@@ -49,6 +49,7 @@ fun DashboardHeader(
     senseOfDayContext: String = "",
     senseOfDayPillars: List<SenseOfDayPillar> = emptyList(),
     onPillarClick: (String) -> Unit = {},
+    burnoutRisk: BurnoutRisk = BurnoutRisk(),
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -112,6 +113,10 @@ fun DashboardHeader(
             pillars = senseOfDayPillars,
             onPillarClick = onPillarClick
         )
+
+        Spacer(Modifier.height(10.dp))
+
+        BurnoutRiskWidget(burnoutRisk = burnoutRisk)
 
         Spacer(Modifier.height(12.dp))
 

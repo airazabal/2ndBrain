@@ -128,8 +128,20 @@ class WellnessViewModel(
     private val _senseOfDayPillars = MutableStateFlow<List<SenseOfDayPillar>>(emptyList())
     val senseOfDayPillars: StateFlow<List<SenseOfDayPillar>> = _senseOfDayPillars.asStateFlow()
 
+    // ── Burnout Risk ──────────────────────────────────────────────────────────
+    private val _meetingCount = MutableStateFlow(0)
+    private val _avgSleepMinutes7d = MutableStateFlow(0)
+    private val _burnoutRisk = MutableStateFlow(BurnoutRisk())
+    val burnoutRisk: StateFlow<BurnoutRisk> = _burnoutRisk.asStateFlow()
+
+    fun setMeetingCount(count: Int) {
+        _meetingCount.value = count
+    }
+
     init {
         refreshMeditationSessions()
+
+        viewModelScope.launch(Dispatchers.IO) { refreshSleepHistory() }
 
         viewModelScope.launch {
             nearbySyncManager.meditationSyncTrigger.collect {
@@ -152,10 +164,18 @@ class WellnessViewModel(
             }
         }
 
-        // Recalculate score whenever health, usage, meditation, or exercise changes
+        // Recalculate scores whenever health, usage, meditation, or exercise changes
         viewModelScope.launch {
             combine(_healthMetricsToday, usageStats, meditatedToday, exerciseTodayMinutes) { _, _, _, _ -> }
-                .collect { updateSenseOfDayScore() }
+                .collect {
+                    updateSenseOfDayScore()
+                    updateBurnoutRisk()
+                }
+        }
+
+        // Also recalculate burnout when meeting count changes
+        viewModelScope.launch {
+            _meetingCount.collect { updateBurnoutRisk() }
         }
     }
 
@@ -180,6 +200,65 @@ class WellnessViewModel(
         if (metrics.steps > 0 || metrics.sleepMinutes > 0 || metrics.avgHeartRate > 0) {
             _healthMetricsToday.value = metrics
             _healthPermissionsGranted.value = true
+        }
+        refreshSleepHistory()
+    }
+
+    private suspend fun refreshSleepHistory() {
+        val (metrics, _) = healthRepository.getPeriodMetrics(7)
+        val daysWithData = metrics.filter { it.hasSleep }
+        _avgSleepMinutes7d.value = if (daysWithData.isEmpty()) 0
+        else daysWithData.sumOf { it.sleepMinutes } / daysWithData.size
+    }
+
+    private fun updateBurnoutRisk() {
+        viewModelScope.launch(Dispatchers.Default) {
+            val sleepGoalMinutes = (settingsManager.getSleepGoalHours() * 60).toInt()
+            val digitalBaseline = settingsManager.getDigitalFocusBaselineMinutes()
+
+            // Sleep deficit: 7-day avg vs goal (fall back to today if no history)
+            val avgSleep = if (_avgSleepMinutes7d.value > 0) _avgSleepMinutes7d.value
+                           else _healthMetricsToday.value.sleepMinutes
+            val sleepScore = if (sleepGoalMinutes == 0 || avgSleep == 0) 0
+                else ((1f - avgSleep.toFloat() / sleepGoalMinutes) * 100).toInt().coerceIn(0, 100)
+
+            // Missed workouts: inverse of exercise sessions this week (goal = 3)
+            val workoutScore = ((1f - exerciseWeekSessions.value / 3f) * 100).toInt().coerceIn(0, 100)
+
+            // Digital overload: screen time today above baseline (score 0 when at/below baseline)
+            val totalMs = usageStats.value.sumOf { it.totalTimeVisibleMs }
+            val todayScreenMinutes = (totalMs / 60_000L).toInt()
+            val digitalScore = if (todayScreenMinutes <= digitalBaseline) 0
+                else ((todayScreenMinutes - digitalBaseline).toFloat() / digitalBaseline * 100).toInt().coerceIn(0, 100)
+
+            // Meeting density: 5+ calendar events = max pressure
+            val meetingScore = (_meetingCount.value / 5f * 100).toInt().coerceIn(0, 100)
+
+            val composite = (sleepScore * 0.35f + workoutScore * 0.25f + digitalScore * 0.25f + meetingScore * 0.15f).toInt()
+
+            val level = when {
+                composite < 26 -> BurnoutLevel.LOW
+                composite < 51 -> BurnoutLevel.MODERATE
+                composite < 76 -> BurnoutLevel.HIGH
+                else -> BurnoutLevel.CRITICAL
+            }
+
+            val drivers = buildList {
+                if (sleepScore >= 50) add("sleep deficit")
+                if (workoutScore >= 50) add("low activity")
+                if (digitalScore >= 50) add("screen overload")
+                if (meetingScore >= 50) add("meeting load")
+            }.take(2)
+
+            _burnoutRisk.value = BurnoutRisk(
+                score = composite,
+                level = level,
+                sleepScore = sleepScore,
+                workoutScore = workoutScore,
+                digitalScore = digitalScore,
+                meetingScore = meetingScore,
+                drivers = drivers
+            )
         }
     }
 

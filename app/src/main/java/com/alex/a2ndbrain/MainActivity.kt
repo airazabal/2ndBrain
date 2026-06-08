@@ -566,6 +566,7 @@ class MainActivity : ComponentActivity() {
                                                     val senseOfDayScore by wellnessViewModel.senseOfDayScore.collectAsStateWithLifecycle()
                                                     val senseOfDayContext by wellnessViewModel.senseOfDayContext.collectAsStateWithLifecycle()
                                                     val senseOfDayPillars by wellnessViewModel.senseOfDayPillars.collectAsStateWithLifecycle()
+                                                    val burnoutRisk by wellnessViewModel.burnoutRisk.collectAsStateWithLifecycle()
                                                     val todayTimelineEvents by homeViewModel.todayTimelineEvents.collectAsStateWithLifecycle()
                                                     val tomorrowTimelineEvents by homeViewModel.tomorrowTimelineEvents.collectAsStateWithLifecycle()
                                                     val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
@@ -602,6 +603,9 @@ class MainActivity : ComponentActivity() {
                                                             calCount + taskTitles.size
                                                         }
                                                     }
+                                                    LaunchedEffect(meetingsTodayCount) {
+                                                        wellnessViewModel.setMeetingCount(meetingsTodayCount)
+                                                    }
                                                     LaunchedEffect(Unit) {
                                                         homeViewModel.markRefreshed()
                                                         homeViewModel.refreshMonitoredApps()
@@ -630,6 +634,7 @@ class MainActivity : ComponentActivity() {
                                                         senseOfDayScore = senseOfDayScore,
                                                         senseOfDayContext = senseOfDayContext,
                                                         senseOfDayPillars = senseOfDayPillars,
+                                                        burnoutRisk = burnoutRisk,
                                                         todayTimelineEvents = todayTimelineEvents,
                                                         tomorrowTimelineEvents = tomorrowTimelineEvents,
                                                         timelineConflicts = timelineConflicts,
