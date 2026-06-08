@@ -7,6 +7,8 @@ import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
+import com.alex.a2ndbrain.core.habits.HabitCompletionEntity
+import com.alex.a2ndbrain.core.habits.HabitEntity
 import com.alex.a2ndbrain.core.mood.MoodLogEntity
 
 /**
@@ -21,6 +23,7 @@ data class BrainContext(
     val meditation: MeditationContext = MeditationContext(),
     val exercise: ExerciseContext = ExerciseContext(),
     val mood: MoodContext = MoodContext(),
+    val habits: HabitContext = HabitContext(),
     val vaultNoteLines: List<String> = emptyList(),
     val timelineEvents: List<TimelineEvent> = emptyList(),
     val timestamp: Long = System.currentTimeMillis()
@@ -45,4 +48,10 @@ data class ExerciseContext(
 data class MoodContext(
     val todayLogs: List<MoodLogEntity> = emptyList(),
     val recentLogs: List<MoodLogEntity> = emptyList()   // last 7 days
+)
+
+data class HabitContext(
+    val todayHabits: List<HabitEntity> = emptyList(),
+    val completedTodayIds: Set<String> = emptySet(),
+    val recentCompletions: List<HabitCompletionEntity> = emptyList()   // last 7 days
 )

@@ -11,6 +11,7 @@ import com.alex.a2ndbrain.ui.health.HealthScreen
 import com.alex.a2ndbrain.ui.health.HealthViewModel
 import com.alex.a2ndbrain.ui.home.WellnessViewModel
 import com.alex.a2ndbrain.ui.meditation.MeditationScreen
+import com.alex.a2ndbrain.ui.habits.HabitsScreen
 import com.alex.a2ndbrain.ui.mood.MoodScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionViewModel
@@ -25,6 +26,7 @@ import org.koin.androidx.compose.koinViewModel
 private enum class WellnessTab(val label: String) {
     HEALTH("Health"),
     EXERCISE("Exercise"),
+    HABITS("Habits"),
     MOOD("Mood"),
     TASKS("Tasks"),
     TRENDS("Trends"),
@@ -86,6 +88,7 @@ fun WellnessScreen(
                     totalCount = todoistUiState.totalCount,
                     modifier = Modifier.fillMaxSize()
                 )
+                WellnessTab.HABITS -> HabitsScreen(modifier = Modifier.fillMaxSize())
                 WellnessTab.MOOD -> MoodScreen(modifier = Modifier.fillMaxSize())
                 WellnessTab.EXERCISE -> ExerciseScreen(
                     sessions = exerciseUiState.sessions,

@@ -36,6 +36,10 @@ import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.exercise.ExerciseDao
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.exercise.ExerciseRepositoryImpl
+import com.alex.a2ndbrain.core.habits.HabitRepository
+import com.alex.a2ndbrain.core.habits.HabitRepositoryImpl
+import com.alex.a2ndbrain.core.habits.HabitSyncManager
+import com.alex.a2ndbrain.core.habits.HabitsDao
 import com.alex.a2ndbrain.core.mood.MoodDao
 import com.alex.a2ndbrain.core.mood.MoodRepository
 import com.alex.a2ndbrain.core.mood.MoodRepositoryImpl
@@ -43,6 +47,7 @@ import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepositoryImpl
 import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotDao
 import com.alex.a2ndbrain.core.todoist.TodoistDao
+import com.alex.a2ndbrain.core.todoist.TodoistHabitClient
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
 import com.alex.a2ndbrain.core.todoist.TodoistRepositoryImpl
 import com.alex.a2ndbrain.core.todoist.TodoistStatsRepository
@@ -65,6 +70,7 @@ val appModule = module {
     single<TodoistDao> { get<AppDatabase>().todoistDao() }
     single<SenseOfDaySnapshotDao> { get<AppDatabase>().senseOfDaySnapshotDao() }
     single<MoodDao> { get<AppDatabase>().moodDao() }
+    single<HabitsDao> { get<AppDatabase>().habitsDao() }
 
     // Repositories
     single<MemoryRepository> { MemoryRepositoryImpl(get()) }
@@ -73,8 +79,11 @@ val appModule = module {
     single<SenseOfDayHistoryRepository> { SenseOfDayHistoryRepositoryImpl(get()) }
     single<UsageRepository> { UsageRepositoryImpl(get()) }
     single<MoodRepository> { MoodRepositoryImpl(get()) }
+    single<HabitRepository> { HabitRepositoryImpl(get()) }
 
     // Managers
+    single { TodoistHabitClient(get()) }
+    single { HabitSyncManager(get(), get()) }
     single { CaptureSettingsManager(androidContext()) }
     single { ClipboardCaptureManager(androidContext(), get()) }
     single { DigitalTimeManager(androidContext(), get(), get()) }
@@ -99,7 +108,7 @@ val appModule = module {
     single { ReflectionAgent() }
     single { ModelPicker(androidContext()) }
     single { ModelRouter(get(), get(), get()) }
-    single { OrchestratorAgent(get(), get(), get(), get(), get(), get(), get()) }
+    single { OrchestratorAgent(get(), get(), get(), get(), get(), get(), get(), get()) }
     // factory = new SessionMemory per Copilot session (not a global singleton)
     factory { SessionMemory() }
 
@@ -115,7 +124,7 @@ val appModule = module {
     viewModel { ExerciseViewModel(get()) }
     viewModel { TodoistViewModel(get()) }
     viewModel { SenseOfDayTrendsViewModel(get()) }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.home.HomeTasksViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.home.GrandCentralViewModel(get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.home.WellnessViewModel(get(), get(), get(), get(), get(), get(), get()) }
@@ -127,6 +136,7 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.search.SearchViewModel(get()) }
     viewModel { com.alex.a2ndbrain.ui.mood.MoodViewModel(get()) }
+    viewModel { com.alex.a2ndbrain.ui.habits.HabitsViewModel(get()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }

@@ -9,6 +9,7 @@ import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.TimelineConflict
 import com.alex.a2ndbrain.TimelineEvent
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.habits.HabitRepository
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -42,7 +43,8 @@ class HomeViewModel(
     private val settingsManager: CaptureSettingsManager,
     private val reflectionManager: ReflectionManager,
     private val applicationContext: Context,
-    private val nearbySyncManager: NearbySyncManager
+    private val nearbySyncManager: NearbySyncManager,
+    private val habitRepository: HabitRepository
 ) : ViewModel() {
 
     private val _lastRefreshedAt = MutableStateFlow(System.currentTimeMillis())
@@ -315,11 +317,24 @@ class HomeViewModel(
     private val _dismissedConflictIds = MutableStateFlow<Set<String>>(persistedDismissedIds())
     val dismissedConflictIds = _dismissedConflictIds.asStateFlow()
 
+    private val _todayDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+    val activeHabitsToday: StateFlow<List<com.alex.a2ndbrain.core.habits.HabitEntity>> =
+        habitRepository.getTodayHabitsFlow()
+            .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val completedHabitIdsToday: StateFlow<Set<String>> =
+        habitRepository.getCompletionsForDateFlow(_todayDateStr)
+            .map { completions -> completions.map { it.habitId }.toSet() }
+            .stateIn(viewModelScope, SharingStarted.Lazily, emptySet())
+
     private val _localComputedConflicts: StateFlow<List<TimelineConflict>> = combine(
         todayTimelineEvents,
         usageStats,
+        activeHabitsToday,
+        completedHabitIdsToday,
         _minuteTicker
-    ) { events, usage, _ ->
+    ) { events, usage, habits, completedIds, _ ->
         val conflicts = mutableListOf<TimelineConflict>()
         val nowCal = Calendar.getInstance()
         val currentMinutes = nowCal.get(Calendar.HOUR_OF_DAY) * 60 + nowCal.get(Calendar.MINUTE)
@@ -349,6 +364,29 @@ class HomeViewModel(
                     relatedEventIds = listOf(worstEv1.id, worstEv2.id)
                 )
             )
+        }
+
+        // Overdue Habit Detection — fire 30 min after scheduled time, only for timed habits
+        habits.forEach { habit ->
+            if (habit.timeString.isNotBlank() && habit.id !in completedIds) {
+                val parts = habit.timeString.split(":")
+                val h = parts.getOrNull(0)?.toIntOrNull() ?: return@forEach
+                val m = parts.getOrNull(1)?.toIntOrNull() ?: 0
+                val habitMinutes = h * 60 + m
+                if (currentMinutes - habitMinutes in 30..240) {
+                    conflicts.add(
+                        TimelineConflict(
+                            id = "overdue_${habit.id}",
+                            type = ConflictType.OVERDUE_HABIT,
+                            severity = ConflictSeverity.WARNING,
+                            title = "Habit Overdue",
+                            description = "${habit.emoji} '${habit.name}' was scheduled for ${habit.timeString} and hasn't been completed yet.",
+                            deepDivePrompt = "I missed my habit '${habit.name}' scheduled for ${habit.timeString}. It's now past that time. Should I still do it now or skip it today? Help me decide and get back on track.",
+                            relatedEventIds = listOf(habit.id)
+                        )
+                    )
+                }
+            }
         }
 
         // Distraction Gap Detection

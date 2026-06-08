@@ -212,6 +212,9 @@ class CaptureSettingsManager(private val context: Context) {
         prefs.edit().putBoolean("calendar_sync_enabled", enabled).apply()
     }
 
+    fun getTodoistHabitProjectId(): String = prefs.getString("todoist_habit_project_id", "") ?: ""
+    fun saveTodoistHabitProjectId(id: String) { prefs.edit().putString("todoist_habit_project_id", id).apply() }
+
     // ── Daily Goals (Sense of Day) ────────────────────────────────────────────
     fun getStepsGoal(): Int = prefs.getInt("steps_goal", 10000)
     fun setStepsGoal(goal: Int) { prefs.edit().putInt("steps_goal", goal).apply() }

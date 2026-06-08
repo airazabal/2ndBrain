@@ -267,6 +267,35 @@ class ReflectionAgent {
             append("\n")
         }
 
+        // ── Habits ────────────────────────────────────────────────────────
+        if (ctx.habits.todayHabits.isNotEmpty() || (type == ReflectionType.WEEKLY_CORRELATION && ctx.habits.recentCompletions.isNotEmpty())) {
+            when (type) {
+                ReflectionType.WEEKLY_CORRELATION -> {
+                    val completions = ctx.habits.recentCompletions
+                    val habitNames = ctx.habits.todayHabits.associateBy({ it.id }, { "${it.emoji} ${it.name}" })
+                    val byHabit = completions.groupBy { it.habitId }
+                    if (ctx.habits.todayHabits.isNotEmpty()) {
+                        append("PAST 7 DAYS HABITS:\n")
+                        ctx.habits.todayHabits.forEach { habit ->
+                            val count = byHabit[habit.id]?.size ?: 0
+                            append("- ${habit.emoji} ${habit.name}: $count/7 days completed\n")
+                        }
+                    }
+                }
+                else -> {
+                    val completed = ctx.habits.completedTodayIds
+                    val total = ctx.habits.todayHabits.size
+                    val doneCount = ctx.habits.todayHabits.count { it.id in completed }
+                    append("HABITS TODAY ($doneCount/$total):\n")
+                    ctx.habits.todayHabits.forEach { habit ->
+                        val status = if (habit.id in completed) "✓" else "○"
+                        append("- $status ${habit.emoji} ${habit.name}\n")
+                    }
+                }
+            }
+            append("\n")
+        }
+
         // ── Meditation ────────────────────────────────────────────────────
         if (ctx.meditation.sessions.isNotEmpty()) {
             val streaks = ctx.meditation.streaks

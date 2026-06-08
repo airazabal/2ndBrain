@@ -8,6 +8,9 @@ import com.alex.a2ndbrain.core.exercise.ExerciseDao
 import com.alex.a2ndbrain.core.exercise.ExerciseSessionEntity
 import com.alex.a2ndbrain.core.health.HealthDao
 import com.alex.a2ndbrain.core.health.HealthSnapshotEntity
+import com.alex.a2ndbrain.core.habits.HabitCompletionEntity
+import com.alex.a2ndbrain.core.habits.HabitEntity
+import com.alex.a2ndbrain.core.habits.HabitsDao
 import com.alex.a2ndbrain.core.mood.MoodDao
 import com.alex.a2ndbrain.core.mood.MoodLogEntity
 import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotDao
@@ -15,7 +18,7 @@ import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity
 import com.alex.a2ndbrain.core.todoist.TodoistCompletionEntity
 import com.alex.a2ndbrain.core.todoist.TodoistDao
 
-@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class, HealthSnapshotEntity::class, ExerciseSessionEntity::class, TodoistCompletionEntity::class, SenseOfDaySnapshotEntity::class, MoodLogEntity::class], version = 24, exportSchema = true)
+@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class, HealthSnapshotEntity::class, ExerciseSessionEntity::class, TodoistCompletionEntity::class, SenseOfDaySnapshotEntity::class, MoodLogEntity::class, HabitEntity::class, HabitCompletionEntity::class], version = 27, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
     abstract fun healthDao(): HealthDao
@@ -23,6 +26,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun todoistDao(): TodoistDao
     abstract fun senseOfDaySnapshotDao(): SenseOfDaySnapshotDao
     abstract fun moodDao(): MoodDao
+    abstract fun habitsDao(): HabitsDao
 
     companion object {
         @Volatile
