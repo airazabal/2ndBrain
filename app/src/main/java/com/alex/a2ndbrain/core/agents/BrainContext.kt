@@ -7,6 +7,7 @@ import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
+import com.alex.a2ndbrain.core.mood.MoodLogEntity
 
 /**
  * Immutable snapshot of all personal data for one inference call.
@@ -19,6 +20,7 @@ data class BrainContext(
     val usageStats: List<UsageStatEntity> = emptyList(),
     val meditation: MeditationContext = MeditationContext(),
     val exercise: ExerciseContext = ExerciseContext(),
+    val mood: MoodContext = MoodContext(),
     val vaultNoteLines: List<String> = emptyList(),
     val timelineEvents: List<TimelineEvent> = emptyList(),
     val timestamp: Long = System.currentTimeMillis()
@@ -38,4 +40,9 @@ data class MeditationContext(
 
 data class ExerciseContext(
     val recentSessions: List<ExerciseSessionEntity> = emptyList()
+)
+
+data class MoodContext(
+    val todayLogs: List<MoodLogEntity> = emptyList(),
+    val recentLogs: List<MoodLogEntity> = emptyList()   // last 7 days
 )

@@ -36,6 +36,9 @@ import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.exercise.ExerciseDao
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.exercise.ExerciseRepositoryImpl
+import com.alex.a2ndbrain.core.mood.MoodDao
+import com.alex.a2ndbrain.core.mood.MoodRepository
+import com.alex.a2ndbrain.core.mood.MoodRepositoryImpl
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepositoryImpl
 import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotDao
@@ -61,6 +64,7 @@ val appModule = module {
     single<ExerciseDao> { get<AppDatabase>().exerciseDao() }
     single<TodoistDao> { get<AppDatabase>().todoistDao() }
     single<SenseOfDaySnapshotDao> { get<AppDatabase>().senseOfDaySnapshotDao() }
+    single<MoodDao> { get<AppDatabase>().moodDao() }
 
     // Repositories
     single<MemoryRepository> { MemoryRepositoryImpl(get()) }
@@ -68,6 +72,7 @@ val appModule = module {
     single<TodoistStatsRepository> { TodoistStatsRepositoryImpl(get()) }
     single<SenseOfDayHistoryRepository> { SenseOfDayHistoryRepositoryImpl(get()) }
     single<UsageRepository> { UsageRepositoryImpl(get()) }
+    single<MoodRepository> { MoodRepositoryImpl(get()) }
 
     // Managers
     single { CaptureSettingsManager(androidContext()) }
@@ -94,7 +99,7 @@ val appModule = module {
     single { ReflectionAgent() }
     single { ModelPicker(androidContext()) }
     single { ModelRouter(get(), get(), get()) }
-    single { OrchestratorAgent(get(), get(), get(), get(), get(), get()) }
+    single { OrchestratorAgent(get(), get(), get(), get(), get(), get(), get()) }
     // factory = new SessionMemory per Copilot session (not a global singleton)
     factory { SessionMemory() }
 
@@ -121,6 +126,7 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.search.SearchViewModel(get()) }
+    viewModel { com.alex.a2ndbrain.ui.mood.MoodViewModel(get()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }

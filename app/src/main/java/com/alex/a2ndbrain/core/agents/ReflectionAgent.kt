@@ -239,6 +239,34 @@ class ReflectionAgent {
             append("\n")
         }
 
+        // ── Mood & Energy ────────────────────────────────────────────────
+        if (ctx.mood.todayLogs.isNotEmpty() || (type == ReflectionType.WEEKLY_CORRELATION && ctx.mood.recentLogs.isNotEmpty())) {
+            when (type) {
+                ReflectionType.WEEKLY_CORRELATION -> {
+                    val logs = ctx.mood.recentLogs
+                    if (logs.isNotEmpty()) {
+                        val avgMood = logs.map { it.mood }.average()
+                        val avgEnergy = logs.map { it.energy }.average()
+                        append("PAST 7 DAYS MOOD & ENERGY:\n")
+                        append("- Average mood: ${"%.1f".format(avgMood)}/5, average energy: ${"%.1f".format(avgEnergy)}/5\n")
+                        logs.take(7).forEach { log ->
+                            val note = if (log.note.isNotBlank()) " — \"${log.note}\"" else ""
+                            append("- ${log.date}: mood ${log.mood}/5, energy ${log.energy}/5$note\n")
+                        }
+                    }
+                }
+                else -> {
+                    val latest = ctx.mood.todayLogs.firstOrNull()
+                    if (latest != null) {
+                        append("MOOD & ENERGY TODAY:\n")
+                        append("- Mood: ${latest.mood}/5, Energy: ${latest.energy}/5\n")
+                        if (latest.note.isNotBlank()) append("- Note: \"${latest.note}\"\n")
+                    }
+                }
+            }
+            append("\n")
+        }
+
         // ── Meditation ────────────────────────────────────────────────────
         if (ctx.meditation.sessions.isNotEmpty()) {
             val streaks = ctx.meditation.streaks
