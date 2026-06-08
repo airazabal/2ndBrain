@@ -21,7 +21,8 @@ class ReflectionAgent {
     enum class ReflectionType {
         MORNING_BRIEFING,
         EVENING_REFLECTION,
-        WEEKLY_CORRELATION;
+        WEEKLY_CORRELATION,
+        TOMORROW_FORECAST;
 
         companion object {
             /** Infer reflection type from current hour of day. */
@@ -86,6 +87,7 @@ class ReflectionAgent {
             ReflectionType.MORNING_BRIEFING -> "Good morning"
             ReflectionType.EVENING_REFLECTION -> "Good evening"
             ReflectionType.WEEKLY_CORRELATION -> "Good morning"
+            ReflectionType.TOMORROW_FORECAST -> "Good evening"
         }
 
         // ── System instruction ────────────────────────────────────────────
@@ -123,7 +125,18 @@ class ReflectionAgent {
                     Discover key correlations between physical activity, sleep cycles, habit compliance, and screen distractions.
                     Highlight positive habits and provide specific, actionable cognitive advice.
                     Tone: friendly, premium, concise. Write as a cohesive narrative — no bullet points.
-                    
+
+                """.trimIndent())
+            }
+            ReflectionType.TOMORROW_FORECAST -> {
+                append("""
+                    TOMORROW FORECAST MODE:
+                    You are looking ahead. Based on today's data and tomorrow's schedule:
+                    1. READINESS CHECK — given today's pillar scores (steps/sleep/exercise/focus) and habit compliance, rate readiness for tomorrow (High / Medium / Low) and explain why in one sentence.
+                    2. RISKS — identify 1-2 specific risks for tomorrow (e.g., "back-to-back meetings with low sleep will hurt focus", "exercise streak at risk").
+                    3. PREP ACTIONS — give exactly 3 specific actions to take tonight or tomorrow morning.
+                    Format: use the three numbered sections above. Keep each section tight — 2-3 sentences max.
+
                 """.trimIndent())
             }
         }
@@ -137,8 +150,29 @@ class ReflectionAgent {
                 - Flag potential time crunches or energy drains.
                 - Spot patterns across people and projects (mention them by name).
                 FORMAT: Friendly, professional, and insightful. Use clear headings. Keep it brief.
-                
+
             """.trimIndent())
+        }
+
+        // ── Drift alerts ──────────────────────────────────────────────────
+        if (type in listOf(ReflectionType.EVENING_REFLECTION, ReflectionType.TOMORROW_FORECAST, ReflectionType.WEEKLY_CORRELATION)) {
+            val drifted = ctx.drift.driftedPillars()
+            if (drifted.isNotEmpty()) {
+                append("DRIFT ALERTS (>20% below 4-week rolling average):\n")
+                drifted.forEach { (pillar, drop) ->
+                    append("- $pillar is ${drop}% below baseline\n")
+                }
+                append("→ Acknowledge these regressions and suggest specific recovery steps.\n\n")
+            }
+        }
+
+        // ── Tomorrow's schedule ───────────────────────────────────────────
+        if (ctx.tomorrowEvents.isNotEmpty()) {
+            append("TOMORROW'S SCHEDULE:\n")
+            ctx.tomorrowEvents.sortedBy { it.minutesFromMidnight }.forEach { event ->
+                append("- ${event.time}  ${event.title} (${event.appName})\n")
+            }
+            append("\n")
         }
 
         // ── Memory timeline ───────────────────────────────────────────────
@@ -233,6 +267,63 @@ class ReflectionAgent {
                             append("RECENT EXERCISE:\n")
                             append("- Last session: ${recentSession.date} $exType ${recentSession.durationMinutes}m\n")
                         }
+                    }
+                }
+            }
+            append("\n")
+        }
+
+        // ── Mood & Energy ────────────────────────────────────────────────
+        if (ctx.mood.todayLogs.isNotEmpty() || (type == ReflectionType.WEEKLY_CORRELATION && ctx.mood.recentLogs.isNotEmpty())) {
+            when (type) {
+                ReflectionType.WEEKLY_CORRELATION -> {
+                    val logs = ctx.mood.recentLogs
+                    if (logs.isNotEmpty()) {
+                        val avgMood = logs.map { it.mood }.average()
+                        val avgEnergy = logs.map { it.energy }.average()
+                        append("PAST 7 DAYS MOOD & ENERGY:\n")
+                        append("- Average mood: ${"%.1f".format(avgMood)}/5, average energy: ${"%.1f".format(avgEnergy)}/5\n")
+                        logs.take(7).forEach { log ->
+                            val note = if (log.note.isNotBlank()) " — \"${log.note}\"" else ""
+                            append("- ${log.date}: mood ${log.mood}/5, energy ${log.energy}/5$note\n")
+                        }
+                    }
+                }
+                else -> {
+                    val latest = ctx.mood.todayLogs.firstOrNull()
+                    if (latest != null) {
+                        append("MOOD & ENERGY TODAY:\n")
+                        append("- Mood: ${latest.mood}/5, Energy: ${latest.energy}/5\n")
+                        if (latest.note.isNotBlank()) append("- Note: \"${latest.note}\"\n")
+                    }
+                }
+            }
+            append("\n")
+        }
+
+        // ── Habits ────────────────────────────────────────────────────────
+        if (ctx.habits.todayHabits.isNotEmpty() || (type == ReflectionType.WEEKLY_CORRELATION && ctx.habits.recentCompletions.isNotEmpty())) {
+            when (type) {
+                ReflectionType.WEEKLY_CORRELATION -> {
+                    val completions = ctx.habits.recentCompletions
+                    val habitNames = ctx.habits.todayHabits.associateBy({ it.id }, { "${it.emoji} ${it.name}" })
+                    val byHabit = completions.groupBy { it.habitId }
+                    if (ctx.habits.todayHabits.isNotEmpty()) {
+                        append("PAST 7 DAYS HABITS:\n")
+                        ctx.habits.todayHabits.forEach { habit ->
+                            val count = byHabit[habit.id]?.size ?: 0
+                            append("- ${habit.emoji} ${habit.name}: $count/7 days completed\n")
+                        }
+                    }
+                }
+                else -> {
+                    val completed = ctx.habits.completedTodayIds
+                    val total = ctx.habits.todayHabits.size
+                    val doneCount = ctx.habits.todayHabits.count { it.id in completed }
+                    append("HABITS TODAY ($doneCount/$total):\n")
+                    ctx.habits.todayHabits.forEach { habit ->
+                        val status = if (habit.id in completed) "✓" else "○"
+                        append("- $status ${habit.emoji} ${habit.name}\n")
                     }
                 }
             }

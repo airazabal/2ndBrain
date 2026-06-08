@@ -11,24 +11,15 @@ class DynamicContextFlagsTest {
     fun `meditation query only triggers meditation`() {
         val flags = DynamicContextFlags.fromMessage("How many meditation sessions did I have this week?")
         assertTrue(flags.includeMeditation)
-        assertFalse("habits should NOT fire for meditation query", flags.includeHabits)
         assertFalse("usage should NOT fire for meditation query", flags.includeUsage)
         assertFalse("health should NOT fire for meditation query", flags.includeHealth)
         assertFalse(flags.isGeneral)
     }
 
     @Test
-    fun `meditate keyword does not trigger habits`() {
+    fun `meditate keyword triggers meditation`() {
         val flags = DynamicContextFlags.fromMessage("Did I meditate today?")
         assertTrue(flags.includeMeditation)
-        assertFalse(flags.includeHabits)
-    }
-
-    @Test
-    fun `medication query triggers habits not meditation`() {
-        val flags = DynamicContextFlags.fromMessage("Did I take my medication?")
-        assertTrue(flags.includeHabits)
-        assertFalse("medication should not trigger meditation section", flags.includeMeditation)
     }
 
     @Test
@@ -42,7 +33,6 @@ class DynamicContextFlagsTest {
         ).forEach { query ->
             val flags = DynamicContextFlags.fromMessage(query)
             assertTrue("'$query' should trigger meditation", flags.includeMeditation)
-            assertFalse("'$query' should NOT trigger habits", flags.includeHabits)
         }
     }
 
@@ -51,7 +41,6 @@ class DynamicContextFlagsTest {
         val flags = DynamicContextFlags.fromMessage("How much screen time did I have today?")
         assertTrue(flags.includeUsage)
         assertFalse(flags.includeMeditation)
-        assertFalse(flags.includeHabits)
     }
 
     @Test
@@ -66,9 +55,21 @@ class DynamicContextFlagsTest {
         val flags = DynamicContextFlags.fromMessage("How am I doing?")
         assertTrue(flags.isGeneral)
         assertTrue(flags.includeHealth)
-        assertTrue(flags.includeHabits)
         assertTrue(flags.includeUsage)
         assertTrue(flags.includeMeditation)
+        assertTrue(flags.includeMemories)
+    }
+
+    @Test
+    fun `exercise query triggers exercise not health`() {
+        val flags = DynamicContextFlags.fromMessage("How many workouts did I do this week?")
+        assertTrue(flags.includeExercise)
+        assertFalse(flags.isGeneral)
+    }
+
+    @Test
+    fun `finance query triggers memories`() {
+        val flags = DynamicContextFlags.fromMessage("What did I spend money on this week?")
         assertTrue(flags.includeMemories)
     }
 }

@@ -129,6 +129,50 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_23_24 = object : Migration(23, 24) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `mood_logs` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `date` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `mood` INTEGER NOT NULL, `energy` INTEGER NOT NULL, `note` TEXT NOT NULL)")
+        }
+    }
+
+    val MIGRATION_24_25 = object : Migration(24, 25) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS `habits` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `emoji` TEXT NOT NULL, `timeString` TEXT NOT NULL, `isActive` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `lastModifiedAt` INTEGER NOT NULL, `isDeleted` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            db.execSQL("CREATE TABLE IF NOT EXISTS `habit_completions` (`habitId` TEXT NOT NULL, `date` TEXT NOT NULL, `completedAt` INTEGER NOT NULL, PRIMARY KEY(`habitId`, `date`))")
+        }
+    }
+
+    val MIGRATION_25_26 = object : Migration(25, 26) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE habits ADD COLUMN todoistTaskId TEXT")
+        }
+    }
+
+    val MIGRATION_26_27 = object : Migration(26, 27) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE habits ADD COLUMN repeatRule TEXT")
+        }
+    }
+
+    val MIGRATION_27_28 = object : Migration(27, 28) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `goals` (
+                    `id` TEXT NOT NULL,
+                    `title` TEXT NOT NULL,
+                    `type` TEXT NOT NULL,
+                    `targetValue` REAL NOT NULL,
+                    `periodDays` INTEGER NOT NULL DEFAULT 7,
+                    `isActive` INTEGER NOT NULL DEFAULT 1,
+                    `createdAt` INTEGER NOT NULL,
+                    `linkedHabitId` TEXT,
+                    `linkedExerciseType` TEXT,
+                    PRIMARY KEY(`id`)
+                )
+            """.trimIndent())
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> = arrayOf(
         MIGRATION_14_15,
         MIGRATION_15_16,
@@ -138,6 +182,11 @@ object DatabaseMigrations {
         MIGRATION_19_20,
         MIGRATION_20_21,
         MIGRATION_21_22,
-        MIGRATION_22_23
+        MIGRATION_22_23,
+        MIGRATION_23_24,
+        MIGRATION_24_25,
+        MIGRATION_25_26,
+        MIGRATION_26_27,
+        MIGRATION_27_28
     )
 }

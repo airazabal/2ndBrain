@@ -13,4 +13,5 @@ interface SenseOfDayHistoryRepository {
     )
     suspend fun getStats(): Triple<Int, Int, Int>
     suspend fun getWeeklyAverages(weeks: Int = 8): List<Pair<String, Float>>
+    suspend fun getRecentSnapshots(days: Int): List<SenseOfDaySnapshotEntity>
 }

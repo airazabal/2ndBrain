@@ -49,6 +49,7 @@ fun DashboardHeader(
     senseOfDayContext: String = "",
     senseOfDayPillars: List<SenseOfDayPillar> = emptyList(),
     onPillarClick: (String) -> Unit = {},
+    burnoutRisk: BurnoutRisk = BurnoutRisk(),
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -113,6 +114,10 @@ fun DashboardHeader(
             onPillarClick = onPillarClick
         )
 
+        Spacer(Modifier.height(10.dp))
+
+        BurnoutRiskWidget(burnoutRisk = burnoutRisk)
+
         Spacer(Modifier.height(12.dp))
 
         // Cards row
@@ -123,12 +128,12 @@ fun DashboardHeader(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             DashCard(
-                label = "OVERDUE\nACTIONS",
-                value = overdueCount.toString(),
-                subtitle = if (overdueCount == 0) "All caught up" else "$overdueCount past due",
-                accentColor = Color(0xFFEF5350),
-                icon = Icons.Default.Warning,
-                onClick = onOverdueClick
+                label = "TODAY'S\nAGENDA",
+                value = meetingsCount.toString(),
+                subtitle = if (overdueCount > 0) "$overdueCount overdue" else if (meetingsCount == 0) "All clear" else "$meetingsCount items",
+                accentColor = if (overdueCount > 0) Color(0xFFEF5350) else Color(0xFF1E88E5),
+                icon = Icons.Default.ListAlt,
+                onClick = onMeetingsClick
             )
             DashCard(
                 label = "UNREAD\nEMAIL",
@@ -137,14 +142,6 @@ fun DashboardHeader(
                 accentColor = Color(0xFFFF9800),
                 icon = Icons.Default.Email,
                 onClick = onEmailClick
-            )
-            DashCard(
-                label = "TASKS\nTODAY",
-                value = meetingsCount.toString(),
-                subtitle = if (meetingsCount == 0) "Nothing on schedule" else "$meetingsCount on schedule",
-                accentColor = Color(0xFF1E88E5),
-                icon = Icons.Default.CalendarMonth,
-                onClick = onMeetingsClick
             )
             DashCard(
                 label = "UNREAD\nMESSAGES",

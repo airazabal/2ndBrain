@@ -2,12 +2,17 @@ package com.alex.a2ndbrain.core.agents
 
 import android.util.Log
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
+import com.alex.a2ndbrain.core.habits.HabitRepository
+import com.alex.a2ndbrain.core.mood.MoodRepository
+import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Locale
 
 /**
  * OrchestratorAgent — single entry point for all AI-powered features.
@@ -35,8 +40,13 @@ class OrchestratorAgent(
     private val reflectionAgent: ReflectionAgent,
     private val modelRouter: ModelRouter,
     private val usageRepository: UsageRepository,
-    private val exerciseRepository: ExerciseRepository
+    private val exerciseRepository: ExerciseRepository,
+    private val moodRepository: MoodRepository,
+    private val habitRepository: HabitRepository,
+    private val senseOfDayRepository: SenseOfDayHistoryRepository
 ) {
+
+    private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     /**
      * Build a BrainContext snapshot. Fetches only what the query needs (ReAct pattern).
@@ -48,12 +58,15 @@ class OrchestratorAgent(
      */
     suspend fun buildContext(
         query: String = "",
-        flags: DynamicContextFlags? = null
+        flags: DynamicContextFlags? = null,
+        tomorrowEvents: List<com.alex.a2ndbrain.TimelineEvent> = emptyList()
     ): BrainContext = withContext(Dispatchers.IO) {
         val needsMemory   = flags == null || flags.includeMemories
         val needsHealth   = flags == null || flags.includeHealth || flags.includeMeditation
         val needsUsage    = flags == null || flags.includeUsage
         val needsExercise = flags == null || flags.includeExercise
+        val needsMood     = flags == null || flags.includeMood
+        val needsHabits   = flags == null || flags.includeHabits
 
         coroutineScope {
             val memoriesDeferred = async {
@@ -75,18 +88,79 @@ class OrchestratorAgent(
                     catch (e: Exception) { emptyList() }
                 } else emptyList()
             }
+            val moodDeferred = async {
+                if (needsMood) {
+                    try {
+                        val today = dateFmt.format(java.util.Date())
+                        val weekAgo = dateFmt.format(java.util.Date(System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L))
+                        val todayLogs = moodRepository.getLogsForDate(today)
+                        val recentLogs = moodRepository.getLogsSince(weekAgo)
+                        MoodContext(todayLogs = todayLogs, recentLogs = recentLogs)
+                    } catch (e: Exception) { MoodContext() }
+                } else MoodContext()
+            }
+            val habitsDeferred = async {
+                if (needsHabits) {
+                    try {
+                        val today = dateFmt.format(java.util.Date())
+                        val weekAgo = dateFmt.format(java.util.Date(System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L))
+                        val habits = habitRepository.getTodayCompletions(today)
+                            .let { completions ->
+                                HabitContext(
+                                    completedTodayIds = completions.map { it.habitId }.toSet(),
+                                    recentCompletions = habitRepository.getRecentCompletions(weekAgo)
+                                )
+                            }
+                        habits
+                    } catch (e: Exception) { HabitContext() }
+                } else HabitContext()
+            }
+
+            val driftDeferred = async {
+                try {
+                    val snapshots = senseOfDayRepository.getRecentSnapshots(28)
+                    if (snapshots.size < 7) return@async DriftContext()
+                    val thisWeek = snapshots.takeLast(7)
+                    fun avg(fn: (com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity) -> Float, list: List<com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity>) =
+                        if (list.isEmpty()) 0f else list.map(fn).average().toFloat()
+                    DriftContext(
+                        currentWeek = PillarAverages(
+                            steps = avg({ it.stepsProgress }, thisWeek),
+                            sleep = avg({ it.sleepProgress }, thisWeek),
+                            exercise = avg({ it.exerciseProgress }, thisWeek),
+                            focus = avg({ it.focusProgress }, thisWeek),
+                            overall = avg({ it.score.toFloat() }, thisWeek)
+                        ),
+                        fourWeekRolling = PillarAverages(
+                            steps = avg({ it.stepsProgress }, snapshots),
+                            sleep = avg({ it.sleepProgress }, snapshots),
+                            exercise = avg({ it.exerciseProgress }, snapshots),
+                            focus = avg({ it.focusProgress }, snapshots),
+                            overall = avg({ it.score.toFloat() }, snapshots)
+                        ),
+                        hasEnoughData = snapshots.size >= 14
+                    )
+                } catch (e: Exception) { DriftContext() }
+            }
 
             val memories = memoriesDeferred.await()
             val (healthCtx, meditationCtx) = healthPairDeferred.await()
             val usage = usageDeferred.await()
             val exerciseSessions = exerciseDeferred.await()
+            val moodCtx = moodDeferred.await()
+            val habitCtx = habitsDeferred.await()
+            val driftCtx = driftDeferred.await()
 
             BrainContext(
                 memories = memories,
                 health = healthCtx,
                 usageStats = usage,
                 meditation = meditationCtx,
-                exercise = ExerciseContext(recentSessions = exerciseSessions)
+                exercise = ExerciseContext(recentSessions = exerciseSessions),
+                mood = moodCtx,
+                habits = habitCtx,
+                drift = driftCtx,
+                tomorrowEvents = tomorrowEvents
             )
         }
     }
@@ -238,6 +312,32 @@ class OrchestratorAgent(
             append("\n")
         }
 
+        if (flags.includeMood && ctx.mood.todayLogs.isNotEmpty()) {
+            val latest = ctx.mood.todayLogs.first()
+            append("MOOD & ENERGY TODAY:\n")
+            append("- Mood: ${latest.mood}/5  Energy: ${latest.energy}/5\n")
+            if (latest.note.isNotBlank()) append("- Note: \"${latest.note}\"\n")
+            if (ctx.mood.recentLogs.size > 1) {
+                val avgMood = ctx.mood.recentLogs.map { it.mood }.average()
+                val avgEnergy = ctx.mood.recentLogs.map { it.energy }.average()
+                append("- 7-day avg mood: ${"%.1f".format(avgMood)}/5, avg energy: ${"%.1f".format(avgEnergy)}/5\n")
+            }
+            append("\n")
+        }
+
+        if (flags.includeHabits && ctx.habits.todayHabits.isNotEmpty()) {
+            val completed = ctx.habits.completedTodayIds
+            val total = ctx.habits.todayHabits.size
+            val doneCount = ctx.habits.todayHabits.count { it.id in completed }
+            append("HABITS TODAY ($doneCount/$total completed):\n")
+            ctx.habits.todayHabits.forEach { habit ->
+                val status = if (habit.id in completed) "✓" else "○"
+                val time = if (habit.timeString.isNotBlank()) " @ ${habit.timeString}" else ""
+                append("- $status ${habit.emoji} ${habit.name}$time\n")
+            }
+            append("\n")
+        }
+
         if (flags.includeMemories && ctx.memories.isNotEmpty()) {
             val lower = userMessage.lowercase(java.util.Locale.getDefault())
             val isFinanceQuery = DynamicContextFlags.FINANCE_KEYWORDS.any { lower.matchesKeyword(it) }
@@ -271,6 +371,8 @@ data class DynamicContextFlags(
     val includeMeditation: Boolean,
     val includeMemories: Boolean,
     val includeExercise: Boolean,
+    val includeMood: Boolean,
+    val includeHabits: Boolean,
     val isGeneral: Boolean
 ) {
     companion object {
@@ -292,13 +394,17 @@ data class DynamicContextFlags(
             // Finance keywords route to memories (bank/payment notifications captured there)
             val finance = FINANCE_KEYWORDS.any { lower.matchesKeyword(it) }
             val memories = finance || listOf("notification", "clipboard", "log", "memory", "captured", "tag", "remember", "text", "copy", "message", "email", "chat", "gmail", "slack", "whatsapp").any { lower.matchesKeyword(it) }
-            val general = !health && !usage && !meditation && !exercise && !memories
+            val mood = listOf("mood", "feel", "feeling", "feelings", "energy", "stress", "mental", "emotional", "burnout", "anxious", "happy", "sad", "tired", "motivated").any { lower.matchesKeyword(it) }
+            val habits = listOf("habit", "routine", "streak", "daily", "check", "done", "complete", "medication", "remind").any { lower.matchesKeyword(it) }
+            val general = !health && !usage && !meditation && !exercise && !memories && !mood && !habits
             return DynamicContextFlags(
                 includeHealth = health || general,
                 includeUsage = usage || general,
                 includeMeditation = meditation || general,
                 includeExercise = exercise || general,
                 includeMemories = memories || general,
+                includeMood = mood || general,
+                includeHabits = habits || general,
                 isGeneral = general
             )
         }
