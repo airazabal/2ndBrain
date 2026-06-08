@@ -15,6 +15,8 @@ import com.alex.a2ndbrain.ui.habits.HabitsScreen
 import com.alex.a2ndbrain.ui.mood.MoodScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionScreen
 import com.alex.a2ndbrain.ui.reflection.ReflectionViewModel
+import com.alex.a2ndbrain.ui.goals.GoalsScreen
+import com.alex.a2ndbrain.ui.goals.GoalsViewModel
 import com.alex.a2ndbrain.ui.todoist.TodoistScreen
 import com.alex.a2ndbrain.ui.todoist.TodoistViewModel
 import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsScreen
@@ -27,6 +29,7 @@ private enum class WellnessTab(val label: String) {
     HEALTH("Health"),
     EXERCISE("Exercise"),
     HABITS("Habits"),
+    GOALS("Goals"),
     MOOD("Mood"),
     TASKS("Tasks"),
     TRENDS("Sense of Day"),
@@ -42,6 +45,7 @@ fun WellnessScreen(
 ) {
     val healthViewModel: HealthViewModel = koinViewModel()
     val wellnessViewModel: WellnessViewModel = koinViewModel()
+    val goalsViewModel: GoalsViewModel = koinViewModel()
     val reflectionViewModel: ReflectionViewModel = koinViewModel()
     val exerciseViewModel: ExerciseViewModel = koinViewModel()
     val todoistViewModel: TodoistViewModel = koinViewModel()
@@ -81,6 +85,8 @@ fun WellnessScreen(
                 }
 
                 WellnessTab.HABITS -> HabitsScreen(modifier = Modifier.fillMaxSize())
+
+                WellnessTab.GOALS -> GoalsScreen(viewModel = goalsViewModel, modifier = Modifier.fillMaxSize())
 
                 WellnessTab.MOOD -> MoodScreen(modifier = Modifier.fillMaxSize())
 

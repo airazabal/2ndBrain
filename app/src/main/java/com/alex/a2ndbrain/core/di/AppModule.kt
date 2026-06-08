@@ -71,6 +71,7 @@ val appModule = module {
     single<SenseOfDaySnapshotDao> { get<AppDatabase>().senseOfDaySnapshotDao() }
     single<MoodDao> { get<AppDatabase>().moodDao() }
     single<HabitsDao> { get<AppDatabase>().habitsDao() }
+    single { get<AppDatabase>().goalDao() }
 
     // Repositories
     single<MemoryRepository> { MemoryRepositoryImpl(get()) }
@@ -90,6 +91,7 @@ val appModule = module {
     single { GeminiAgent(get()) }
     single { ReflectionManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { com.alex.a2ndbrain.core.reflection.CircadianInsightManager(androidContext(), get(), get(), get(), get()) }
+    single { com.alex.a2ndbrain.core.goals.GoalProgressCalculator(get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
     single<HealthRepository> { HealthRepositoryImpl(get(), get()) }
@@ -139,6 +141,7 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.ui.search.SearchViewModel(get()) }
     viewModel { com.alex.a2ndbrain.ui.mood.MoodViewModel(get()) }
     viewModel { com.alex.a2ndbrain.ui.habits.HabitsViewModel(get()) }
+    viewModel { com.alex.a2ndbrain.ui.goals.GoalsViewModel(get(), get(), get()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
