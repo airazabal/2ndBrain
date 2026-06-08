@@ -14,6 +14,7 @@ import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.domain.GenerateWeeklyInsightUseCase
 import com.alex.a2ndbrain.core.domain.GetWeeklyHealthTrendsUseCase
+import com.alex.a2ndbrain.core.reflection.CircadianInsightManager
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +30,8 @@ class ReflectionViewModel(
     private val generateWeeklyInsight: GenerateWeeklyInsightUseCase,
     private val settingsManager: CaptureSettingsManager,
     private val applicationContext: Context,
-    private val reflectionManager: ReflectionManager
+    private val reflectionManager: ReflectionManager,
+    private val circadianInsightManager: CircadianInsightManager
 ) : ViewModel() {
 
     val summaries: StateFlow<List<DailySummaryEntity>> = memoryRepository.getAllSummariesFlow()
@@ -58,6 +60,9 @@ class ReflectionViewModel(
 
     private val _isGeneratingTomorrowForecast = MutableStateFlow(false)
     val isGeneratingTomorrowForecast = _isGeneratingTomorrowForecast.asStateFlow()
+
+    private val _isGeneratingCircadian = MutableStateFlow(false)
+    val isGeneratingCircadian = _isGeneratingCircadian.asStateFlow()
 
     init {
         loadWeeklyHealthTrends()
@@ -120,6 +125,19 @@ class ReflectionViewModel(
                 android.util.Log.e("2ndBrain", "Failed to generate tomorrow forecast", e)
             } finally {
                 _isGeneratingTomorrowForecast.value = false
+            }
+        }
+    }
+
+    fun generateCircadianInsight() {
+        _isGeneratingCircadian.value = true
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                circadianInsightManager.generateInsight()
+            } catch (e: Exception) {
+                android.util.Log.e("2ndBrain", "Failed to generate circadian insight", e)
+            } finally {
+                _isGeneratingCircadian.value = false
             }
         }
     }

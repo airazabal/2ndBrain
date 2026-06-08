@@ -53,13 +53,17 @@ fun ReflectionScreen(
     onGenerateWeeklyInsight: () -> Unit,
     isGeneratingTomorrowForecast: Boolean = false,
     onGenerateTomorrowForecast: () -> Unit = {},
+    isGeneratingCircadian: Boolean = false,
+    onGenerateCircadianInsight: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val configuration = LocalConfiguration.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var activeTab by remember { mutableStateOf("daily") }
+    val reflectionTabs = listOf("daily", "weekly", "rhythms")
+    var activeTabIndex by remember { mutableIntStateOf(0) }
+    val activeTab = reflectionTabs[activeTabIndex]
     val ttsManager = remember { TtsManager(context) }
     var speakingText by remember { mutableStateOf<String?>(null) }
     val isSpeaking by ttsManager.isSpeaking.collectAsState()
@@ -74,27 +78,23 @@ fun ReflectionScreen(
     // the list entirely so item indices never shift and there's no shared recomposition scope.
     Column(modifier = modifier.fillMaxSize()) {
         TabRow(
-            selectedTabIndex = if (activeTab == "daily") 0 else 1,
+            selectedTabIndex = activeTabIndex,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 16.dp).clip(RoundedCornerShape(16.dp)),
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
             contentColor = MaterialTheme.colorScheme.primary,
             indicator = { tabPositions ->
                 TabRowDefaults.SecondaryIndicator(
-                    Modifier.tabIndicatorOffset(tabPositions[if (activeTab == "daily") 0 else 1]),
+                    Modifier.tabIndicatorOffset(tabPositions[activeTabIndex]),
                     color = MaterialTheme.colorScheme.primary
                 )
             }
         ) {
-            Tab(
-                selected = activeTab == "daily",
-                onClick = { activeTab = "daily" },
-                text = { Text("Daily Briefings", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp)) }
-            )
-            Tab(
-                selected = activeTab == "weekly",
-                onClick = { activeTab = "weekly" },
-                text = { Text("Weekly Cockpit", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp)) }
-            )
+            Tab(selected = activeTabIndex == 0, onClick = { activeTabIndex = 0 },
+                text = { Text("Daily Briefings", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp)) })
+            Tab(selected = activeTabIndex == 1, onClick = { activeTabIndex = 1 },
+                text = { Text("Weekly Cockpit", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp)) })
+            Tab(selected = activeTabIndex == 2, onClick = { activeTabIndex = 2 },
+                text = { Text("Rhythms", fontWeight = FontWeight.Bold, modifier = Modifier.padding(vertical = 12.dp)) })
         }
 
         if (activeTab == "daily") {
@@ -158,7 +158,7 @@ fun ReflectionScreen(
                     }
                 }
             }
-        } else {
+        } else if (activeTab == "weekly") {
             // ── Weekly tab — independent LazyColumn ──────────────────────
             // Compute screen-time breakdown once; recomputes only when stats change.
             val weeklyReport = remember(summaries) { summaries.find { it.type == "weekly_correlation" } }
@@ -353,6 +353,93 @@ fun ReflectionScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+        } else {
+            // ── Rhythms tab — circadian pattern analysis ──────────────────
+            val circadianReports = remember(summaries) {
+                summaries.filter { it.type == "circadian_pattern" }.sortedByDescending { it.timestamp }
+            }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 32.dp)
+            ) {
+                item(key = "rhythms_card") {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(20.dp)) {
+                            Text(
+                                "Circadian Pattern Analysis",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                "28-day activity rhythm across habits, notifications & exercise",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                            Spacer(Modifier.height(16.dp))
+                            if (circadianReports.isNotEmpty()) {
+                                Text(
+                                    circadianReports.first().summary,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    lineHeight = 24.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    "Last analyzed: ${SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(Date(circadianReports.first().timestamp))}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            } else {
+                                Text(
+                                    "Analyze 28 days of your habits, notifications, and exercise timestamps to discover your natural energy peaks and focus windows.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
+                            Spacer(Modifier.height(20.dp))
+                            Button(
+                                onClick = onGenerateCircadianInsight,
+                                enabled = !isGeneratingCircadian,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                if (isGeneratingCircadian) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = androidx.compose.ui.graphics.Color.White
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text("Mapping Your Rhythms…")
+                                } else {
+                                    Text(if (circadianReports.isNotEmpty()) "Refresh Analysis" else "Analyze My Rhythms")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (circadianReports.size > 1) {
+                    item(key = "rhythms_history_header") {
+                        Text(
+                            "HISTORY",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.8.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                        )
+                    }
+                    items(circadianReports.drop(1), key = { it.id }) { report ->
+                        SummaryCard(report, onDelete = { onDeleteSummary(report.id) })
                     }
                 }
             }

@@ -140,6 +140,7 @@ fun WellnessScreen(
                     val isGenerating by reflectionViewModel.isGeneratingReflection.collectAsStateWithLifecycle()
                     val isGeneratingWeekly by reflectionViewModel.isGeneratingWeeklyInsight.collectAsStateWithLifecycle()
                     val isGeneratingTomorrowForecast by reflectionViewModel.isGeneratingTomorrowForecast.collectAsStateWithLifecycle()
+                    val isGeneratingCircadian by reflectionViewModel.isGeneratingCircadian.collectAsStateWithLifecycle()
                     LaunchedEffect(Unit) { reflectionViewModel.loadWeeklyHealthTrends() }
                     ReflectionScreen(
                         summaries = summaries,
@@ -153,7 +154,9 @@ fun WellnessScreen(
                         isGeneratingWeeklyInsight = isGeneratingWeekly,
                         onGenerateWeeklyInsight = { reflectionViewModel.generateWeeklyInsight() },
                         isGeneratingTomorrowForecast = isGeneratingTomorrowForecast,
-                        onGenerateTomorrowForecast = { reflectionViewModel.generateTomorrowForecast() }
+                        onGenerateTomorrowForecast = { reflectionViewModel.generateTomorrowForecast() },
+                        isGeneratingCircadian = isGeneratingCircadian,
+                        onGenerateCircadianInsight = { reflectionViewModel.generateCircadianInsight() }
                     )
                 }
             }

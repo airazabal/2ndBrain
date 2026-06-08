@@ -89,6 +89,7 @@ val appModule = module {
     single { DigitalTimeManager(androidContext(), get(), get()) }
     single { GeminiAgent(get()) }
     single { ReflectionManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { com.alex.a2ndbrain.core.reflection.CircadianInsightManager(androidContext(), get(), get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
     single<HealthRepository> { HealthRepositoryImpl(get(), get()) }
@@ -131,7 +132,7 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.ui.home.WellnessViewModel(get(), get(), get(), get(), get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }
