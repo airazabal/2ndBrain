@@ -44,12 +44,15 @@ class TodayAgendaViewModel(
         val nowCal = Calendar.getInstance()
         val currentMinutes = nowCal.get(Calendar.HOUR_OF_DAY) * 60 + nowCal.get(Calendar.MINUTE)
 
+        // Habits linked to Todoist already appear as Habit items — suppress the duplicate Task entry.
+        val habitTodoistIds = habits.mapNotNull { it.todoistTaskId }.toSet()
+
         val items = mutableListOf<TodayAgendaItem>()
 
-        overdueTasks.forEach { task ->
+        overdueTasks.filter { it.id !in habitTodoistIds }.forEach { task ->
             items.add(TodayAgendaItem.Task(task, isOverdue = true))
         }
-        todayTasks.forEach { task ->
+        todayTasks.filter { it.id !in habitTodoistIds }.forEach { task ->
             items.add(TodayAgendaItem.Task(task, isOverdue = false))
         }
         habits.forEach { habit ->
