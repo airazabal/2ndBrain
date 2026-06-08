@@ -314,6 +314,7 @@ class MainActivity : ComponentActivity() {
                         val navViewModel: NavigationViewModel = koinViewModel()
                         val homeViewModel: HomeViewModel = koinViewModel()
                         val homeTasksViewModel: com.alex.a2ndbrain.ui.home.HomeTasksViewModel = koinViewModel()
+                        val todayAgendaViewModel: com.alex.a2ndbrain.ui.home.TodayAgendaViewModel = koinViewModel()
                         val grandCentralViewModel: com.alex.a2ndbrain.ui.home.GrandCentralViewModel = koinViewModel()
                         val wellnessViewModel: com.alex.a2ndbrain.ui.home.WellnessViewModel = koinViewModel()
                         val memoryViewModel: MemoryViewModel = koinViewModel()
@@ -581,21 +582,24 @@ class MainActivity : ComponentActivity() {
                                                     val refreshIntervalMinutes by homeViewModel.refreshIntervalMinutes.collectAsStateWithLifecycle()
                                                     val unreadEmailCount by grandCentralViewModel.unreadEmailCount.collectAsStateWithLifecycle()
                                                     val unreadMessageCount by grandCentralViewModel.unreadMessageCount.collectAsStateWithLifecycle()
-                                                    val todoistTasks by homeTasksViewModel.todoistTasks.collectAsStateWithLifecycle()
-                                                    val overdueTasks by homeTasksViewModel.overdueTasks.collectAsStateWithLifecycle()
-                                                    val taskLatencyStats by homeTasksViewModel.taskLatencyStats.collectAsStateWithLifecycle()
-                                                    val todoistLoading by homeTasksViewModel.todoistLoading.collectAsStateWithLifecycle()
+                                                    val agendaItems by todayAgendaViewModel.agendaItems.collectAsStateWithLifecycle()
+                                                    val agendaOverdueCount by todayAgendaViewModel.overdueCount.collectAsStateWithLifecycle()
+                                                    val taskLatencyStats by todayAgendaViewModel.taskLatencyStats.collectAsStateWithLifecycle()
+                                                    val agendaLoading by todayAgendaViewModel.isLoading.collectAsStateWithLifecycle()
+                                                    // keep homeTasksViewModel alive for backward-compat tests; not used in UI
                                                     val exerciseWeekSessions by wellnessViewModel.exerciseWeekSessions.collectAsStateWithLifecycle()
                                                     val exerciseTotalMinutes by wellnessViewModel.exerciseTotalMinutesThisWeek.collectAsStateWithLifecycle()
-                                                    val meetingsTodayCount by remember(todoistTasks, todayTimelineEvents) {
+                                                    val meetingsTodayCount by remember(agendaItems, todayTimelineEvents) {
                                                         derivedStateOf {
-                                                            val taskTitles = todoistTasks.map { it.content.trim().lowercase() }.toSet()
+                                                            val taskTitles = agendaItems
+                                                                .filterIsInstance<com.alex.a2ndbrain.ui.home.TodayAgendaItem.Task>()
+                                                                .map { it.task.content.trim().lowercase() }.toSet()
                                                             val calCount = todayTimelineEvents.count { event ->
                                                                 event.sourcePackage == "calendar" &&
                                                                 !event.appName.contains("todoist", ignoreCase = true) &&
                                                                 event.title.trim().lowercase() !in taskTitles
                                                             }
-                                                            calCount + todoistTasks.size
+                                                            calCount + taskTitles.size
                                                         }
                                                     }
                                                     LaunchedEffect(Unit) {
@@ -672,12 +676,13 @@ class MainActivity : ComponentActivity() {
                                                         unreadMessageCount = unreadMessageCount,
                                                         meetingsTodayCount = meetingsTodayCount,
                                                         grandCentralResult = grandCentralResult,
-                                                        todoistTasks = todoistTasks,
-                                                        overdueTasks = overdueTasks,
+                                                        agendaItems = agendaItems,
+                                                        agendaOverdueCount = agendaOverdueCount,
                                                         taskLatencyStats = taskLatencyStats,
-                                                        todoistLoading = todoistLoading,
-                                                        onCompleteTodoistTask = { id -> homeTasksViewModel.completeTodoistTask(id) },
-                                                        onRefreshTodoistTasks = { homeTasksViewModel.refreshTodoistTasks() },
+                                                        agendaLoading = agendaLoading,
+                                                        onCompleteTask = { id -> todayAgendaViewModel.completeTask(id) },
+                                                        onToggleHabit = { id -> todayAgendaViewModel.toggleHabit(id) },
+                                                        onRefreshAgenda = { todayAgendaViewModel.refresh() },
                                                         onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
                                                         exerciseSessionsThisWeek = exerciseWeekSessions,
                                                         exerciseTotalMinutesThisWeek = exerciseTotalMinutes,

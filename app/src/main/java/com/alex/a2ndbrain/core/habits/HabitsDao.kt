@@ -17,6 +17,15 @@ interface HabitsDao {
     @Query("UPDATE habits SET isDeleted = 1, lastModifiedAt = :now WHERE id = :id")
     suspend fun softDelete(id: String, now: Long)
 
+    @Query("UPDATE habits SET isDeleted = 0, isActive = 1, todoistTaskId = :todoistTaskId, lastModifiedAt = :now WHERE id = :id")
+    suspend fun restore(id: String, todoistTaskId: String, now: Long)
+
+    @Query("SELECT * FROM habits WHERE name = :name AND isDeleted = 1 ORDER BY lastModifiedAt DESC LIMIT 1")
+    suspend fun findDeletedByName(name: String): HabitEntity?
+
+    @Query("SELECT * FROM habits WHERE todoistTaskId = :todoistTaskId LIMIT 1")
+    suspend fun getByTodoistTaskIdIncludingDeleted(todoistTaskId: String): HabitEntity?
+
     @Query("UPDATE habits SET todoistTaskId = :todoistTaskId, lastModifiedAt = :now WHERE id = :id")
     suspend fun updateTodoistTaskId(id: String, todoistTaskId: String, now: Long)
 

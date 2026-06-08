@@ -85,7 +85,6 @@ import com.alex.a2ndbrain.ui.home.GrandCentralResult
 import com.alex.a2ndbrain.ui.home.NotificationCategory
 import com.alex.a2ndbrain.ui.home.CategorizedNotification
 import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
-import com.alex.a2ndbrain.core.todoist.TodoistTask
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -129,12 +128,13 @@ fun HomeScreen(
     unreadMessageCount: Int = 0,
     meetingsTodayCount: Int = 0,
     grandCentralResult: GrandCentralResult = GrandCentralResult(),
-    todoistTasks: List<TodoistTask> = emptyList(),
-    overdueTasks: List<TodoistTask> = emptyList(),
+    agendaItems: List<TodayAgendaItem> = emptyList(),
+    agendaOverdueCount: Int = 0,
     taskLatencyStats: TaskLatencyStats = TaskLatencyStats(),
-    todoistLoading: Boolean = false,
-    onCompleteTodoistTask: (String) -> Unit = {},
-    onRefreshTodoistTasks: () -> Unit = {},
+    agendaLoading: Boolean = false,
+    onCompleteTask: (String) -> Unit = {},
+    onToggleHabit: (String) -> Unit = {},
+    onRefreshAgenda: () -> Unit = {},
     onRefreshIntervalChange: (Int) -> Unit = {},
     exerciseSessionsThisWeek: Int = 0,
     exerciseTotalMinutesThisWeek: Int = 0,
@@ -148,8 +148,7 @@ fun HomeScreen(
     val ttsManager = remember { TtsManager(context) }
     val isSpeaking by ttsManager.isSpeaking.collectAsState()
 
-    var showOverdueSheet by remember { mutableStateOf(false) }
-    var showMeetingsSheet by remember { mutableStateOf(false) }
+    var showAgendaSheet by remember { mutableStateOf(false) }
     var showQuickAddDialog by remember { mutableStateOf(false) }
     var isTimelineExpanded by remember { mutableStateOf(true) }
     var expandedTimelineEventId by remember { mutableStateOf<String?>(null) }
@@ -161,7 +160,7 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) onRefreshTodoistTasks()
+            if (event == Lifecycle.Event.ON_RESUME) onRefreshAgenda()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -194,16 +193,16 @@ fun HomeScreen(
                 lastRefreshedAt       = lastRefreshedAt,
                 refreshIntervalMinutes = refreshIntervalMinutes,
                 onRefreshIntervalChange = onRefreshIntervalChange,
-                overdueCount          = overdueTasks.size,
+                overdueCount          = agendaOverdueCount,
                 unreadEmailCount      = unreadEmailCount,
                 meetingsCount         = meetingsTodayCount,
                 unreadMessageCount    = unreadMessageCount,
                 steps                 = healthMetrics.steps,
                 sleepMinutes          = healthMetrics.sleepMinutes,
                 avgHeartRate          = healthMetrics.avgHeartRate,
-                onOverdueClick        = { showOverdueSheet = true },
+                onOverdueClick        = { showAgendaSheet = true },
                 onEmailClick          = { onNavigateToFeedWithFilter("Gmail") },
-                onMeetingsClick       = { showMeetingsSheet = true },
+                onMeetingsClick       = { showAgendaSheet = true },
                 onMessagesClick       = { onNavigateToFeedWithFilter("Messages") },
                 onHealthClick         = { onNavigateToTab(AppTab.WELLNESS) },
                 exerciseSessionsThisWeek = exerciseSessionsThisWeek,
@@ -230,7 +229,7 @@ fun HomeScreen(
                 onTasksClick       = {
                     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    try { context.startActivity(intent) } catch (e: Exception) { showMeetingsSheet = true }
+                    try { context.startActivity(intent) } catch (e: Exception) { showAgendaSheet = true }
                 },
                 onEmailClick       = {
                     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_EMAIL)
@@ -249,232 +248,200 @@ fun HomeScreen(
 
     }
 
-    // ── Overdue Sheet ────────────────────────────────────────────────────────
-    if (showOverdueSheet) {
-        ModalBottomSheet(onDismissRequest = { showOverdueSheet = false }) {
+    // ── Today's Agenda Sheet ─────────────────────────────────────────────────
+    if (showAgendaSheet) {
+        val agendaTaskTitles = agendaItems.filterIsInstance<TodayAgendaItem.Task>()
+            .map { it.task.content.trim().lowercase() }.toSet()
+        val calEvents = todayTimelineEvents
+            .filter { it.sourcePackage == "calendar" }
+            .filter { !it.appName.contains("todoist", ignoreCase = true) && it.title.trim().lowercase() !in agendaTaskTitles }
+            .sortedBy { it.minutesFromMidnight }
+        val overdueItems = agendaItems.filter { it.isOverdue && !it.isCompleted }
+        val upcomingItems = agendaItems.filter { !it.isOverdue && !it.isCompleted }
+        val completedItems = agendaItems.filter { it.isCompleted }
+
+        ModalBottomSheet(onDismissRequest = { showAgendaSheet = false }) {
             Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column {
-                        Text("Overdue Actions", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Text("Today's Agenda", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        val pending = agendaItems.count { !it.isCompleted }
                         Text(
-                            if (overdueTasks.isEmpty()) "All clear" else "${overdueTasks.size} task(s) past due",
+                            if (pending == 0) "All done!" else "$pending remaining · ${completedItems.size} done",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )
                         if (taskLatencyStats.completedCount > 0) {
-                            val avg = "%.1f".format(taskLatencyStats.avgDays)
                             Text(
-                                "Avg: ${avg}d · Best: ${taskLatencyStats.bestDays}d · Worst: ${taskLatencyStats.worstDays}d  (${taskLatencyStats.completedCount} completed)",
+                                "Task avg: ${"%.1f".format(taskLatencyStats.avgDays)}d overdue",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                             )
                         }
                     }
-                    IconButton(onClick = { onRefreshTodoistTasks() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.primary)
+                    if (agendaLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        IconButton(onClick = onRefreshAgenda) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Refresh", tint = MaterialTheme.colorScheme.primary)
+                        }
                     }
                 }
-                Spacer(Modifier.height(16.dp))
-                if (overdueTasks.isEmpty()) {
-                    Text("No overdue tasks.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                } else {
-                    overdueTasks.forEach { task ->
-                        val priorityColor = when (task.priority) {
-                            4 -> Color(0xFFE53935)
-                            3 -> Color(0xFFFF8F00)
-                            2 -> Color(0xFF1E88E5)
-                            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                        }
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = { onCompleteTodoistTask(task.id) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(Icons.Default.RadioButtonUnchecked, contentDescription = "Complete",
-                                    tint = priorityColor, modifier = Modifier.size(22.dp))
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(task.content, style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold)
-                                val dueLabel = task.dueDateStr?.take(10) ?: task.deadlineDateStr?.take(10)
-                                if (dueLabel != null) {
-                                    Text("Due $dueLabel", style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFFE53935).copy(alpha = 0.8f))
-                                }
-                            }
-                            val staleDays = taskLatencyStats.staleDays[task.id] ?: 0
-                            if (staleDays >= 1) {
-                                Surface(
-                                    shape = RoundedCornerShape(4.dp),
-                                    color = Color(0xFFE53935).copy(alpha = 0.1f)
-                                ) {
-                                    Text(
-                                        "${staleDays}d",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFFE53935),
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
-                            }
-                        }
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
-                    }
-                }
-            }
-        }
-    }
 
-    // ── Tasks Sheet ──────────────────────────────────────────────────────────
-    if (showMeetingsSheet) {
-        val todoistTitles = todoistTasks.map { it.content.trim().lowercase() }.toSet()
-        val calEvents = todayTimelineEvents
-            .filter { it.sourcePackage == "calendar" }
-            .filter { calEvent ->
-                !calEvent.appName.contains("todoist", ignoreCase = true) &&
-                calEvent.title.trim().lowercase() !in todoistTitles
-            }
-            .sortedBy { it.minutesFromMidnight }
-        val totalCount = todoistTasks.size + calEvents.size
-        ModalBottomSheet(onDismissRequest = { showMeetingsSheet = false }) {
-            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("Tasks Today", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(
-                            if (totalCount == 0) "Nothing on schedule" else "$totalCount item(s)",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                    IconButton(onClick = { onRefreshTodoistTasks() }) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Refresh tasks",
-                            tint = MaterialTheme.colorScheme.primary)
-                    }
-                }
                 Spacer(Modifier.height(16.dp))
 
-                // ── Todoist tasks ────────────────────────────────────────────
-                if (todoistLoading) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Text("Loading Todoist tasks…", style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    }
-                } else if (todoistTasks.isNotEmpty()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null,
-                            tint = Color(0xFFE44332), modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("TODOIST", style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold, color = Color(0xFFE44332),
-                            letterSpacing = 0.8.sp)
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    todoistTasks.forEach { task ->
-                        val priorityColor = when (task.priority) {
-                            4 -> Color(0xFFE53935)
-                            3 -> Color(0xFFFF8F00)
-                            2 -> Color(0xFF1E88E5)
-                            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                        }
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 6.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            IconButton(
-                                onClick = { onCompleteTodoistTask(task.id) },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.RadioButtonUnchecked,
-                                    contentDescription = "Complete task",
-                                    tint = priorityColor,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(task.content, style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold)
-                                if (task.description.isNotBlank()) {
-                                    Text(task.description, style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                }
-                            }
-                        }
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
-                    }
+                // Overdue section
+                if (overdueItems.isNotEmpty()) {
+                    AgendaSectionLabel("OVERDUE", Color(0xFFE53935))
+                    overdueItems.forEach { item -> AgendaItemRow(item, taskLatencyStats, onCompleteTask, onToggleHabit) }
                     Spacer(Modifier.height(12.dp))
                 }
 
-                // ── Calendar events ──────────────────────────────────────────
+                // Upcoming: agenda items
+                if (upcomingItems.isNotEmpty()) {
+                    AgendaSectionLabel("TODAY", MaterialTheme.colorScheme.primary)
+                    upcomingItems.forEach { item -> AgendaItemRow(item, taskLatencyStats, onCompleteTask, onToggleHabit) }
+                    Spacer(Modifier.height(12.dp))
+                }
+
+                // Calendar events
                 if (calEvents.isNotEmpty()) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Schedule, contentDescription = null,
-                            tint = Color(0xFF1E88E5), modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text("CALENDAR", style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold, color = Color(0xFF1E88E5),
-                            letterSpacing = 0.8.sp)
-                    }
-                    Spacer(Modifier.height(6.dp))
+                    AgendaSectionLabel("CALENDAR", Color(0xFF1E88E5))
                     calEvents.forEach { event ->
-                        val targetPkg = "com.google.android.calendar"
-                        val fallbackPkg = "com.samsung.android.calendar"
                         Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    val intent = context.packageManager.getLaunchIntentForPackage(targetPkg)
-                                        ?: context.packageManager.getLaunchIntentForPackage(fallbackPkg)
-                                    intent?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    intent?.let { context.startActivity(it) }
-                                    showMeetingsSheet = false
-                                }
-                                .padding(vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(event.time, style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.width(52.dp))
+                                modifier = Modifier.width(48.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(event.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 Text(event.appName, style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                             }
                         }
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                        HorizontalDivider()
                     }
+                    Spacer(Modifier.height(12.dp))
                 }
 
-                if (totalCount == 0 && !todoistLoading) {
-                    Text("Nothing on your schedule today.",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
+                // Completed
+                if (completedItems.isNotEmpty()) {
+                    AgendaSectionLabel("DONE", Color(0xFF43A047))
+                    completedItems.forEach { item -> AgendaItemRow(item, taskLatencyStats, onCompleteTask, onToggleHabit) }
+                }
+
+                if (agendaItems.isEmpty() && calEvents.isEmpty() && !agendaLoading) {
+                    Text("Nothing on the agenda today.", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 }
             }
         }
     }
+}
+
+@Composable
+private fun AgendaSectionLabel(label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
+        Box(modifier = Modifier.size(6.dp, 14.dp).clip(RoundedCornerShape(2.dp)).background(color))
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+            color = color, letterSpacing = 0.8.sp)
+    }
+}
+
+@Composable
+private fun AgendaItemRow(
+    item: TodayAgendaItem,
+    taskLatencyStats: com.alex.a2ndbrain.core.todoist.TaskLatencyStats,
+    onCompleteTask: (String) -> Unit,
+    onToggleHabit: (String) -> Unit
+) {
+    val overdueColor = Color(0xFFE53935)
+    val doneColor = Color(0xFF43A047)
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Check button
+        when (item) {
+            is TodayAgendaItem.Task -> {
+                val priorityColor = when (item.task.priority) {
+                    4 -> overdueColor; 3 -> Color(0xFFFF8F00); 2 -> Color(0xFF1E88E5)
+                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                }
+                IconButton(onClick = { onCompleteTask(item.id) }, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.RadioButtonUnchecked, contentDescription = "Complete",
+                        tint = if (item.isOverdue) overdueColor else priorityColor,
+                        modifier = Modifier.size(22.dp))
+                }
+            }
+            is TodayAgendaItem.Habit -> {
+                val tint = when {
+                    item.isCompleted -> doneColor
+                    item.isOverdue -> overdueColor
+                    else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                }
+                IconButton(onClick = { onToggleHabit(item.id) }, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        if (item.isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = if (item.isCompleted) "Mark incomplete" else "Complete habit",
+                        tint = tint, modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+
+        // Content
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                item.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (item.isCompleted) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        else MaterialTheme.colorScheme.onSurface
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (item is TodayAgendaItem.Habit && item.habit.timeString.isNotBlank()) {
+                    Text(item.habit.timeString, style = MaterialTheme.typography.labelSmall,
+                        color = if (item.isOverdue) overdueColor else MaterialTheme.colorScheme.primary.copy(alpha = 0.7f))
+                }
+                if (item is TodayAgendaItem.Task) {
+                    val dueLabel = item.task.dueDateStr?.take(10) ?: item.task.deadlineDateStr?.take(10)
+                    if (dueLabel != null && item.isOverdue) {
+                        Text("Due $dueLabel", style = MaterialTheme.typography.labelSmall, color = overdueColor.copy(alpha = 0.8f))
+                    }
+                }
+                if (item is TodayAgendaItem.Habit && !item.habit.repeatRule.isNullOrBlank()) {
+                    Text("🔄 ${item.habit.repeatRule}", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                }
+            }
+        }
+
+        // Type badge + stale badge
+        if (item is TodayAgendaItem.Habit) {
+            Text(item.habit.emoji, fontSize = 16.sp)
+        }
+        if (item is TodayAgendaItem.Task) {
+            val staleDays = taskLatencyStats.staleDays[item.id] ?: 0
+            if (staleDays >= 1) {
+                Surface(shape = RoundedCornerShape(4.dp), color = overdueColor.copy(alpha = 0.1f)) {
+                    Text("${staleDays}d", style = MaterialTheme.typography.labelSmall,
+                        color = overdueColor, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+            }
+        }
+    }
+    HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
 }
 
 @Composable

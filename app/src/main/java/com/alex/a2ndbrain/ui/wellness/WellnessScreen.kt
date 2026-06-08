@@ -29,7 +29,7 @@ private enum class WellnessTab(val label: String) {
     HABITS("Habits"),
     MOOD("Mood"),
     TASKS("Tasks"),
-    TRENDS("Trends"),
+    TRENDS("Sense of Day"),
     MEDITATION("Meditation"),
     ONLINE("Online"),
     REFLECT("Reflect")

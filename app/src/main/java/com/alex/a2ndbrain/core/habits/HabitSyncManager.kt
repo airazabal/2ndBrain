@@ -111,33 +111,62 @@ class HabitSyncManager(
         }
         val remoteIds = remoteTasks.map { it.id }.toSet()
 
-        // Import new or update renamed remote habits
+        // Guard: if remote returned nothing, don't touch local data — could be a transient API failure
+        if (remoteTasks.isEmpty()) {
+            Log.w(TAG, "pullFromTodoist: remote returned 0 tasks — skipping sync to avoid accidental deletion")
+            return
+        }
+
+        val remoteNames = remoteTasks.map { it.content.trim().lowercase() }.toSet()
+
+        // Import or restore or update each remote task
         for (task in remoteTasks) {
+            val time = extractTime(task.dueDatetime, task.dueString)
+            val recurrence = extractRecurrence(task.dueString)
             val existing = try { localRepo.getByTodoistTaskId(task.id) } catch (e: Exception) { null }
             when {
-                existing == null -> {
-                    // New in Todoist — import locally with time and recurrence
-                    val time = extractTime(task.dueDatetime, task.dueString)
-                    val recurrence = extractRecurrence(task.dueString)
-                    localRepo.addHabit(name = task.content, emoji = "✅", timeString = time, repeatRule = recurrence)
-                    // Immediately link via backfill so we don't push it back redundantly
-                    pushLatestUnlinkedByName(task.content, forceId = task.id)
-                    Log.d(TAG, "pullFromTodoist: imported '${task.content}' (repeat=$recurrence, time=$time)")
+                existing != null -> {
+                    // Already linked — update if anything changed
+                    if (existing.name != task.content || existing.repeatRule != recurrence || existing.timeString != time) {
+                        localRepo.updateHabit(existing.id, task.content, existing.emoji, time, recurrence)
+                        Log.d(TAG, "pullFromTodoist: updated '${existing.name}' → '${task.content}'")
+                    }
                 }
-                existing.name != task.content || existing.repeatRule != extractRecurrence(task.dueString) -> {
-                    // Renamed or recurrence changed in Todoist — update local record
-                    val time = extractTime(task.dueDatetime, task.dueString)
-                    val recurrence = extractRecurrence(task.dueString)
-                    localRepo.updateHabit(existing.id, task.content, existing.emoji, time, recurrence)
-                    Log.d(TAG, "pullFromTodoist: updated '${existing.name}' → '${task.content}' (repeat=$recurrence)")
+                else -> {
+                    // No active habit for this Todoist ID. Try to find one by name (active or deleted).
+                    // Recurring tasks get a new Todoist ID on each completion — re-link instead of creating
+                    // a fresh row so that completion history is preserved.
+                    val sameNameActive = try { localRepo.getAllActiveHabitsList() } catch (e: Exception) { emptyList() }
+                        .firstOrNull { it.name.equals(task.content, ignoreCase = true) }
+                    val deleted = if (sameNameActive == null)
+                        try { localRepo.findDeletedByName(task.content) } catch (e: Exception) { null }
+                    else null
+
+                    when {
+                        sameNameActive != null -> {
+                            localRepo.updateTodoistTaskId(sameNameActive.id, task.id)
+                            Log.d(TAG, "pullFromTodoist: re-linked active '${task.content}' → ${task.id}")
+                        }
+                        deleted != null -> {
+                            localRepo.restore(deleted.id, task.id)
+                            Log.d(TAG, "pullFromTodoist: restored deleted '${task.content}' with history intact")
+                        }
+                        else -> {
+                            localRepo.addHabit(name = task.content, emoji = "✅", timeString = time, repeatRule = recurrence)
+                            pushLatestUnlinkedByName(task.content, forceId = task.id)
+                            Log.d(TAG, "pullFromTodoist: imported '${task.content}' (repeat=$recurrence, time=$time)")
+                        }
+                    }
                 }
             }
         }
 
-        // Remove local habits whose Todoist counterpart was deleted
+        // Only delete habits that are genuinely gone from Todoist — not in remote list by ID or name
         val allLocal = try { localRepo.getAllActiveHabitsList() } catch (e: Exception) { emptyList() }
         for (habit in allLocal) {
-            if (habit.todoistTaskId != null && habit.todoistTaskId !in remoteIds) {
+            if (habit.todoistTaskId != null
+                && habit.todoistTaskId !in remoteIds
+                && habit.name.trim().lowercase() !in remoteNames) {
                 localRepo.deleteHabit(habit.id)
                 Log.d(TAG, "pullFromTodoist: removed '${habit.name}' (deleted in Todoist)")
             }
@@ -176,29 +205,39 @@ class HabitSyncManager(
     private fun extractRecurrence(dueString: String?): String? {
         if (dueString.isNullOrBlank()) return null
         val clean = dueString.lowercase()
-            .replace(Regex("\\s+at\\s+\\d{1,2}:\\d{2}(am|pm)?\\s*$"), "")
+            .replace(Regex("\\s+at\\s+\\d{1,2}(?::\\d{2})?\\s*(am|pm)?\\s*$"), "")
             .trim()
         return if (clean.startsWith("every")) clean else null
     }
 
     private fun extractTime(datetime: String?, dueString: String?): String {
+        // dueString is already in the user's local timezone — prefer it.
+        if (!dueString.isNullOrBlank()) {
+            // Matches: "at 7am", "at 7:00am", "at 7:00 am", "at 07:00", "at 19:00"
+            val m = Regex("at (\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?").find(dueString.lowercase())
+            if (m != null) {
+                var h = m.groupValues[1].toIntOrNull() ?: 0
+                val min = m.groupValues[2].toIntOrNull() ?: 0
+                val ampm = m.groupValues[3]
+                if (ampm == "pm" && h < 12) h += 12
+                if (ampm == "am" && h == 12) h = 0
+                return String.format("%02d:%02d", h, min)
+            }
+            // dueString has no time component — fall through to dueDatetime
+        }
+        // Fall back to dueDatetime. If it has a "Z" it's UTC → convert to local.
+        // If there's no timezone marker, Todoist is giving local time directly → parse as-is.
         if (!datetime.isNullOrBlank() && datetime.length > 10) {
             return try {
-                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).apply {
-                    timeZone = java.util.TimeZone.getTimeZone("UTC")
-                }
+                val isUtc = datetime.contains("Z", ignoreCase = true)
                 val normalized = datetime.substringBefore("Z").substringBefore("+").take(19)
+                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).apply {
+                    if (isUtc) timeZone = java.util.TimeZone.getTimeZone("UTC")
+                }
                 val date = sdf.parse(normalized) ?: return ""
                 val cal = Calendar.getInstance().apply { time = date }
                 String.format("%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE))
             } catch (_: Exception) { "" }
-        }
-        if (!dueString.isNullOrBlank()) {
-            val m = Regex("at (\\d{1,2}:\\d{2})").find(dueString.lowercase())
-            if (m != null) {
-                val (h, min) = m.groupValues[1].split(":").map { it.toIntOrNull() ?: 0 }
-                return String.format("%02d:%02d", h, min)
-            }
         }
         return ""
     }

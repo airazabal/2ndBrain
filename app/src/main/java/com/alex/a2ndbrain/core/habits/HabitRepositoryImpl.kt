@@ -102,4 +102,8 @@ class HabitRepositoryImpl(private val dao: HabitsDao) : HabitRepository {
     override suspend fun getAllActiveHabitsList() = dao.getAllActiveHabitsList()
 
     override suspend fun getById(id: String) = dao.getById(id)
+    override suspend fun findDeletedByName(name: String) = dao.findDeletedByName(name)
+    override suspend fun restore(id: String, todoistTaskId: String) {
+        dao.restore(id, todoistTaskId, System.currentTimeMillis())
+    }
 }

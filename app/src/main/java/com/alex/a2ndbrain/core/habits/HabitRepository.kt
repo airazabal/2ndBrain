@@ -20,4 +20,6 @@ interface HabitRepository {
     suspend fun getByTodoistTaskId(todoistTaskId: String): HabitEntity?
     suspend fun getAllActiveHabitsList(): List<HabitEntity>
     suspend fun getById(id: String): HabitEntity?
+    suspend fun findDeletedByName(name: String): HabitEntity?
+    suspend fun restore(id: String, todoistTaskId: String)
 }
