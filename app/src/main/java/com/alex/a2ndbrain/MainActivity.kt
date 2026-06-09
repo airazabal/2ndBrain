@@ -568,7 +568,6 @@ class MainActivity : ComponentActivity() {
                                                     val senseOfDayScore by wellnessViewModel.senseOfDayScore.collectAsStateWithLifecycle()
                                                     val senseOfDayContext by wellnessViewModel.senseOfDayContext.collectAsStateWithLifecycle()
                                                     val senseOfDayPillars by wellnessViewModel.senseOfDayPillars.collectAsStateWithLifecycle()
-                                                    val burnoutRisk by wellnessViewModel.burnoutRisk.collectAsStateWithLifecycle()
                                                     val todayTimelineEvents by homeViewModel.todayTimelineEvents.collectAsStateWithLifecycle()
                                                     val tomorrowTimelineEvents by homeViewModel.tomorrowTimelineEvents.collectAsStateWithLifecycle()
                                                     val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
@@ -590,8 +589,8 @@ class MainActivity : ComponentActivity() {
                                                     val taskLatencyStats by todayAgendaViewModel.taskLatencyStats.collectAsStateWithLifecycle()
                                                     val agendaLoading by todayAgendaViewModel.isLoading.collectAsStateWithLifecycle()
                                                     // keep homeTasksViewModel alive for backward-compat tests; not used in UI
-                                                    val exerciseWeekSessions by wellnessViewModel.exerciseWeekSessions.collectAsStateWithLifecycle()
-                                                    val exerciseTotalMinutes by wellnessViewModel.exerciseTotalMinutesThisWeek.collectAsStateWithLifecycle()
+                                                    val exerciseTodaySessions by wellnessViewModel.exerciseTodaySessions.collectAsStateWithLifecycle()
+                                                    val exerciseTodayMinutes by wellnessViewModel.exerciseTodayMinutes.collectAsStateWithLifecycle()
                                                     val meetingsTodayCount by remember(agendaItems, todayTimelineEvents) {
                                                         derivedStateOf {
                                                             val taskTitles = agendaItems
@@ -604,9 +603,6 @@ class MainActivity : ComponentActivity() {
                                                             }
                                                             calCount + taskTitles.size
                                                         }
-                                                    }
-                                                    LaunchedEffect(meetingsTodayCount) {
-                                                        wellnessViewModel.setMeetingCount(meetingsTodayCount)
                                                     }
                                                     LaunchedEffect(Unit) {
                                                         homeViewModel.markRefreshed()
@@ -636,7 +632,6 @@ class MainActivity : ComponentActivity() {
                                                         senseOfDayScore = senseOfDayScore,
                                                         senseOfDayContext = senseOfDayContext,
                                                         senseOfDayPillars = senseOfDayPillars,
-                                                        burnoutRisk = burnoutRisk,
                                                         todayTimelineEvents = todayTimelineEvents,
                                                         tomorrowTimelineEvents = tomorrowTimelineEvents,
                                                         timelineConflicts = timelineConflicts,
@@ -691,8 +686,8 @@ class MainActivity : ComponentActivity() {
                                                         onToggleHabit = { id -> todayAgendaViewModel.toggleHabit(id) },
                                                         onRefreshAgenda = { todayAgendaViewModel.refresh() },
                                                         onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
-                                                        exerciseSessionsThisWeek = exerciseWeekSessions,
-                                                        exerciseTotalMinutesThisWeek = exerciseTotalMinutes,
+                                                        exerciseTodaySessions = exerciseTodaySessions,
+                                                        exerciseTodayMinutes = exerciseTodayMinutes,
                                                         onExerciseClick = { navViewModel.navigateToWellness("EXERCISE") },
                                                         onPillarClick = { label ->
                                                             when (label) {

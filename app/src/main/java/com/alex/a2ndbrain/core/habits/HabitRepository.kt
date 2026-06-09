@@ -6,6 +6,7 @@ interface HabitRepository {
     fun getAllActiveHabitsFlow(): Flow<List<HabitEntity>>
     fun getTodayHabitsFlow(): Flow<List<HabitEntity>>
     fun getCompletionsForDateFlow(date: String): Flow<List<HabitCompletionEntity>>
+    fun getCompletionsSinceFlow(sinceDate: String): Flow<List<HabitCompletionEntity>>
     suspend fun addHabit(name: String, emoji: String, timeString: String, repeatRule: String? = null)
     suspend fun updateHabit(id: String, name: String, emoji: String, timeString: String, repeatRule: String? = null)
     suspend fun deleteHabit(id: String)

@@ -72,6 +72,8 @@ class AppCaptureSettingsActivity : ComponentActivity() {
             BrainTheme(darkTheme = isDark) {
                 Surface(color = MaterialTheme.colorScheme.background) {
                     val syncStatus by nearbySyncManager.syncStatus.collectAsState(NearbySyncManager.SyncStatus.Idle)
+                    val lastSyncTimestamp = (syncStatus as? NearbySyncManager.SyncStatus.Success)?.atMs
+                        ?: nearbySyncManager.getLastSyncedAtMs()
                     AppCaptureSettingsScreen(
                         settingsManager = settingsManager,
                         onBack = { finish() },
@@ -87,7 +89,8 @@ class AppCaptureSettingsActivity : ComponentActivity() {
                             }
                         },
                         syncStatus = syncStatus,
-                        onStartSync = { force -> nearbySyncManager.startSync(force) },
+                        lastSyncTimestamp = lastSyncTimestamp,
+                        onStartSync  = { force -> nearbySyncManager.startSync(force) },
                         onStopSync = { nearbySyncManager.stopSync() }
                     )
                 }
@@ -103,6 +106,7 @@ fun AppCaptureSettingsScreen(
     onRestartService: () -> Unit,
     onUnmonitoredAppRemoved: (String) -> Unit = {},
     syncStatus: NearbySyncManager.SyncStatus = NearbySyncManager.SyncStatus.Idle,
+    lastSyncTimestamp: Long = 0L,
     onStartSync: (Boolean) -> Unit = {},
     onStopSync: () -> Unit = {}
 ) {
@@ -411,6 +415,28 @@ fun AppCaptureSettingsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        val lastSyncLabel = remember(lastSyncTimestamp) {
+                            if (lastSyncTimestamp == 0L) {
+                                "Never synced"
+                            } else {
+                                val now = System.currentTimeMillis()
+                                val diffMs = now - lastSyncTimestamp
+                                val diffMin = diffMs / 60_000
+                                val diffH = diffMs / 3_600_000
+                                val diffD = diffMs / 86_400_000
+                                when {
+                                    diffMin < 1 -> "Last synced just now"
+                                    diffMin < 60 -> "Last synced ${diffMin}m ago"
+                                    diffH < 24 -> "Last synced ${diffH}h ago"
+                                    else -> "Last synced ${diffD}d ago"
+                                }
+                            }
+                        }
+                        Text(
+                            text = lastSyncLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     val isBusy = syncStatus is NearbySyncManager.SyncStatus.Scanning ||
@@ -644,7 +670,7 @@ fun AppCaptureSettingsScreen(
                         unit = "steps",
                         onValueChange = {
                             stepsGoalText = it
-                            it.toIntOrNull()?.let { v -> settingsManager.setStepsGoal(v) }
+                            it.toIntOrNull()?.let { v -> settingsManager.setStepsGoalLocal(v) }
                         },
                         onDone = {
                             stepsGoalText.toIntOrNull()?.let { settingsManager.setStepsGoal(it) }
@@ -656,7 +682,7 @@ fun AppCaptureSettingsScreen(
                         unit = "hours",
                         onValueChange = {
                             sleepGoalText = it
-                            it.toFloatOrNull()?.let { v -> settingsManager.setSleepGoalHours(v) }
+                            it.toFloatOrNull()?.let { v -> settingsManager.setSleepGoalHoursLocal(v) }
                         },
                         onDone = {
                             sleepGoalText.toFloatOrNull()?.let { settingsManager.setSleepGoalHours(it) }
@@ -668,7 +694,7 @@ fun AppCaptureSettingsScreen(
                         unit = "min",
                         onValueChange = {
                             exerciseGoalText = it
-                            it.toIntOrNull()?.let { v -> settingsManager.setExerciseGoalMinutes(v) }
+                            it.toIntOrNull()?.let { v -> settingsManager.setExerciseGoalMinutesLocal(v) }
                         },
                         onDone = {
                             exerciseGoalText.toIntOrNull()?.let { settingsManager.setExerciseGoalMinutes(it) }
@@ -680,7 +706,7 @@ fun AppCaptureSettingsScreen(
                         unit = "min/day",
                         onValueChange = {
                             focusGoalText = it
-                            it.toIntOrNull()?.let { v -> settingsManager.setDigitalFocusBaselineMinutes(v) }
+                            it.toIntOrNull()?.let { v -> settingsManager.setDigitalFocusBaselineMinutesLocal(v) }
                         },
                         onDone = {
                             focusGoalText.toIntOrNull()?.let { settingsManager.setDigitalFocusBaselineMinutes(it) }

@@ -11,6 +11,7 @@ class HabitRepositoryImpl(private val dao: HabitsDao) : HabitRepository {
     override fun getAllActiveHabitsFlow() = dao.getAllActiveHabitsFlow()
     override fun getTodayHabitsFlow() = dao.getTodayHabitsFlow()
     override fun getCompletionsForDateFlow(date: String) = dao.getCompletionsForDateFlow(date)
+    override fun getCompletionsSinceFlow(sinceDate: String) = dao.getCompletionsSinceFlow(sinceDate)
 
     override suspend fun addHabit(name: String, emoji: String, timeString: String, repeatRule: String?) {
         dao.upsertHabit(

@@ -56,6 +56,10 @@ fun WellnessScreen(
     val startTab = WellnessTab.entries.firstOrNull { it.name == initialTab } ?: WellnessTab.HEALTH
     var selectedTab by remember { mutableStateOf(startTab) }
 
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == WellnessTab.GOALS) goalsViewModel.refresh()
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         ScrollableTabRow(selectedTabIndex = selectedTab.ordinal) {
             WellnessTab.entries.forEach { tab ->

@@ -2,6 +2,7 @@ package com.alex.a2ndbrain.ui.health
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.health.DailyHealthMetrics
 import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
@@ -14,8 +15,11 @@ enum class HealthPeriod { TODAY, WEEK, MONTH }
 
 class HealthViewModel(
     private val healthRepository: HealthRepository,
-    private val nearbySyncManager: NearbySyncManager
+    private val nearbySyncManager: NearbySyncManager,
+    private val settingsManager: CaptureSettingsManager
 ) : ViewModel() {
+
+    val stepsGoal: Int get() = settingsManager.getStepsGoal()
 
     private val _selectedPeriod = MutableStateFlow(HealthPeriod.TODAY)
     val selectedPeriod = _selectedPeriod.asStateFlow()

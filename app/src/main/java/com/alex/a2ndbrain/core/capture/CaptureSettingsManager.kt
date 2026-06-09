@@ -227,4 +227,15 @@ class CaptureSettingsManager(private val context: Context) {
 
     fun getDigitalFocusBaselineMinutes(): Int = prefs.getInt("digital_focus_baseline_minutes", 120)
     fun setDigitalFocusBaselineMinutes(minutes: Int) { prefs.edit().putInt("digital_focus_baseline_minutes", minutes).apply() }
+
+    fun getLastNearbySyncTimestamp(): Long = prefs.getLong("last_nearby_sync_ts", 0L)
+    fun setLastNearbySyncTimestamp(ts: Long) { prefs.edit().putLong("last_nearby_sync_ts", ts).apply() }
+
+    fun getSettingsUpdatedAt(): Long = prefs.getLong("settings_updated_at", 0L)
+    private fun touchSettingsTimestamp() { prefs.edit().putLong("settings_updated_at", System.currentTimeMillis()).apply() }
+
+    fun setStepsGoalLocal(goal: Int) { prefs.edit().putInt("steps_goal", goal).putLong("settings_updated_at", System.currentTimeMillis()).apply() }
+    fun setSleepGoalHoursLocal(hours: Float) { prefs.edit().putFloat("sleep_goal_hours", hours).putLong("settings_updated_at", System.currentTimeMillis()).apply() }
+    fun setExerciseGoalMinutesLocal(minutes: Int) { prefs.edit().putInt("exercise_goal_minutes", minutes).putLong("settings_updated_at", System.currentTimeMillis()).apply() }
+    fun setDigitalFocusBaselineMinutesLocal(minutes: Int) { prefs.edit().putInt("digital_focus_baseline_minutes", minutes).putLong("settings_updated_at", System.currentTimeMillis()).apply() }
 }

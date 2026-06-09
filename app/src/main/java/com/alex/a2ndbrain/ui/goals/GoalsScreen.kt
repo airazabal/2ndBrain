@@ -63,7 +63,11 @@ fun GoalsScreen(
                     )
                 }
                 items(state.progresses, key = { it.goal.id }) { progress ->
-                    GoalCard(progress = progress, onDelete = { viewModel.deleteGoal(progress.goal.id) })
+                    GoalCard(
+                        progress = progress,
+                        onEdit = { viewModel.showEditSheet(progress.goal) },
+                        onDelete = { viewModel.deleteGoal(progress.goal.id) }
+                    )
                 }
             }
         }
@@ -84,7 +88,7 @@ fun GoalsScreen(
 }
 
 @Composable
-private fun GoalCard(progress: GoalProgress, onDelete: () -> Unit) {
+private fun GoalCard(progress: GoalProgress, onEdit: () -> Unit, onDelete: () -> Unit) {
     val trendColor = when (progress.trend) {
         GoalTrend.AHEAD    -> Color(0xFF388E3C)
         GoalTrend.ON_TRACK -> Color(0xFF1E88E5)
@@ -131,6 +135,11 @@ private fun GoalCard(progress: GoalProgress, onDelete: () -> Unit) {
                         Text(trendLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                             fontSize = 10.sp, fontWeight = FontWeight.Bold, color = trendColor)
                     }
+                    IconButton(onClick = onEdit, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit",
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
+                            modifier = Modifier.size(16.dp))
+                    }
                     IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
                         Icon(Icons.Default.Delete, contentDescription = "Delete",
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
@@ -176,7 +185,8 @@ private fun GoalCard(progress: GoalProgress, onDelete: () -> Unit) {
 @Composable
 private fun GoalAddSheet(state: GoalsUiState, viewModel: GoalsViewModel) {
     Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 40.dp)) {
-        Text("New Goal", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(if (state.editingGoalId != null) "Edit Goal" else "New Goal",
+            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(20.dp))
 
         // Title

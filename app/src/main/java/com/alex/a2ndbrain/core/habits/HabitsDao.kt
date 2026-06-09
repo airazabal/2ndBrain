@@ -58,4 +58,7 @@ interface HabitsDao {
 
     @Query("SELECT * FROM habit_completions WHERE date >= :sinceDate ORDER BY date DESC")
     suspend fun getAllCompletionsSince(sinceDate: String): List<HabitCompletionEntity>
+
+    @Query("SELECT * FROM habit_completions WHERE date >= :sinceDate ORDER BY date DESC")
+    fun getCompletionsSinceFlow(sinceDate: String): Flow<List<HabitCompletionEntity>>
 }
