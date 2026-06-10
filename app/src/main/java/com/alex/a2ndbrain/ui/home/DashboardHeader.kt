@@ -40,8 +40,8 @@ fun DashboardHeader(
     onMeetingsClick: () -> Unit,
     onMessagesClick: () -> Unit,
     onHealthClick: () -> Unit = {},
-    exerciseSessionsThisWeek: Int = 0,
-    exerciseTotalMinutesThisWeek: Int = 0,
+    exerciseTodaySessions: Int = 0,
+    exerciseTodayMinutes: Int = 0,
     onExerciseClick: () -> Unit = {},
     themePreference: String = "SYSTEM",
     onThemeToggle: () -> Unit = {},
@@ -49,7 +49,6 @@ fun DashboardHeader(
     senseOfDayContext: String = "",
     senseOfDayPillars: List<SenseOfDayPillar> = emptyList(),
     onPillarClick: (String) -> Unit = {},
-    burnoutRisk: BurnoutRisk = BurnoutRisk(),
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
@@ -114,10 +113,6 @@ fun DashboardHeader(
             onPillarClick = onPillarClick
         )
 
-        Spacer(Modifier.height(10.dp))
-
-        BurnoutRiskWidget(burnoutRisk = burnoutRisk)
-
         Spacer(Modifier.height(12.dp))
 
         // Cards row
@@ -167,10 +162,10 @@ fun DashboardHeader(
                 onClick = onHealthClick
             )
             DashCard(
-                label = "EXERCISE\nTHIS WEEK",
-                value = exerciseSessionsThisWeek.toString(),
-                subtitle = if (exerciseSessionsThisWeek == 0) "No sessions logged"
-                           else "${exerciseTotalMinutesThisWeek} min total",
+                label = "EXERCISE\nTODAY",
+                value = exerciseTodaySessions.toString(),
+                subtitle = if (exerciseTodaySessions == 0) "No sessions logged"
+                           else "${exerciseTodayMinutes} min today",
                 accentColor = Color(0xFF43A047),
                 icon = Icons.Default.FitnessCenter,
                 onClick = onExerciseClick

@@ -16,4 +16,7 @@ interface GoalDao {
 
     @Query("SELECT * FROM goals WHERE isActive = 1 ORDER BY createdAt ASC")
     suspend fun getActiveGoals(): List<GoalEntity>
+
+    @Query("SELECT * FROM goals WHERE id = :id LIMIT 1")
+    suspend fun getById(id: String): GoalEntity?
 }

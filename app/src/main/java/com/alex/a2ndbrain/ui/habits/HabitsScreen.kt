@@ -239,11 +239,15 @@ private fun HabitCard(
                     if (!habit.repeatRule.isNullOrBlank()) {
                         MetaChip("🔄 ${repeatLabel(habit.repeatRule)}", MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f))
                     }
-                    if (entry.streak > 0) {
-                        MetaChip("🔥 ${entry.streak}d", Color(0xFFFB8C00))
-                    }
-                    if (entry.weeklyRate > 0f) {
-                        MetaChip("${(entry.weeklyRate * 100).toInt()}% this week", MaterialTheme.colorScheme.outline)
+                }
+                if (entry.streak > 0 || entry.weeklyRate > 0f) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (entry.streak > 0) {
+                            MetaChip("🔥 ${entry.streak}d", Color(0xFFFB8C00))
+                        }
+                        if (entry.weeklyRate > 0f) {
+                            MetaChip("${(entry.weeklyRate * 100).toInt()}% this week", MaterialTheme.colorScheme.outline)
+                        }
                     }
                 }
             }

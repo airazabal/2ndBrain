@@ -37,6 +37,7 @@ fun HealthScreen(viewModel: HealthViewModel, modifier: Modifier = Modifier) {
     val metrics          by viewModel.dailyMetrics.collectAsStateWithLifecycle()
     val isLoading        by viewModel.isLoading.collectAsStateWithLifecycle()
     val lastRefreshedMs  by viewModel.lastRefreshedMs.collectAsStateWithLifecycle()
+    val stepsGoal        = viewModel.stepsGoal
 
     val lastRefreshedLabel = remember(lastRefreshedMs) {
         if (lastRefreshedMs == 0L) "Never synced"
@@ -117,7 +118,7 @@ fun HealthScreen(viewModel: HealthViewModel, modifier: Modifier = Modifier) {
         }
 
         if (period == HealthPeriod.TODAY) {
-            TodayView(day = metrics.first(), modifier = Modifier.padding(horizontal = 16.dp))
+            TodayView(day = metrics.first(), stepsGoal = stepsGoal, modifier = Modifier.padding(horizontal = 16.dp))
         } else {
             PeriodView(metrics = metrics, period = period)
         }
@@ -127,21 +128,21 @@ fun HealthScreen(viewModel: HealthViewModel, modifier: Modifier = Modifier) {
 // ── Today ────────────────────────────────────────────────────────────────────
 
 @Composable
-private fun TodayView(day: DailyHealthMetrics, modifier: Modifier = Modifier) {
+private fun TodayView(day: DailyHealthMetrics, stepsGoal: Int, modifier: Modifier = Modifier) {
     LazyColumn(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
-        item { StepsCard(day) }
+        item { StepsCard(day, stepsGoal) }
         item { SleepCard(day) }
         item { HeartCard(day) }
     }
 }
 
 @Composable
-private fun StepsCard(day: DailyHealthMetrics) {
-    val goal = 10_000L
+private fun StepsCard(day: DailyHealthMetrics, stepsGoal: Int) {
+    val goal = stepsGoal.toLong()
     val progress = if (goal > 0) (day.steps.toFloat() / goal).coerceIn(0f, 1f) else 0f
     MetricCard(icon = Icons.Default.DirectionsRun, iconTint = Color(0xFF42A5F5), title = "Steps") {
         if (day.hasSteps) {

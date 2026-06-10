@@ -103,7 +103,7 @@ val appModule = module {
     }
     single<MeditationRepository> { ZendenceMeditationRepository(androidContext()) }
     single<TodoistRepository> { TodoistRepositoryImpl(get()) }
-    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get()) }
+    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 
     // Agent layer
     single { MemoryAgent(get()) }
@@ -132,7 +132,7 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.ui.home.TodayAgendaViewModel(get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.home.GrandCentralViewModel(get(), get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.home.WellnessViewModel(get(), get(), get(), get(), get(), get(), get()) }
-    viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
     viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get()) }
@@ -141,7 +141,7 @@ val appModule = module {
     viewModel { com.alex.a2ndbrain.ui.search.SearchViewModel(get()) }
     viewModel { com.alex.a2ndbrain.ui.mood.MoodViewModel(get()) }
     viewModel { com.alex.a2ndbrain.ui.habits.HabitsViewModel(get()) }
-    viewModel { com.alex.a2ndbrain.ui.goals.GoalsViewModel(get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.goals.GoalsViewModel(get(), get(), get(), get()) }
 
     // Application-wide CoroutineScope for critical background tasks
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }

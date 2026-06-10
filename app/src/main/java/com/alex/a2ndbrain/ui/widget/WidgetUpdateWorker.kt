@@ -12,6 +12,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.MemoryDao
 import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.meditation.MeditationRepository
@@ -35,6 +36,7 @@ class WidgetUpdateWorker(
     private val memoryDao: MemoryDao by inject()
     private val usageRepository: UsageRepository by inject()
     private val meditationRepository: MeditationRepository by inject()
+    private val settingsManager: CaptureSettingsManager by inject()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
@@ -74,7 +76,7 @@ class WidgetUpdateWorker(
             val sessions = meditationRepository.loadSessions()
             val meditated = sessions.any { dateFormat.format(Date(it.timestamp)) == today }
 
-            val stepsRatio = (steps.toFloat() / 10_000f).coerceIn(0f, 1f)
+            val stepsRatio = (steps.toFloat() / settingsManager.getStepsGoal().toFloat()).coerceIn(0f, 1f)
             val score = ((stepsRatio * 25f) + (focusRatio * 55f) + (if (meditated) 20f else 0f))
                 .toInt().coerceIn(10, 100)
 

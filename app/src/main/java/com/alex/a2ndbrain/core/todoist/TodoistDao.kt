@@ -23,4 +23,7 @@ interface TodoistDao {
 
     @Query("SELECT COUNT(*) FROM todoist_completions")
     suspend fun getTotalCount(): Int
+
+    @Query("SELECT * FROM todoist_completions ORDER BY completedAt DESC")
+    suspend fun getAllCompletions(): List<TodoistCompletionEntity>
 }

@@ -183,3 +183,15 @@ android {
     }
 }
 
+// Run unit tests then install — use this instead of installDebug.
+afterEvaluate {
+    tasks.register("deployDebug") {
+        group = "deployment"
+        description = "Run unit tests, then install debug APK on all connected devices."
+        dependsOn("testDebugUnitTest", "installDebug")
+    }
+    tasks.named("installDebug").configure {
+        mustRunAfter("testDebugUnitTest")
+    }
+}
+

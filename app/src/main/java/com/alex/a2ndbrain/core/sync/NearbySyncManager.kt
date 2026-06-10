@@ -11,10 +11,21 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import com.alex.a2ndbrain.ConflictSeverity
 import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.TimelineConflict
+import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
+import com.alex.a2ndbrain.core.habits.HabitCompletionEntity
+import com.alex.a2ndbrain.core.habits.HabitsDao
 import com.alex.a2ndbrain.core.exercise.ExerciseSessionEntity
+import com.alex.a2ndbrain.core.goals.GoalDao
+import com.alex.a2ndbrain.core.goals.GoalEntity
 import com.alex.a2ndbrain.core.health.HealthRepository
+import com.alex.a2ndbrain.core.mood.MoodDao
+import com.alex.a2ndbrain.core.mood.MoodLogEntity
+import com.alex.a2ndbrain.core.todoist.TodoistCompletionEntity
+import com.alex.a2ndbrain.core.todoist.TodoistDao
 import com.alex.a2ndbrain.core.health.HealthSnapshotEntity
+import com.alex.a2ndbrain.core.memory.DailySummaryEntity
+import com.alex.a2ndbrain.core.memory.MemoryDao
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import com.google.android.gms.nearby.Nearby
@@ -39,7 +50,13 @@ class NearbySyncManager(
     private val meditationRepository: com.alex.a2ndbrain.core.meditation.MeditationRepository,
     private val healthRepository: HealthRepository,
     private val digitalTimeManager: com.alex.a2ndbrain.core.usage.DigitalTimeManager,
-    private val exerciseRepository: ExerciseRepository
+    private val exerciseRepository: ExerciseRepository,
+    private val goalDao: GoalDao,
+    private val moodDao: MoodDao,
+    private val todoistDao: TodoistDao,
+    private val memoryDao: MemoryDao,
+    private val settingsManager: CaptureSettingsManager,
+    private val habitsDao: HabitsDao
 ) {
     private val _meditationSyncTrigger = MutableSharedFlow<Unit>(replay = 0)
     val meditationSyncTrigger = _meditationSyncTrigger.asSharedFlow()
@@ -94,6 +111,7 @@ class NearbySyncManager(
     private val _syncStatus = MutableStateFlow<SyncStatus>(SyncStatus.Idle)
     val syncStatus = _syncStatus.asStateFlow()
 
+
     private val localDeviceName = android.os.Build.MODEL ?: "Android Device"
     private val localDeviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
 
@@ -111,7 +129,7 @@ class NearbySyncManager(
         object Scanning : SyncStatus()
         data class Connecting(val deviceName: String) : SyncStatus()
         data class Syncing(val deviceName: String) : SyncStatus()
-        data class Success(val deviceName: String) : SyncStatus()
+        data class Success(val deviceName: String, val atMs: Long = System.currentTimeMillis()) : SyncStatus()
         data class Failed(val reason: String) : SyncStatus()
     }
 
@@ -130,6 +148,8 @@ class NearbySyncManager(
             request
         )
     }
+
+    fun getLastSyncedAtMs(): Long = settingsManager.getLastNearbySyncTimestamp()
 
     fun startSync(force: Boolean = false) {
         Log.d("NearbySync", "Starting Nearby Sync (force=$force)...")
@@ -341,7 +361,9 @@ class NearbySyncManager(
                 
                 val currentStatus = _syncStatus.value
                 val remoteName = if (currentStatus is SyncStatus.Syncing) currentStatus.deviceName else "Device"
-                _syncStatus.value = SyncStatus.Success("Synced with $remoteName")
+                val now = System.currentTimeMillis()
+                settingsManager.setLastNearbySyncTimestamp(now)
+                _syncStatus.value = SyncStatus.Success(remoteName, now)
                 
                 val remoteDeviceId = endpointToDeviceMap[endpointId] ?: ""
                 if (remoteDeviceId.isNotEmpty()) {
@@ -463,6 +485,90 @@ class NearbySyncManager(
                     exerciseJsonArray.put(json)
                 }
 
+                // Serialize habit completions (last 30 days)
+                val thirtyDaysAgoDateStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    .format(Date(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000))
+                val habitCompletions = habitsDao.getAllCompletionsSince(thirtyDaysAgoDateStr)
+                val habitCompletionsArray = JSONArray()
+                habitCompletions.forEach { c ->
+                    val habit = habitsDao.getById(c.habitId)
+                    val json = JSONObject()
+                    json.put("habitId", c.habitId)
+                    json.put("todoistTaskId", habit?.todoistTaskId ?: "")
+                    json.put("date", c.date)
+                    json.put("completedAt", c.completedAt)
+                    habitCompletionsArray.put(json)
+                }
+
+                // Serialize user goal settings so peer stays in sync with phone preferences
+                val settingsJson = JSONObject().apply {
+                    put("stepsGoal", settingsManager.getStepsGoal())
+                    put("sleepGoalHours", settingsManager.getSleepGoalHours())
+                    put("exerciseGoalMinutes", settingsManager.getExerciseGoalMinutes())
+                    put("digitalFocusBaselineMinutes", settingsManager.getDigitalFocusBaselineMinutes())
+                    put("updatedAt", settingsManager.getSettingsUpdatedAt())
+                }
+
+                // Serialize daily reflections/briefings (last 7 days)
+                val allSummaries = memoryDao.getAllSummariesSync()
+                val sevenDaysAgoMs = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
+                val recentSummaries = allSummaries.filter { it.timestamp >= sevenDaysAgoMs }
+                val summariesJsonArray = JSONArray()
+                recentSummaries.forEach { s ->
+                    val json = JSONObject()
+                    json.put("date", s.date)
+                    json.put("type", s.type)
+                    json.put("summary", s.summary)
+                    json.put("timestamp", s.timestamp)
+                    if (s.modelName != null) json.put("modelName", s.modelName)
+                    summariesJsonArray.put(json)
+                }
+
+                // Serialize mood logs (last 30 days)
+                val thirtyDaysAgoDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    .format(Date(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000))
+                val localMoodLogs = moodDao.getLogsSince(thirtyDaysAgoDate)
+                val moodJsonArray = JSONArray()
+                localMoodLogs.forEach { log ->
+                    val json = JSONObject()
+                    json.put("date", log.date)
+                    json.put("timestamp", log.timestamp)
+                    json.put("mood", log.mood)
+                    json.put("energy", log.energy)
+                    json.put("note", log.note)
+                    moodJsonArray.put(json)
+                }
+
+                // Serialize Todoist completion history
+                val localCompletions = todoistDao.getAllCompletions()
+                val completionsJsonArray = JSONArray()
+                localCompletions.forEach { c ->
+                    val json = JSONObject()
+                    json.put("id", c.id)
+                    json.put("taskId", c.taskId)
+                    json.put("taskContent", c.taskContent)
+                    json.put("completedAt", c.completedAt)
+                    json.put("date", c.date)
+                    completionsJsonArray.put(json)
+                }
+
+                // Serialize active goals
+                val localGoals = goalDao.getActiveGoals()
+                val goalsJsonArray = JSONArray()
+                localGoals.forEach { goal ->
+                    val json = JSONObject()
+                    json.put("id", goal.id)
+                    json.put("title", goal.title)
+                    json.put("type", goal.type)
+                    json.put("targetValue", goal.targetValue)
+                    json.put("periodDays", goal.periodDays)
+                    json.put("isActive", goal.isActive)
+                    json.put("createdAt", goal.createdAt)
+                    if (goal.linkedHabitId != null) json.put("linkedHabitId", goal.linkedHabitId)
+                    if (goal.linkedExerciseType != null) json.put("linkedExerciseType", goal.linkedExerciseType)
+                    goalsJsonArray.put(json)
+                }
+
                 val payloadObject = JSONObject()
                 payloadObject.put("usage", usageJsonArray)
                 payloadObject.put("meditations", meditationJsonArray)
@@ -470,10 +576,20 @@ class NearbySyncManager(
                 if (alertsJsonArray.length() > 0) payloadObject.put("alerts", alertsJsonArray)
                 if (dismissedJsonArray.length() > 0) payloadObject.put("dismissedAlertIds", dismissedJsonArray)
                 if (exerciseJsonArray.length() > 0) payloadObject.put("exercise", exerciseJsonArray)
+                if (goalsJsonArray.length() > 0) payloadObject.put("goals", goalsJsonArray)
+                if (moodJsonArray.length() > 0) payloadObject.put("mood", moodJsonArray)
+                if (completionsJsonArray.length() > 0) payloadObject.put("todoistCompletions", completionsJsonArray)
+                if (summariesJsonArray.length() > 0) payloadObject.put("reflections", summariesJsonArray)
+                payloadObject.put("settings", settingsJson)
+                if (habitCompletionsArray.length() > 0) payloadObject.put("habitCompletions", habitCompletionsArray)
 
                 val payloadBytes = payloadObject.toString().toByteArray()
                 connectionsClient.sendPayload(endpointId, Payload.fromBytes(payloadBytes))
-                Log.d("NearbySync", "Sent ${filteredStats.size} usage, ${localMeditations.size} meditations, ${healthJsonArray.length()} health, ${alertsJsonArray.length()} alerts, ${exerciseJsonArray.length()} exercise")
+                Log.d("NearbySync", "Sent ${filteredStats.size} usage, ${localMeditations.size} meditations, ${healthJsonArray.length()} health, ${alertsJsonArray.length()} alerts, ${exerciseJsonArray.length()} exercise, ${localGoals.size} goals, ${localMoodLogs.size} mood, ${localCompletions.size} task completions")
+                val now = System.currentTimeMillis()
+                settingsManager.setLastNearbySyncTimestamp(now)
+                val remoteName = (_syncStatus.value as? SyncStatus.Syncing)?.deviceName ?: "Device"
+                _syncStatus.value = SyncStatus.Success(remoteName, now)
             } catch (e: Exception) {
                 Log.e("NearbySync", "Failed to send local stats", e)
             }
@@ -505,6 +621,24 @@ class NearbySyncManager(
                 }
                 if (jsonObject.has("exercise")) {
                     importExerciseSessions(jsonObject.getJSONArray("exercise"))
+                }
+                if (jsonObject.has("goals")) {
+                    importGoals(jsonObject.getJSONArray("goals"))
+                }
+                if (jsonObject.has("mood")) {
+                    importMoodLogs(jsonObject.getJSONArray("mood"))
+                }
+                if (jsonObject.has("todoistCompletions")) {
+                    importTodoistCompletions(jsonObject.getJSONArray("todoistCompletions"))
+                }
+                if (jsonObject.has("reflections")) {
+                    importReflections(jsonObject.getJSONArray("reflections"))
+                }
+                if (jsonObject.has("settings")) {
+                    importSettings(jsonObject.getJSONObject("settings"))
+                }
+                if (jsonObject.has("habitCompletions")) {
+                    importHabitCompletions(jsonObject.getJSONArray("habitCompletions"))
                 }
             } else if (trimmed.startsWith("[")) {
                 val usageArray = JSONArray(trimmed)
@@ -674,6 +808,179 @@ class NearbySyncManager(
                 if (importedCount > 0) scope.launch { _exerciseSyncTrigger.emit(Unit) }
             } catch (e: Exception) {
                 Log.e("NearbySync", "Failed to import exercise sessions", e)
+            }
+        }
+    }
+
+    private fun importHabitCompletions(jsonArray: JSONArray) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                var importedCount = 0
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val incomingHabitId = obj.getString("habitId")
+                    val todoistTaskId = obj.optString("todoistTaskId").takeIf { it.isNotEmpty() }
+                    val date = obj.getString("date")
+
+                    // Remap the habit ID using todoistTaskId so completions from another device
+                    // (which may have a different local UUID for the same Todoist habit) are stored
+                    // under the correct local habit ID.
+                    val localHabitId = if (todoistTaskId != null) {
+                        habitsDao.getByTodoistTaskId(todoistTaskId)?.id ?: incomingHabitId
+                    } else {
+                        incomingHabitId
+                    }
+
+                    // Skip if no local habit found for this completion
+                    if (habitsDao.getById(localHabitId) == null) continue
+
+                    val existing = habitsDao.getCompletionsForDate(date)
+                    if (existing.none { it.habitId == localHabitId }) {
+                        habitsDao.upsertCompletion(HabitCompletionEntity(
+                            habitId = localHabitId,
+                            date = date,
+                            completedAt = obj.getLong("completedAt")
+                        ))
+                        importedCount++
+                    }
+                }
+                Log.d("NearbySync", "Imported $importedCount/${jsonArray.length()} habit completions")
+            } catch (e: Exception) {
+                Log.e("NearbySync", "Failed to import habit completions", e)
+            }
+        }
+    }
+
+    private fun importSettings(obj: JSONObject) {
+        try {
+            val incomingTs = obj.optLong("updatedAt", 0L)
+            val localTs = settingsManager.getSettingsUpdatedAt()
+            // Only apply if peer's settings are newer than ours
+            if (incomingTs <= localTs) {
+                Log.d("NearbySync", "Skipping settings import — local settings are newer ($localTs >= $incomingTs)")
+                return
+            }
+            if (obj.has("stepsGoal")) settingsManager.setStepsGoalLocal(obj.getInt("stepsGoal"))
+            if (obj.has("sleepGoalHours")) settingsManager.setSleepGoalHoursLocal(obj.getDouble("sleepGoalHours").toFloat())
+            if (obj.has("exerciseGoalMinutes")) settingsManager.setExerciseGoalMinutesLocal(obj.getInt("exerciseGoalMinutes"))
+            if (obj.has("digitalFocusBaselineMinutes")) settingsManager.setDigitalFocusBaselineMinutesLocal(obj.getInt("digitalFocusBaselineMinutes"))
+            Log.d("NearbySync", "Applied settings from peer (peer ts=$incomingTs)")
+        } catch (e: Exception) {
+            Log.e("NearbySync", "Failed to import settings", e)
+        }
+    }
+
+    private fun importReflections(jsonArray: JSONArray) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val existing = memoryDao.getAllSummariesSync()
+                val existingTimestamps = existing.map { it.timestamp }.toSet()
+                var importedCount = 0
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val ts = obj.getLong("timestamp")
+                    if (ts !in existingTimestamps) {
+                        memoryDao.insertSummary(DailySummaryEntity(
+                            id = 0, // auto-generate
+                            date = obj.getString("date"),
+                            type = obj.getString("type"),
+                            summary = obj.getString("summary"),
+                            timestamp = ts,
+                            modelName = obj.optString("modelName").takeIf { it.isNotEmpty() }
+                        ))
+                        importedCount++
+                    }
+                }
+                Log.d("NearbySync", "Imported $importedCount/${jsonArray.length()} reflections")
+            } catch (e: Exception) {
+                Log.e("NearbySync", "Failed to import reflections", e)
+            }
+        }
+    }
+
+    private fun importMoodLogs(jsonArray: JSONArray) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val thirtyDaysAgoDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                    .format(Date(System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000))
+                val existingTimestamps = moodDao.getLogsSince(thirtyDaysAgoDate).map { it.timestamp }.toSet()
+                var importedCount = 0
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val ts = obj.getLong("timestamp")
+                    if (ts !in existingTimestamps) {
+                        moodDao.insert(MoodLogEntity(
+                            id = 0, // auto-generate on this device
+                            date = obj.getString("date"),
+                            timestamp = ts,
+                            mood = obj.getInt("mood"),
+                            energy = obj.getInt("energy"),
+                            note = obj.optString("note", "")
+                        ))
+                        importedCount++
+                    }
+                }
+                Log.d("NearbySync", "Imported $importedCount/${jsonArray.length()} mood logs")
+            } catch (e: Exception) {
+                Log.e("NearbySync", "Failed to import mood logs", e)
+            }
+        }
+    }
+
+    private fun importTodoistCompletions(jsonArray: JSONArray) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val existingIds = todoistDao.getAllCompletions().map { it.id }.toSet()
+                var importedCount = 0
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val id = obj.getString("id")
+                    if (id !in existingIds) {
+                        todoistDao.insert(TodoistCompletionEntity(
+                            id = id,
+                            taskId = obj.getString("taskId"),
+                            taskContent = obj.getString("taskContent"),
+                            completedAt = obj.getLong("completedAt"),
+                            date = obj.getString("date")
+                        ))
+                        importedCount++
+                    }
+                }
+                Log.d("NearbySync", "Imported $importedCount/${jsonArray.length()} Todoist completions")
+            } catch (e: Exception) {
+                Log.e("NearbySync", "Failed to import Todoist completions", e)
+            }
+        }
+    }
+
+    private fun importGoals(jsonArray: JSONArray) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val existingIds = goalDao.getActiveGoals().map { it.id }.toSet()
+                var importedCount = 0
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    val id = obj.getString("id")
+                    if (id !in existingIds) {
+                        goalDao.upsert(
+                            GoalEntity(
+                                id = id,
+                                title = obj.getString("title"),
+                                type = obj.getString("type"),
+                                targetValue = obj.getDouble("targetValue").toFloat(),
+                                periodDays = obj.getInt("periodDays"),
+                                isActive = obj.getInt("isActive"),
+                                createdAt = obj.getLong("createdAt"),
+                                linkedHabitId = obj.optString("linkedHabitId").takeIf { it.isNotEmpty() },
+                                linkedExerciseType = obj.optString("linkedExerciseType").takeIf { it.isNotEmpty() }
+                            )
+                        )
+                        importedCount++
+                    }
+                }
+                Log.d("NearbySync", "Imported $importedCount/${jsonArray.length()} goals")
+            } catch (e: Exception) {
+                Log.e("NearbySync", "Failed to import goals", e)
             }
         }
     }

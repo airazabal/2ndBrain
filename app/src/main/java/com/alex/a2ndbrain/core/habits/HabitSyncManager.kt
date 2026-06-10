@@ -38,6 +38,9 @@ class HabitSyncManager(
     fun getCompletionsForDateFlow(date: String): Flow<List<HabitCompletionEntity>> =
         localRepo.getCompletionsForDateFlow(date)
 
+    fun getCompletionsSinceFlow(sinceDate: String): Flow<List<HabitCompletionEntity>> =
+        localRepo.getCompletionsSinceFlow(sinceDate)
+
     suspend fun getStreakForHabit(id: String) = localRepo.getStreakForHabit(id)
 
     suspend fun getWeeklyCompletionRate(id: String) = localRepo.getWeeklyCompletionRate(id)

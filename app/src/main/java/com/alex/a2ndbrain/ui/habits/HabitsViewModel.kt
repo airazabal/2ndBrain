@@ -38,13 +38,20 @@ class HabitsViewModel(private val syncManager: HabitSyncManager) : ViewModel() {
     private val _uiState = MutableStateFlow(HabitsUiState())
     val uiState: StateFlow<HabitsUiState> = _uiState.asStateFlow()
 
+    private val sevenDaysAgo get() = run {
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.DAY_OF_YEAR, -7)
+        dateFmt.format(cal.time)
+    }
+
     init {
         viewModelScope.launch {
             combine(
                 syncManager.getTodayHabitsFlow(),
-                syncManager.getCompletionsForDateFlow(today)
-            ) { habits, completions ->
-                habits to completions.map { it.habitId }.toSet()
+                syncManager.getCompletionsSinceFlow(sevenDaysAgo)
+            ) { habits, allCompletions ->
+                val todayStr = today
+                habits to allCompletions.filter { it.date == todayStr }.map { it.habitId }.toSet()
             }.collect { (habits, completedIds) ->
                 val withStats = habits.map { habit ->
                     HabitWithStreak(

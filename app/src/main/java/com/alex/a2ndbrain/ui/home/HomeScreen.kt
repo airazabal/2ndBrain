@@ -136,11 +136,10 @@ fun HomeScreen(
     onToggleHabit: (String) -> Unit = {},
     onRefreshAgenda: () -> Unit = {},
     onRefreshIntervalChange: (Int) -> Unit = {},
-    exerciseSessionsThisWeek: Int = 0,
-    exerciseTotalMinutesThisWeek: Int = 0,
+    exerciseTodaySessions: Int = 0,
+    exerciseTodayMinutes: Int = 0,
     onExerciseClick: () -> Unit = {},
     onPillarClick: (String) -> Unit = {},
-    burnoutRisk: BurnoutRisk = BurnoutRisk(),
     themePreference: String = "SYSTEM",
     onThemeToggle: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -196,7 +195,7 @@ fun HomeScreen(
                 onRefreshIntervalChange = onRefreshIntervalChange,
                 overdueCount          = agendaOverdueCount,
                 unreadEmailCount      = unreadEmailCount,
-                meetingsCount         = meetingsTodayCount,
+                meetingsCount         = agendaItems.count { !it.isCompleted },
                 unreadMessageCount    = unreadMessageCount,
                 steps                 = healthMetrics.steps,
                 sleepMinutes          = healthMetrics.sleepMinutes,
@@ -206,8 +205,8 @@ fun HomeScreen(
                 onMeetingsClick       = { showAgendaSheet = true },
                 onMessagesClick       = { onNavigateToFeedWithFilter("Messages") },
                 onHealthClick         = { onNavigateToTab(AppTab.WELLNESS) },
-                exerciseSessionsThisWeek = exerciseSessionsThisWeek,
-                exerciseTotalMinutesThisWeek = exerciseTotalMinutesThisWeek,
+                exerciseTodaySessions = exerciseTodaySessions,
+                exerciseTodayMinutes = exerciseTodayMinutes,
                 onExerciseClick       = onExerciseClick,
                 onPillarClick         = onPillarClick,
                 themePreference       = themePreference,
@@ -215,7 +214,6 @@ fun HomeScreen(
                 senseOfDayScore       = senseOfDayScore,
                 senseOfDayContext     = senseOfDayContext,
                 senseOfDayPillars     = senseOfDayPillars,
-                burnoutRisk           = burnoutRisk
             )
         }
 
