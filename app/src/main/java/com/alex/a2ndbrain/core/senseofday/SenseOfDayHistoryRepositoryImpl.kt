@@ -1,10 +1,14 @@
 package com.alex.a2ndbrain.core.senseofday
 
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
 import java.util.*
 
-class SenseOfDayHistoryRepositoryImpl(private val dao: SenseOfDaySnapshotDao) : SenseOfDayHistoryRepository {
+class SenseOfDayHistoryRepositoryImpl(
+    private val dao: SenseOfDaySnapshotDao,
+    private val memoryRepository: MemoryRepository
+) : SenseOfDayHistoryRepository {
 
     private val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -17,9 +21,10 @@ class SenseOfDayHistoryRepositoryImpl(private val dao: SenseOfDaySnapshotDao) : 
         exerciseProgress: Float,
         focusProgress: Float
     ) {
+        val date = sdf.format(Date())
         dao.upsert(
             SenseOfDaySnapshotEntity(
-                date = sdf.format(Date()),
+                date = date,
                 score = score,
                 stepsProgress = stepsProgress,
                 sleepProgress = sleepProgress,
@@ -28,6 +33,9 @@ class SenseOfDayHistoryRepositoryImpl(private val dao: SenseOfDaySnapshotDao) : 
                 savedAt = System.currentTimeMillis()
             )
         )
+        val content = "Sense of day $score/100 on $date: steps ${(stepsProgress * 100).toInt()}%, sleep ${(sleepProgress * 100).toInt()}%, exercise ${(exerciseProgress * 100).toInt()}%, focus ${(focusProgress * 100).toInt()}%"
+        try { memoryRepository.insertEpisodicEvent(content, "sense_of_day") }
+        catch (e: Exception) { /* non-fatal */ }
     }
 
     override suspend fun getStats(): Triple<Int, Int, Int> {

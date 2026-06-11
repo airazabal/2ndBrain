@@ -1,5 +1,6 @@
 package com.alex.a2ndbrain.core.todoist
 
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -7,7 +8,10 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 
-class TodoistStatsRepositoryImpl(private val dao: TodoistDao) : TodoistStatsRepository {
+class TodoistStatsRepositoryImpl(
+    private val dao: TodoistDao,
+    private val memoryRepository: MemoryRepository
+) : TodoistStatsRepository {
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -52,6 +56,8 @@ class TodoistStatsRepositoryImpl(private val dao: TodoistDao) : TodoistStatsRepo
                 date = dateFormat.format(Date(now))
             )
         )
+        try { memoryRepository.insertEpisodicEvent("Completed task: $taskContent", "task") }
+        catch (e: Exception) { /* non-fatal */ }
     }
 
     override suspend fun getTodayCount(): Int = withContext(Dispatchers.IO) {

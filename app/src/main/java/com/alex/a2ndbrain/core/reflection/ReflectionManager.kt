@@ -10,12 +10,14 @@ import com.alex.a2ndbrain.core.agents.MemoryAgent
 import com.alex.a2ndbrain.core.agents.ModelRouter
 import com.alex.a2ndbrain.core.agents.PillarAverages
 import com.alex.a2ndbrain.core.agents.ReflectionAgent
+import com.alex.a2ndbrain.core.agents.recallForContext
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryDao
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
+import com.alex.a2ndbrain.core.workers.MemoryConsolidationWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -71,6 +73,11 @@ class ReflectionManager(
             ExistingPeriodicWorkPolicy.KEEP,
             request
         )
+    }
+
+    fun scheduleWorkers() {
+        schedulePeriodicReflection()
+        MemoryConsolidationWorker.schedule(WorkManager.getInstance(context))
     }
 
     fun scheduleExpeditedSync() {
@@ -173,6 +180,7 @@ class ReflectionManager(
             }
             coroutineScope {
                 val memoriesDeferred = async { memoryAgent.retrieveSince(startCal.timeInMillis) }
+                val longTermDeferred = async { try { memoryAgent.recallForContext("") } catch (e: Exception) { emptyList() } }
                 val healthPairDeferred = async { healthAgent.fetchAll() }
                 val weeklyTrendsDeferred = async { healthAgent.fetchWeeklyTrends() }
                 val usageDeferred = async {
@@ -180,6 +188,7 @@ class ReflectionManager(
                 }
 
                 val memories = memoriesDeferred.await()
+                val longTermMemories = longTermDeferred.await()
                 val (healthCtx, meditationCtx) = healthPairDeferred.await()
                 val weeklyTrends = weeklyTrendsDeferred.await()
                 val usage = usageDeferred.await()
@@ -188,7 +197,8 @@ class ReflectionManager(
                     memories = memories,
                     health = healthCtx.copy(weeklyTrends = weeklyTrends),
                     usageStats = usage,
-                    meditation = meditationCtx
+                    meditation = meditationCtx,
+                    longTermMemories = longTermMemories
                 )
             }
         } catch (e: Exception) {
@@ -272,6 +282,7 @@ class ReflectionManager(
 
         return coroutineScope {
             val memoriesDeferred = async { memoryAgent.retrieveSince(searchStart) }
+            val longTermDeferred = async { try { memoryAgent.recallForContext("") } catch (e: Exception) { emptyList() } }
             val healthPairDeferred = async { healthAgent.fetchAll() }
             val usageDeferred = async {
                 try { usageRepository.getUsageStatsForTodaySync() } catch (e: Exception) { emptyList() }
@@ -304,6 +315,7 @@ class ReflectionManager(
             }
 
             val memories = memoriesDeferred.await()
+            val longTermMemories = longTermDeferred.await()
             val (healthCtx, meditationCtx) = healthPairDeferred.await()
             val usage = usageDeferred.await()
             val driftCtx = driftDeferred.await()
@@ -313,7 +325,8 @@ class ReflectionManager(
                 health = healthCtx,
                 usageStats = usage,
                 meditation = meditationCtx,
-                drift = driftCtx
+                drift = driftCtx,
+                longTermMemories = longTermMemories
             )
         }
     }

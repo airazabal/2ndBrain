@@ -141,7 +141,7 @@ class MainActivity : ComponentActivity() {
         
         com.alex.a2ndbrain.core.sync.FirebaseInitializer.init(this)
         triggerGoogleSignInIfNeeded()
-        reflectionPicker.schedulePeriodicReflection()
+        reflectionPicker.scheduleWorkers()
         val circadianManager: com.alex.a2ndbrain.core.reflection.CircadianInsightManager by inject()
         circadianManager.scheduleWeeklyAnalysis()
         digitalTimeManager.schedulePeriodicSync()

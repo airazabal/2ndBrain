@@ -116,6 +116,11 @@ class OrchestratorAgent(
                 } else HabitContext()
             }
 
+            val longTermMemoriesDeferred = async {
+                try { memoryAgent.recallForContext(query) }
+                catch (e: Exception) { emptyList() }
+            }
+
             val driftDeferred = async {
                 try {
                     val snapshots = senseOfDayRepository.getRecentSnapshots(28)
@@ -150,6 +155,7 @@ class OrchestratorAgent(
             val moodCtx = moodDeferred.await()
             val habitCtx = habitsDeferred.await()
             val driftCtx = driftDeferred.await()
+            val longTermMemories = longTermMemoriesDeferred.await()
 
             BrainContext(
                 memories = memories,
@@ -160,7 +166,8 @@ class OrchestratorAgent(
                 mood = moodCtx,
                 habits = habitCtx,
                 drift = driftCtx,
-                tomorrowEvents = tomorrowEvents
+                tomorrowEvents = tomorrowEvents,
+                longTermMemories = longTermMemories
             )
         }
     }

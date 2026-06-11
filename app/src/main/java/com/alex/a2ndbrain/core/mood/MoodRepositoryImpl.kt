@@ -1,10 +1,14 @@
 package com.alex.a2ndbrain.core.mood
 
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
 import java.util.*
 
-class MoodRepositoryImpl(private val dao: MoodDao) : MoodRepository {
+class MoodRepositoryImpl(
+    private val dao: MoodDao,
+    private val memoryRepository: MemoryRepository
+) : MoodRepository {
 
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -19,6 +23,12 @@ class MoodRepositoryImpl(private val dao: MoodDao) : MoodRepository {
                 note = note
             )
         )
+        val content = buildString {
+            append("Mood $mood/5, Energy $energy/5")
+            if (note.isNotBlank()) append(": $note")
+        }
+        try { memoryRepository.insertEpisodicEvent(content, "mood") }
+        catch (e: Exception) { /* non-fatal */ }
     }
 
     override suspend fun getLogsForDate(date: String) = dao.getLogsForDate(date)

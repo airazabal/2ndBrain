@@ -15,6 +15,7 @@ import java.util.Locale
 class HealthRepositoryImpl(
     override val healthConnectManager: HealthConnectManager,
     private val healthDao: HealthDao,
+    private val memoryRepository: com.alex.a2ndbrain.core.memory.MemoryRepository,
     // Injected after CloudHealthSyncManager is created; null until Firebase is configured.
     private var cloudSync: CloudHealthSyncManager? = null
 ) : HealthRepository {
@@ -135,6 +136,19 @@ class HealthRepositoryImpl(
      */
     override suspend fun saveSnapshot(snapshot: HealthSnapshotEntity) = withContext(Dispatchers.IO) {
         healthDao.insertSnapshot(snapshot)
+        if (snapshot.steps > 0 || snapshot.sleepMinutes > 0) {
+            val summary = buildString {
+                if (snapshot.steps > 0) append("${snapshot.steps} steps")
+                if (snapshot.sleepMinutes > 0) {
+                    if (isNotEmpty()) append(", ")
+                    append("${snapshot.sleepMinutes / 60}h ${snapshot.sleepMinutes % 60}m sleep")
+                }
+                if (snapshot.avgHeartRate > 0) append(", avg HR ${snapshot.avgHeartRate} BPM")
+                append(" on ${snapshot.date}")
+            }
+            try { memoryRepository.insertEpisodicEvent(summary, "health") }
+            catch (e: Exception) { Log.w("HealthRepository", "episodic insert failed", e) }
+        }
     }
 
     private fun bestSnapshot(snapshots: List<HealthSnapshotEntity>): HealthSnapshotEntity? =

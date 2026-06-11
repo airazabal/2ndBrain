@@ -3,9 +3,14 @@ package com.alex.a2ndbrain.core.meditation
 import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import com.alex.a2ndbrain.core.memory.MemoryRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 class ZendenceMeditationRepository(
-    private val context: Context
+    private val context: Context,
+    private val memoryRepository: MemoryRepository,
+    private val appScope: CoroutineScope
 ) : MeditationRepository {
     private val contentUri: Uri =
         Uri.parse("content://com.alex.zendence.meditationprovider/meditations")
@@ -53,6 +58,14 @@ class ZendenceMeditationRepository(
             cr.insert(contentUri, values)
         } catch (e: Exception) {
             android.util.Log.e("ZendenceMeditationRepo", "Failed to insert session", e)
+        }
+        val content = buildString {
+            append("${session.durationMinutes}m meditation session")
+            if (!session.insight.isNullOrBlank()) append(": ${session.insight}")
+        }
+        appScope.launch {
+            try { memoryRepository.insertEpisodicEvent(content, "meditation") }
+            catch (e: Exception) { /* non-fatal */ }
         }
     }
 }

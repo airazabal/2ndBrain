@@ -190,6 +190,9 @@ class NotificationCaptureService : NotificationListenerService() {
                     deepLink = deepLink
                 )
                 memoryRepository.insertMemory(entity)
+                val episodicContent = if (contentToStore.isNotBlank())
+                    "$finalTitle: ${contentToStore.take(200)}" else finalTitle
+                memoryRepository.insertEpisodicEvent(episodicContent, "notification")
                 Log.d("2ndBrain", "Captured new memory: $finalTitle")
             }
         }

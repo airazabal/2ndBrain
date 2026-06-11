@@ -1,5 +1,6 @@
 package com.alex.a2ndbrain.core.agents
 
+import android.util.Log
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -79,6 +80,7 @@ class ReflectionAgent {
      * Returns a prompt string — no AI calls are made here.
      */
     fun buildPrompt(type: ReflectionType, ctx: BrainContext): String = buildString {
+        Log.d("ReflectionAgent", "buildPrompt: longTermMemories=${ctx.longTermMemories.size}")
         val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
         val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val now = Calendar.getInstance()
@@ -171,6 +173,15 @@ class ReflectionAgent {
             append("TOMORROW'S SCHEDULE:\n")
             ctx.tomorrowEvents.sortedBy { it.minutesFromMidnight }.forEach { event ->
                 append("- ${event.time}  ${event.title} (${event.appName})\n")
+            }
+            append("\n")
+        }
+
+        // ── Long-term memory patterns ────────────────────────────────────
+        if (ctx.longTermMemories.isNotEmpty()) {
+            append("LONG-TERM PATTERNS (from your history — you MUST reference at least one of these in your response under a '## Patterns' heading):\n")
+            ctx.longTermMemories.forEach {
+                append("- ${it.summary} (importance: ${"%.0f".format(it.importanceScore * 100)}%)\n")
             }
             append("\n")
         }

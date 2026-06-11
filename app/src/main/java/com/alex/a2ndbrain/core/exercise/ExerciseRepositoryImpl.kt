@@ -2,6 +2,7 @@ package com.alex.a2ndbrain.core.exercise
 
 import android.content.Context
 import android.provider.Settings
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -11,7 +12,8 @@ import java.util.*
 
 class ExerciseRepositoryImpl(
     private val exerciseDao: ExerciseDao,
-    private val context: Context
+    private val context: Context,
+    private val memoryRepository: MemoryRepository
 ) : ExerciseRepository {
 
     private val deviceId: String by lazy {
@@ -46,6 +48,12 @@ class ExerciseRepositoryImpl(
                 lastModifiedAt = now
             )
         )
+        val content = buildString {
+            append("${type.displayName} ${durationMinutes}min on $date")
+            if (notes.isNotBlank()) append(": $notes")
+        }
+        try { memoryRepository.insertEpisodicEvent(content, "exercise") }
+        catch (e: Exception) { /* non-fatal */ }
     }
 
     override suspend fun deleteSession(id: String) = withContext(Dispatchers.IO) {

@@ -28,6 +28,7 @@ data class BrainContext(
     val vaultNoteLines: List<String> = emptyList(),
     val timelineEvents: List<TimelineEvent> = emptyList(),
     val tomorrowEvents: List<TimelineEvent> = emptyList(),
+    val longTermMemories: List<ConsolidatedMemory> = emptyList(),
     val timestamp: Long = System.currentTimeMillis()
 )
 

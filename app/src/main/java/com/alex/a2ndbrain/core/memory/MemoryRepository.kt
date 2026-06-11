@@ -1,7 +1,10 @@
 package com.alex.a2ndbrain.core.memory
 
 import androidx.paging.PagingData
+import com.alex.a2ndbrain.core.agents.ConsolidatedMemory
+import com.alex.a2ndbrain.core.agents.EpisodicEvent
 import kotlinx.coroutines.flow.Flow
+import java.time.Instant
 
 interface MemoryRepository {
     fun getPagedMemories(query: String = ""): Flow<PagingData<MemoryEntity>>
@@ -24,4 +27,12 @@ interface MemoryRepository {
     suspend fun getRecentMemories(startTime: Long): List<MemoryEntity>
     suspend fun getMemoriesByPackageSync(packageName: String): List<MemoryEntity>
     suspend fun deleteMemoriesByPackage(packageName: String)
+
+    // Long-term memory consolidation
+    suspend fun insertEpisodicEvent(content: String, sourceTag: String)
+    suspend fun getEpisodicEvents(since: Instant): List<EpisodicEvent>
+    suspend fun countSimilarEvents(content: String, since: Instant): Int
+    suspend fun getLongTermMemories(): List<ConsolidatedMemory>
+    suspend fun insertConsolidatedMemories(memories: List<ConsolidatedMemory>)
+    suspend fun pruneOldLongTermMemories(olderThan: Instant, importanceBelow: Float)
 }

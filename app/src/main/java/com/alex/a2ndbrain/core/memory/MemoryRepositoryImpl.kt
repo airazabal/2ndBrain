@@ -3,9 +3,21 @@ package com.alex.a2ndbrain.core.memory
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
+import com.alex.a2ndbrain.core.agents.ConsolidatedMemory
+import com.alex.a2ndbrain.core.agents.EpisodicEvent
+import com.alex.a2ndbrain.data.db.ConsolidatedMemoryDao
+import com.alex.a2ndbrain.data.db.EpisodicEventDao
+import com.alex.a2ndbrain.data.db.EpisodicEventEntity
+import com.alex.a2ndbrain.data.db.toDomain
+import com.alex.a2ndbrain.data.db.toEntity
 import kotlinx.coroutines.flow.Flow
+import java.time.Instant
 
-class MemoryRepositoryImpl(private val memoryDao: MemoryDao) : MemoryRepository {
+class MemoryRepositoryImpl(
+    private val memoryDao: MemoryDao,
+    private val consolidatedMemoryDao: ConsolidatedMemoryDao,
+    private val episodicEventDao: EpisodicEventDao
+) : MemoryRepository {
 
     override fun getPagedMemories(query: String): Flow<PagingData<MemoryEntity>> {
         return Pager(
@@ -65,4 +77,29 @@ class MemoryRepositoryImpl(private val memoryDao: MemoryDao) : MemoryRepository 
     override suspend fun deleteMemoriesByPackage(packageName: String) {
         memoryDao.deleteMemoriesByPackage(packageName)
     }
+
+    override suspend fun insertEpisodicEvent(content: String, sourceTag: String) {
+        episodicEventDao.insert(EpisodicEventEntity(
+            content   = content,
+            timestamp = System.currentTimeMillis(),
+            sourceTag = sourceTag
+        ))
+    }
+
+    override suspend fun getEpisodicEvents(since: Instant): List<EpisodicEvent> =
+        episodicEventDao.getEventsSince(since.toEpochMilli()).map { it.toDomain() }
+
+    override suspend fun countSimilarEvents(content: String, since: Instant): Int {
+        val keyword = content.split(" ").maxByOrNull { it.length } ?: return 1
+        return episodicEventDao.countSimilarEvents(keyword, since.toEpochMilli())
+    }
+
+    override suspend fun getLongTermMemories(): List<ConsolidatedMemory> =
+        consolidatedMemoryDao.getLongTermMemories().map { it.toDomain() }
+
+    override suspend fun insertConsolidatedMemories(memories: List<ConsolidatedMemory>) =
+        consolidatedMemoryDao.insertAll(memories.map { it.toEntity() })
+
+    override suspend fun pruneOldLongTermMemories(olderThan: Instant, importanceBelow: Float) =
+        consolidatedMemoryDao.pruneOldMemories(olderThan.toEpochMilli(), importanceBelow)
 }

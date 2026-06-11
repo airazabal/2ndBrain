@@ -52,6 +52,8 @@ import com.alex.a2ndbrain.core.todoist.TodoistRepository
 import com.alex.a2ndbrain.core.todoist.TodoistRepositoryImpl
 import com.alex.a2ndbrain.core.todoist.TodoistStatsRepository
 import com.alex.a2ndbrain.core.todoist.TodoistStatsRepositoryImpl
+import com.alex.a2ndbrain.data.db.ConsolidatedMemoryDao
+import com.alex.a2ndbrain.data.db.EpisodicEventDao
 import com.alex.a2ndbrain.core.domain.BuildBrainContextUseCase
 import com.alex.a2ndbrain.core.domain.ChatWithCopilotUseCase
 import com.alex.a2ndbrain.core.domain.GenerateWeeklyInsightUseCase
@@ -72,41 +74,43 @@ val appModule = module {
     single<MoodDao> { get<AppDatabase>().moodDao() }
     single<HabitsDao> { get<AppDatabase>().habitsDao() }
     single { get<AppDatabase>().goalDao() }
+    single<ConsolidatedMemoryDao> { get<AppDatabase>().consolidatedMemoryDao() }
+    single<EpisodicEventDao> { get<AppDatabase>().episodicEventDao() }
 
     // Repositories
-    single<MemoryRepository> { MemoryRepositoryImpl(get()) }
-    single<ExerciseRepository> { ExerciseRepositoryImpl(get(), androidContext()) }
-    single<TodoistStatsRepository> { TodoistStatsRepositoryImpl(get()) }
-    single<SenseOfDayHistoryRepository> { SenseOfDayHistoryRepositoryImpl(get()) }
+    single<MemoryRepository> { MemoryRepositoryImpl(get(), get(), get()) }
+    single<ExerciseRepository> { ExerciseRepositoryImpl(get(), androidContext(), get()) }
+    single<TodoistStatsRepository> { TodoistStatsRepositoryImpl(get(), get()) }
+    single<SenseOfDayHistoryRepository> { SenseOfDayHistoryRepositoryImpl(get(), get()) }
     single<UsageRepository> { UsageRepositoryImpl(get()) }
-    single<MoodRepository> { MoodRepositoryImpl(get()) }
-    single<HabitRepository> { HabitRepositoryImpl(get()) }
+    single<MoodRepository> { MoodRepositoryImpl(get(), get()) }
+    single<HabitRepository> { HabitRepositoryImpl(get(), get()) }
 
     // Managers
     single { TodoistHabitClient(get()) }
     single { HabitSyncManager(get(), get()) }
     single { CaptureSettingsManager(androidContext()) }
     single { ClipboardCaptureManager(androidContext(), get()) }
-    single { DigitalTimeManager(androidContext(), get(), get()) }
+    single { DigitalTimeManager(androidContext(), get(), get(), get()) }
     single { GeminiAgent(get()) }
     single { ReflectionManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get()) }
     single { com.alex.a2ndbrain.core.reflection.CircadianInsightManager(androidContext(), get(), get(), get(), get()) }
     single { com.alex.a2ndbrain.core.goals.GoalProgressCalculator(get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
     single { HealthConnectManager(androidContext()) }
-    single<HealthRepository> { HealthRepositoryImpl(get(), get()) }
+    single<HealthRepository> { HealthRepositoryImpl(get(), get(), get()) }
     // Wire cloud sync back into the repository after both are created (breaks circular dep)
     single {
         CloudHealthSyncManager(androidContext(), get<HealthRepository>()).also {
             get<HealthRepository>().setCloudSync(it)
         }
     }
-    single<MeditationRepository> { ZendenceMeditationRepository(androidContext()) }
+    single<MeditationRepository> { ZendenceMeditationRepository(androidContext(), get(), get()) }
     single<TodoistRepository> { TodoistRepositoryImpl(get()) }
     single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 
     // Agent layer
-    single { MemoryAgent(get()) }
+    single { MemoryAgent(get(), get()) }
     single { HealthAgent(get(), get()) }
     single { ReflectionAgent() }
     single { ModelPicker(androidContext()) }

@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.*
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import org.json.JSONArray
@@ -17,7 +18,8 @@ import java.util.concurrent.TimeUnit
 class DigitalTimeManager(
     private val context: Context,
     private val usageRepository: UsageRepository,
-    private val settingsManager: CaptureSettingsManager
+    private val settingsManager: CaptureSettingsManager,
+    private val memoryRepository: MemoryRepository
 ) {
     private val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
 
@@ -98,6 +100,28 @@ class DigitalTimeManager(
                 )
                 usageRepository.insertUsageStat(entity)
             }
+        }
+
+        // Write daily top-apps summary as episodic event
+        val topApps = stats
+            ?.filter { stat ->
+                val time = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+                    stat.totalTimeVisible else stat.totalTimeInForeground
+                time > 60_000L // more than 1 minute
+            }
+            ?.sortedByDescending { stat ->
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+                    stat.totalTimeVisible else stat.totalTimeInForeground
+            }
+            ?.take(3)
+            ?.joinToString(", ") { stat ->
+                val time = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+                    stat.totalTimeVisible else stat.totalTimeInForeground
+                "${stat.packageName.substringAfterLast(".")} ${time / 60_000}m"
+            } ?: ""
+        if (topApps.isNotEmpty()) {
+            try { memoryRepository.insertEpisodicEvent("Screen time on $todayStr: $topApps", "app_usage") }
+            catch (e: Exception) { /* non-fatal */ }
         }
 
         syncWithVault(todayStr, deviceId, deviceName)

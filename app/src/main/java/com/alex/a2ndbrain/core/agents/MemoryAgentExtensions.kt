@@ -36,11 +36,15 @@ suspend fun MemoryAgent.summarizeCluster(events: List<String>): String {
         appendLine("Focus on the key pattern or insight, not the individual events.")
         appendLine("Return only the summary sentence, no preamble.")
         appendLine()
-        events.forEachIndexed { i, e -> appendLine("- $e") }
+        events.forEach { appendLine("- $it") }
     }
 
-    // TODO: wire generativeModel once MemoryAgent exposes it
-    return events.first().take(200)
+    return try {
+        getModelRouter().run(prompt, ModelRouter.Complexity.LOW).first.trim()
+            .ifBlank { events.first().take(200) }
+    } catch (e: Exception) {
+        events.first().take(200)
+    }
 }
 
 /**
@@ -55,8 +59,18 @@ suspend fun MemoryAgent.summarizeCluster(events: List<String>): String {
  *   // inject into BrainContext.longTermMemories
  */
 suspend fun MemoryAgent.recallForContext(query: String, topK: Int = 5): List<ConsolidatedMemory> {
-    // TODO: implement once MemoryRepository exposes getLongTermMemories()
-    return emptyList()
+    val all = getLongTermMemories()
+    if (all.isEmpty()) return emptyList()
+    if (query.isBlank()) return all.take(topK)
+    val queryWords = query.lowercase().split(" ").filter { it.length > 2 }.toSet()
+    return all
+        .map { mem ->
+            val summaryWords = mem.summary.lowercase().split(" ").toSet()
+            mem to (queryWords intersect summaryWords).size
+        }
+        .sortedByDescending { it.second }
+        .take(topK)
+        .map { it.first }
 }
 
 // ─── BrainContext extension ───────────────────────────────────────────────────

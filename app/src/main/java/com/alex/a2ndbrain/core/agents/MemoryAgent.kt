@@ -5,6 +5,7 @@ import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.alex.a2ndbrain.core.agents.ConsolidatedMemory
 
 /**
  * MemoryAgent — scored, deduplicated memory retrieval.
@@ -21,7 +22,10 @@ import kotlinx.coroutines.withContext
  * in ViewModels. For agent retrieval, always use retrieve() which uses the
  * efficient SQL-backed getRecentMemoriesSync() + searchMemoriesSync().
  */
-class MemoryAgent(private val repo: MemoryRepository) {
+class MemoryAgent(
+    private val repo: MemoryRepository,
+    private val modelRouter: ModelRouter
+) {
 
     /**
      * Retrieve relevant memories for a given query.
@@ -78,6 +82,18 @@ class MemoryAgent(private val repo: MemoryRepository) {
                 repo.getRecentMemories(startTime)
             } catch (e: Exception) {
                 Log.e("MemoryAgent", "retrieveSince() failed", e)
+                emptyList()
+            }
+        }
+
+    internal fun getModelRouter(): ModelRouter = modelRouter
+
+    suspend fun getLongTermMemories(): List<ConsolidatedMemory> =
+        withContext(Dispatchers.IO) {
+            try {
+                repo.getLongTermMemories()
+            } catch (e: Exception) {
+                Log.e("MemoryAgent", "getLongTermMemories() failed", e)
                 emptyList()
             }
         }

@@ -1,10 +1,14 @@
 package com.alex.a2ndbrain.core.habits
 
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
 import java.util.*
 
-class HabitRepositoryImpl(private val dao: HabitsDao) : HabitRepository {
+class HabitRepositoryImpl(
+    private val dao: HabitsDao,
+    private val memoryRepository: MemoryRepository
+) : HabitRepository {
 
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -49,6 +53,13 @@ class HabitRepositoryImpl(private val dao: HabitsDao) : HabitRepository {
 
     override suspend fun markComplete(habitId: String, date: String) {
         dao.upsertCompletion(HabitCompletionEntity(habitId = habitId, date = date))
+        val habit = dao.getById(habitId)
+        if (habit != null) {
+            memoryRepository.insertEpisodicEvent(
+                content   = "${habit.emoji} ${habit.name} completed on $date",
+                sourceTag = "habit"
+            )
+        }
     }
 
     override suspend fun markIncomplete(habitId: String, date: String) {

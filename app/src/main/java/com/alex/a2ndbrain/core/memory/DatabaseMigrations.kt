@@ -173,6 +173,29 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_28_29 = object : Migration(28, 29) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `consolidated_memories` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `summary` TEXT NOT NULL,
+                    `sourceEventIds` TEXT NOT NULL,
+                    `importanceScore` REAL NOT NULL,
+                    `tier` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL
+                )
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TABLE IF NOT EXISTS `episodic_events` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `content` TEXT NOT NULL,
+                    `timestamp` INTEGER NOT NULL,
+                    `sourceTag` TEXT NOT NULL
+                )
+            """.trimIndent())
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> = arrayOf(
         MIGRATION_14_15,
         MIGRATION_15_16,
@@ -187,6 +210,7 @@ object DatabaseMigrations {
         MIGRATION_24_25,
         MIGRATION_25_26,
         MIGRATION_26_27,
-        MIGRATION_27_28
+        MIGRATION_27_28,
+        MIGRATION_28_29
     )
 }
