@@ -95,62 +95,44 @@ class MemoryViewModel(
 
     fun saveVoiceNote(transcript: String, audioPath: String, vaultUri: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            var finalAudioLink = audioPath
-
+            android.util.Log.d("VoiceNote", "saveVoiceNote called. vaultUri empty=${vaultUri.isEmpty()}")
             if (vaultUri.isNotEmpty()) {
                 try {
                     val root = androidx.documentfile.provider.DocumentFile.fromTreeUri(applicationContext, android.net.Uri.parse(vaultUri))
+                    android.util.Log.d("VoiceNote", "root=$root exists=${root?.exists()} canWrite=${root?.canWrite()}")
                     if (root != null && root.exists() && root.canWrite()) {
                         val timestamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.getDefault()).format(java.util.Date())
-                        val audioFileName = "VoiceNote-$timestamp.m4a"
-                        val newNoteName = "VoiceNote-$timestamp"
-                        
-                        val audioDocFile = root.createFile("audio/m4a", audioFileName)
-                        if (audioDocFile != null) {
-                            try {
-                                val tempFile = java.io.File(audioPath)
-                                if (tempFile.exists()) {
-                                    applicationContext.contentResolver.openOutputStream(audioDocFile.uri)?.use { outputStream ->
-                                        tempFile.inputStream().use { inputStream ->
-                                            inputStream.copyTo(outputStream)
-                                        }
-                                    }
-                                    tempFile.delete()
-                                    finalAudioLink = audioDocFile.uri.toString()
-                                }
-                            } catch (e: Exception) {
-                                android.util.Log.e("2ndBrain", "Failed to copy audio file to Obsidian Vault", e)
-                            }
-                        }
+                        val newNoteName = "VoiceNote-$timestamp.md"
+                        android.util.Log.d("VoiceNote", "Creating file: $newNoteName")
 
                         val markdownDocFile = root.createFile("text/markdown", newNoteName)
+                        android.util.Log.d("VoiceNote", "markdownDocFile=$markdownDocFile uri=${markdownDocFile?.uri} name=${markdownDocFile?.name}")
                         if (markdownDocFile != null) {
-                            applicationContext.contentResolver.openOutputStream(markdownDocFile.uri)?.use { stream ->
+                            val stream = applicationContext.contentResolver.openOutputStream(markdownDocFile.uri)
+                            android.util.Log.d("VoiceNote", "outputStream=$stream transcript length=${transcript.length} preview='${transcript.take(80)}'")
+                            stream?.use {
                                 val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
                                 val dateIso = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-                                
-                                val fileContent = """
-                                ---
-                                created: $dateIso
-                                tags:
-                                  - audio
-                                  - voice-capture
-                                ---
-                                # Voice Note
-                                - **Captured**: $dateStr
-                                
-                                ---
-                                
-                                ![[VoiceNote-$timestamp.m4a]]
-                                
-                                $transcript
-                                """.trimIndent()
-                                stream.write(fileContent.toByteArray())
+                                val fileContent = buildString {
+                                    appendLine("---")
+                                    appendLine("created: $dateIso")
+                                    appendLine("tags:")
+                                    appendLine("  - voice-capture")
+                                    appendLine("---")
+                                    appendLine("# Voice Note")
+                                    appendLine("- **Captured**: $dateStr")
+                                    appendLine()
+                                    appendLine("---")
+                                    appendLine()
+                                    appendLine(transcript)
+                                }
+                                it.write(fileContent.toByteArray())
+                                android.util.Log.d("VoiceNote", "Written ${fileContent.length} bytes, starts: '${fileContent.take(40)}'")
                             }
                         }
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("2ndBrain", "Failed to write voice note directly to Obsidian Vault", e)
+                    android.util.Log.e("VoiceNote", "Failed to write voice note to vault", e)
                 }
             }
             
@@ -159,7 +141,7 @@ class MemoryViewModel(
                 packageName = null,
                 title = "Voice Memo",
                 content = transcript,
-                deepLink = finalAudioLink
+                deepLink = null
             )
             memoryRepository.insertMemory(entity)
         }

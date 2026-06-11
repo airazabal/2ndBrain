@@ -331,17 +331,20 @@ fun NoteOrFolderItem(
 private fun openInObsidian(context: android.content.Context, file: DocumentFile, vaultUri: String) {
     val root = DocumentFile.fromTreeUri(context, android.net.Uri.parse(vaultUri)) ?: return
     val vaultName = root.name ?: ""
-    
-    val relativePath = getRelativePath(file, vaultUri)
-    val fileNameWithoutExt = relativePath.removeSuffix(".md")
-    
+    val fileNameWithoutExt = getRelativePath(file, vaultUri).removeSuffix(".md")
     val obsidianUri = android.net.Uri.parse("obsidian://open?vault=${android.net.Uri.encode(vaultName)}&file=${android.net.Uri.encode(fileNameWithoutExt)}")
-    
     try {
         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, obsidianUri)
+        intent.setPackage("md.obsidian")
         intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
-    } catch (e: Exception) {
+    } catch (_: Exception) {
+        // Obsidian not installed — fall back to any app that handles the obsidian:// scheme
+        try {
+            val fallback = android.content.Intent(android.content.Intent.ACTION_VIEW, obsidianUri)
+            fallback.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(fallback)
+        } catch (_: Exception) {}
     }
 }
 

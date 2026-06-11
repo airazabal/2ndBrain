@@ -1,12 +1,17 @@
 package com.alex.a2ndbrain.ui.chat
 
-import android.app.Activity
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -45,47 +50,92 @@ fun BrainChatScreen(
     modifier: Modifier = Modifier
 ) {
     var inputText by remember { mutableStateOf("") }
+    var isListening by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    
+
     val context = LocalContext.current
-    
+
     // 1. TextToSpeech Engine Integration
     val ttsManager = remember { TtsManager(context) }
     val isTtsSpeaking by ttsManager.isSpeaking.collectAsState()
     val activeUtteranceId by ttsManager.activeUtteranceId.collectAsState()
 
     DisposableEffect(Unit) {
-        onDispose {
-            ttsManager.shutdown()
+        onDispose { ttsManager.shutdown() }
+    }
+
+    // 2. Inline Speech-to-Text with live partial results
+    val speechRecognizer = remember { SpeechRecognizer.createSpeechRecognizer(context) }
+    val recognizerIntent = remember {
+        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         }
     }
 
-    // 2. Speech-to-Text Input (Voice Dictation launcher)
-    val speechLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val data = result.data
-            val results = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
-            if (!results.isNullOrEmpty()) {
-                inputText = results[0]
+    DisposableEffect(speechRecognizer) {
+        speechRecognizer.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) {}
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onError(error: Int) {
+                Log.e("BrainChatScreen", "SpeechRecognizer error: $error")
+                isListening = false
+            }
+            override fun onResults(results: Bundle?) {
+                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                if (!text.isNullOrBlank()) inputText = text
+                isListening = false
+            }
+            override fun onPartialResults(partialResults: Bundle?) {
+                val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                if (!partial.isNullOrBlank()) inputText = partial
+            }
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+        onDispose { speechRecognizer.destroy() }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            inputText = ""
+            isListening = true
+            speechRecognizer.startListening(recognizerIntent)
+        }
+    }
+
+    val toggleListening = {
+        if (isListening) {
+            speechRecognizer.stopListening()
+            isListening = false
+        } else {
+            val hasPermission = ContextCompat.checkSelfPermission(
+                context, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+            if (hasPermission) {
+                inputText = ""
+                isListening = true
+                speechRecognizer.startListening(recognizerIntent)
+            } else {
+                permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
             }
         }
     }
 
-    val startVoiceInput = {
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak to your Co-Pilot...")
-        }
-        try {
-            speechLauncher.launch(intent)
-        } catch (e: Exception) {
-            Log.e("BrainChatScreen", "Failed to launch speech recognizer intent", e)
-        }
-    }
+    // Pulsing animation for the mic button while listening
+    val micPulse = rememberInfiniteTransition(label = "mic_pulse")
+    val micPulseAlpha by micPulse.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(550, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "mic_alpha"
+    )
 
     // Auto scroll to latest message when new messages arrive or thinking state changes
     LaunchedEffect(messages.size, isThinking) {
@@ -165,15 +215,16 @@ fun BrainChatScreen(
             OutlinedTextField(
                 value = inputText,
                 onValueChange = { inputText = it },
-                placeholder = { Text("Ask your 2ndBrain...") },
+                placeholder = { Text(if (isListening) "Listening..." else "Ask your 2ndBrain...") },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 leadingIcon = {
-                    IconButton(onClick = { startVoiceInput() }) {
+                    IconButton(onClick = { toggleListening() }) {
                         Icon(
                             imageVector = Icons.Default.Mic,
-                            contentDescription = "Voice Dictation Input",
-                            tint = MaterialTheme.colorScheme.primary
+                            contentDescription = if (isListening) "Stop listening" else "Voice input",
+                            tint = if (isListening) Color.Red else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.alpha(if (isListening) micPulseAlpha else 1f)
                         )
                     }
                 },

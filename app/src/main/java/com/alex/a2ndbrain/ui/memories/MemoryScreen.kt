@@ -7,8 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Delete
@@ -471,6 +473,9 @@ fun MemoryScreen(
             onFinished = { transcript, audioPath ->
                 showRecordingDialog = false
                 onSaveVoiceNote?.invoke(transcript, audioPath)
+                // Put transcript in the search box so user can see what was captured
+                val preview = transcript.split(" ").take(5).joinToString(" ")
+                onSearchQueryChange(preview)
             }
         )
     }
@@ -783,6 +788,7 @@ private fun MemoryCard(
 ) {
     val memory = merged.primary
     val context = LocalContext.current
+    var showTranscriptDialog by remember { mutableStateOf(false) }
 
     val canLaunch = (memory.source == "notification" && !memory.packageName.isNullOrEmpty()) || !memory.deepLink.isNullOrEmpty()
 
@@ -816,6 +822,8 @@ private fun MemoryCard(
                             }
                         } catch (_: Exception) {}
                     }
+                } else if (memory.source == "voice") {
+                    showTranscriptDialog = true
                 } else if (memory.source == "clipboard") {
                     try {
                         val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
@@ -925,6 +933,26 @@ private fun MemoryCard(
             }
         }
     }
+
+    if (showTranscriptDialog) {
+        AlertDialog(
+            onDismissRequest = { showTranscriptDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showTranscriptDialog = false }) { Text("Close") }
+            },
+            title = { Text("Voice Note") },
+            text = {
+                val scroll = androidx.compose.foundation.rememberScrollState()
+                Column(modifier = Modifier.verticalScroll(scroll)) {
+                    Text(
+                        text = memory.content,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            },
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
 }
 
 
@@ -937,25 +965,7 @@ fun VoiceRecordingDialog(
     var isRecording by remember { mutableStateOf(true) }
     var secondsElapsed by remember { mutableStateOf(0) }
     var transcribedText by remember { mutableStateOf("") }
-    
-    // File to save the original high-fidelity audio
-    val audioFile = remember {
-        val dir = File(context.filesDir, "audio")
-        if (!dir.exists()) dir.mkdirs()
-        File(dir, "voice-memo-${System.currentTimeMillis()}.m4a")
-    }
 
-    // MediaRecorder setup
-    val mediaRecorder = remember {
-        android.media.MediaRecorder().apply {
-            setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
-            setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
-            setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
-            setOutputFile(audioFile.absolutePath)
-        }
-    }
-
-    // SpeechRecognizer setup
     val speechRecognizer = remember { android.speech.SpeechRecognizer.createSpeechRecognizer(context) }
     val recognizerIntent = remember {
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -965,17 +975,9 @@ fun VoiceRecordingDialog(
         }
     }
 
-    // Timer and active listening lifecycles
+    // Restarts after each utterance so the full session is transcribed continuously
     LaunchedEffect(Unit) {
-        // Start MediaRecorder
-        try {
-            mediaRecorder.prepare()
-            mediaRecorder.start()
-        } catch (e: Exception) {
-            android.util.Log.e("2ndBrain", "Failed to start MediaRecorder", e)
-        }
-
-        // Setup and start SpeechRecognizer
+        var accumulatedText = ""
         speechRecognizer.setRecognitionListener(object : android.speech.RecognitionListener {
             override fun onReadyForSpeech(params: android.os.Bundle?) {}
             override fun onBeginningOfSpeech() {}
@@ -984,70 +986,56 @@ fun VoiceRecordingDialog(
             override fun onEndOfSpeech() {}
             override fun onError(error: Int) {
                 android.util.Log.e("2ndBrain", "SpeechRecognizer error: $error")
-            }
-            override fun onResults(results: android.os.Bundle?) {
-                val matches = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
-                val text = matches?.firstOrNull()
-                if (!text.isNullOrBlank()) {
-                    transcribedText = text
+                if (isRecording && error != android.speech.SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                    speechRecognizer.startListening(recognizerIntent)
                 }
             }
-            override fun onPartialResults(partialResults: android.os.Bundle?) {
-                val matches = partialResults?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)
-                val text = matches?.firstOrNull()
+            override fun onResults(results: android.os.Bundle?) {
+                val text = results?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
                 if (!text.isNullOrBlank()) {
-                    transcribedText = text
+                    accumulatedText = if (accumulatedText.isBlank()) text else "$accumulatedText $text"
+                    transcribedText = accumulatedText
+                }
+                if (isRecording) speechRecognizer.startListening(recognizerIntent)
+            }
+            override fun onPartialResults(partialResults: android.os.Bundle?) {
+                val partial = partialResults?.getStringArrayList(android.speech.SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                if (!partial.isNullOrBlank()) {
+                    val prefix = if (accumulatedText.isBlank()) "" else "$accumulatedText "
+                    transcribedText = "$prefix$partial"
                 }
             }
             override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
         })
         speechRecognizer.startListening(recognizerIntent)
 
-        // Increment timer
         while (isRecording) {
             kotlinx.coroutines.delay(1000)
             secondsElapsed++
         }
     }
 
-    // Release native resources safely
     DisposableEffect(Unit) {
         onDispose {
-            try {
-                speechRecognizer.destroy()
-            } catch (_: Exception) {}
+            try { speechRecognizer.destroy() } catch (_: Exception) {}
         }
     }
 
     AlertDialog(
         onDismissRequest = {
-            if (isRecording) {
-                isRecording = false
-                try {
-                    mediaRecorder.stop()
-                    mediaRecorder.release()
-                } catch (_: Exception) {}
-            }
+            isRecording = false
             onDismiss()
         },
         confirmButton = {
             Button(
                 onClick = {
                     isRecording = false
-                    try {
-                        mediaRecorder.stop()
-                        mediaRecorder.release()
-                    } catch (_: Exception) {}
-                    
-                    try {
-                        speechRecognizer.stopListening()
-                    } catch (_: Exception) {}
-
+                    try { speechRecognizer.stopListening() } catch (_: Exception) {}
                     val finalTranscript = transcribedText.ifBlank {
                         val sdf = SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault())
                         "Voice Note captured on ${sdf.format(Date())}"
                     }
-                    onFinished(finalTranscript, audioFile.absolutePath)
+                    onFinished(finalTranscript, "")
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
