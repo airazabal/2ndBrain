@@ -101,6 +101,13 @@ class MemoryConsolidationWorker(
             Log.w(TAG, "pruneOldLongTermMemories failed (non-fatal)", e)
         }
 
+        // Episodic events older than 7 days are either consolidated or low-signal — safe to drop
+        try {
+            memoryRepository.pruneOldEpisodicEvents(now.minus(7, ChronoUnit.DAYS))
+        } catch (e: Exception) {
+            Log.w(TAG, "pruneOldEpisodicEvents failed (non-fatal)", e)
+        }
+
         Log.d(TAG, "Consolidation done: ${toInsert.size} promoted, pruned entries older than $PRUNE_AFTER_DAYS days")
         return Result.success(
             workDataOf(

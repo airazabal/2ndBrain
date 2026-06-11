@@ -75,6 +75,9 @@ interface EpisodicEventDao {
           AND content LIKE '%' || :keyword || '%'
     """)
     suspend fun countSimilarEvents(keyword: String, sinceMillis: Long): Int
+
+    @Query("DELETE FROM episodic_events WHERE timestamp < :olderThanMillis")
+    suspend fun deleteOlderThan(olderThanMillis: Long)
 }
 
 // ─── Repository additions ─────────────────────────────────────────────────────
