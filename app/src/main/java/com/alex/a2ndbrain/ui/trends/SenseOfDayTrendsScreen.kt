@@ -6,6 +6,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
 
 private val pillarColors = listOf(
     Color(0xFF1E88E5),
@@ -77,6 +80,9 @@ fun SenseOfDayTrendsScreen(
                 focusProgress = uiState.avgFocusProgress,
                 moodProgress = uiState.avgMoodProgress
             )
+        }
+        if (uiState.correlations.isNotEmpty()) {
+            item { CorrelationsCard(uiState.correlations) }
         }
     }
 }
@@ -383,6 +389,131 @@ private fun PillarRing(label: String, progress: Float, color: Color) {
             fontSize = 10.sp,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
         )
+    }
+}
+
+// ─── Correlation overlay chart ────────────────────────────────────────────────
+
+private val scoreLineColor = Color(0xFF607D8B)
+
+@Composable
+private fun CorrelationsCard(correlations: List<CorrelationData>) {
+    var selectedIdx by remember { mutableStateOf(0) }
+    val pair = correlations.getOrElse(selectedIdx) { correlations[0] }
+    val colorA = if (pair.aPillarIdx < 0) scoreLineColor else pillarColors.getOrElse(pair.aPillarIdx) { Color.Gray }
+    val colorB = if (pair.bPillarIdx < 0) scoreLineColor else pillarColors.getOrElse(pair.bPillarIdx) { Color.Gray }
+    val rAbs = abs(pair.r)
+    val rColor = when {
+        rAbs >= 0.65f -> Color(0xFF4CAF50)
+        rAbs >= 0.35f -> Color(0xFFFF9800)
+        else          -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            SectionLabel("PILLAR CORRELATIONS")
+            Spacer(Modifier.height(10.dp))
+
+            // Pair selector chips
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(correlations.size) { i ->
+                    FilterChip(
+                        selected = i == selectedIdx,
+                        onClick = { selectedIdx = i },
+                        label = { Text(correlations[i].chipLabel, fontSize = 10.sp) }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = pair.chartTitle,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
+            )
+            Spacer(Modifier.height(8.dp))
+
+            // Overlay line chart
+            CorrelationLineChart(pair.aValues, colorA, pair.bValues, colorB)
+
+            Spacer(Modifier.height(10.dp))
+
+            // Legend row + r value
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CorrelationLegendDot(pair.aLabel, colorA)
+                CorrelationLegendDot(pair.bLabel, colorB)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    text = "r = ${"%.2f".format(pair.r)}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = rColor
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = pair.insight,
+                fontSize = 11.sp,
+                lineHeight = 16.sp,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CorrelationLineChart(
+    valuesA: List<Float>,
+    colorA: Color,
+    valuesB: List<Float>,
+    colorB: Color
+) {
+    val n = minOf(valuesA.size, valuesB.size)
+    if (n < 2) return
+    Canvas(modifier = Modifier.fillMaxWidth().height(90.dp)) {
+        val xStep = if (n > 1) size.width / (n - 1) else size.width
+        val strokePx = 2.dp.toPx()
+        val dotRadius = 3.dp.toPx()
+
+        listOf(valuesA to colorA, valuesB to colorB).forEach { (vals, color) ->
+            for (i in 0 until n - 1) {
+                val v1 = vals.getOrElse(i) { 0f }.coerceIn(0f, 1f)
+                val v2 = vals.getOrElse(i + 1) { 0f }.coerceIn(0f, 1f)
+                drawLine(
+                    color = color.copy(alpha = 0.85f),
+                    start = Offset(i * xStep, (1f - v1) * size.height),
+                    end   = Offset((i + 1) * xStep, (1f - v2) * size.height),
+                    strokeWidth = strokePx,
+                    cap = StrokeCap.Round
+                )
+            }
+            for (i in 0 until n) {
+                val v = vals.getOrElse(i) { 0f }.coerceIn(0f, 1f)
+                drawCircle(color = color, radius = dotRadius, center = Offset(i * xStep, (1f - v) * size.height))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CorrelationLegendDot(label: String, color: Color) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Canvas(modifier = Modifier.size(8.dp)) { drawCircle(color) }
+        Text(label, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
     }
 }
 
