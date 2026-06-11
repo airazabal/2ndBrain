@@ -1,9 +1,11 @@
 package com.alex.a2ndbrain
 
 import com.alex.a2ndbrain.core.agents.MemoryAgent
+import com.alex.a2ndbrain.core.agents.ModelRouter
 import com.alex.a2ndbrain.core.domain.RetrieveMemoriesUseCase
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.fakes.FakeMemoryRepository
+import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -27,7 +29,7 @@ class RetrieveMemoriesUseCaseTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         repo = FakeMemoryRepository()
-        useCase = RetrieveMemoriesUseCase(MemoryAgent(repo))
+        useCase = RetrieveMemoriesUseCase(MemoryAgent(repo, mockk(relaxed = true)))
     }
 
     @After

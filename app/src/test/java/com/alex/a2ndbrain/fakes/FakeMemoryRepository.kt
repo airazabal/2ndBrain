@@ -1,12 +1,15 @@
 package com.alex.a2ndbrain.fakes
 
 import androidx.paging.PagingData
+import com.alex.a2ndbrain.core.agents.ConsolidatedMemory
+import com.alex.a2ndbrain.core.agents.EpisodicEvent
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
+import java.time.Instant
 
 class FakeMemoryRepository : MemoryRepository {
 
@@ -93,4 +96,12 @@ class FakeMemoryRepository : MemoryRepository {
     override suspend fun deleteMemoriesByPackage(packageName: String) {
         memories.value = memories.value.filter { it.packageName != packageName }
     }
+
+    override suspend fun insertEpisodicEvent(content: String, sourceTag: String) {}
+    override suspend fun getEpisodicEvents(since: Instant): List<EpisodicEvent> = emptyList()
+    override suspend fun countSimilarEvents(content: String, since: Instant): Int = 0
+    override suspend fun getLongTermMemories(): List<ConsolidatedMemory> = emptyList()
+    override suspend fun insertConsolidatedMemories(memories: List<ConsolidatedMemory>) {}
+    override suspend fun pruneOldLongTermMemories(olderThan: Instant, importanceBelow: Float) {}
+    override suspend fun pruneOldEpisodicEvents(olderThan: Instant) {}
 }
