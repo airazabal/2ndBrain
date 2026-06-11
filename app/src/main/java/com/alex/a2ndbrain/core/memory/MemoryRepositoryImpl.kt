@@ -102,4 +102,7 @@ class MemoryRepositoryImpl(
 
     override suspend fun pruneOldLongTermMemories(olderThan: Instant, importanceBelow: Float) =
         consolidatedMemoryDao.pruneOldMemories(olderThan.toEpochMilli(), importanceBelow)
+
+    override suspend fun pruneOldEpisodicEvents(olderThan: Instant) =
+        episodicEventDao.deleteOlderThan(olderThan.toEpochMilli())
 }

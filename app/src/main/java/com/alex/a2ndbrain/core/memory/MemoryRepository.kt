@@ -35,4 +35,5 @@ interface MemoryRepository {
     suspend fun getLongTermMemories(): List<ConsolidatedMemory>
     suspend fun insertConsolidatedMemories(memories: List<ConsolidatedMemory>)
     suspend fun pruneOldLongTermMemories(olderThan: Instant, importanceBelow: Float)
+    suspend fun pruneOldEpisodicEvents(olderThan: Instant)
 }

@@ -24,6 +24,8 @@ class SettingsViewModel(
 
     val syncStatus = nearbySyncManager.syncStatus
 
+    fun getLastSyncedAtMs(): Long = nearbySyncManager.getLastSyncedAtMs()
+
     fun startNearbySync(force: Boolean = false) {
         nearbySyncManager.startSync(force)
     }

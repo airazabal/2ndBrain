@@ -761,6 +761,8 @@ class MainActivity : ComponentActivity() {
                                                 AppTab.SETTINGS -> {
                                                     val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
                                                     val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
+                                                    val lastSyncTimestamp = (syncStatus as? com.alex.a2ndbrain.core.sync.NearbySyncManager.SyncStatus.Success)?.atMs
+                                                        ?: settingsViewModel.getLastSyncedAtMs()
                                                     AppCaptureSettingsScreen(
                                                         settingsManager = settingsManager,
                                                         onBack = {
@@ -791,6 +793,7 @@ class MainActivity : ComponentActivity() {
                                                             )
                                                         },
                                                         syncStatus = syncStatus,
+                                                        lastSyncTimestamp = lastSyncTimestamp,
                                                         onStartSync = { force ->
                                                             settingsViewModel.startNearbySync(
                                                                 force

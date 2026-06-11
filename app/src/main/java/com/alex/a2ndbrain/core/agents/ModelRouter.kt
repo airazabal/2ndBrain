@@ -31,7 +31,7 @@ class ModelRouter(
     suspend fun run(
         prompt: String,
         complexity: Complexity = Complexity.MEDIUM,
-        timeoutMs: Long = 30_000L
+        timeoutMs: Long = 60_000L
     ): Pair<String, String> {
         return when (modelPicker.getBestModel()) {
             ModelPicker.ModelType.LITERT_LOCAL -> {
@@ -83,7 +83,7 @@ class ModelRouter(
     suspend fun runWithHistory(
         history: List<AgentMessage>,
         complexity: Complexity = Complexity.LOW,
-        timeoutMs: Long = 30_000L,
+        timeoutMs: Long = 60_000L,
         systemInstruction: String? = null
     ): Pair<String, String> {
         if (history.isEmpty()) {

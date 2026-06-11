@@ -107,7 +107,7 @@ val appModule = module {
     }
     single<MeditationRepository> { ZendenceMeditationRepository(androidContext(), get(), get()) }
     single<TodoistRepository> { TodoistRepositoryImpl(get()) }
-    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 
     // Agent layer
     single { MemoryAgent(get(), get()) }
