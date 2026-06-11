@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import org.koin.android.ext.android.inject
 import org.koin.androidx.compose.koinViewModel
+import org.koin.androidx.viewmodel.ext.android.viewModel as koinActivityViewModel
 
 class MainActivity : ComponentActivity() {
     private val clipboardCaptureManager: ClipboardCaptureManager by inject()
@@ -70,6 +71,8 @@ class MainActivity : ComponentActivity() {
     private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager by inject()
     // Eagerly instantiated so it wires cloudSync into HealthRepository before first health read
     private val cloudHealthSyncManager: com.alex.a2ndbrain.core.sync.CloudHealthSyncManager by inject()
+    // Shared with the composable so tile intents can trigger navigation
+    private val navViewModel: NavigationViewModel by koinActivityViewModel()
 
     private val googleSignInLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -130,6 +133,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleTileIntent(intent)
+    }
+
+    private fun handleTileIntent(intent: Intent?) {
+        when (intent?.getStringExtra("tile_nav")) {
+            "MOOD" -> navViewModel.navigateToWellness("MOOD")
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         clipboardCaptureManager.captureCurrentClipboard()
@@ -151,6 +165,7 @@ class MainActivity : ComponentActivity() {
         com.alex.a2ndbrain.core.todoist.TodoistReminderWorker.schedule(this)
         com.alex.a2ndbrain.core.todoist.TodoistReminderWorker.runNow(this)
         com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.schedule(this)
+        handleTileIntent(intent)
         com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.runNow(this)
 
         enableEdgeToEdge()

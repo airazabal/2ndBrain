@@ -46,7 +46,8 @@ class WellnessViewModel(
     private val settingsManager: CaptureSettingsManager,
     private val meditationRepository: MeditationRepository,
     private val nearbySyncManager: NearbySyncManager,
-    private val moodRepository: MoodRepository
+    private val moodRepository: MoodRepository,
+    private val appContext: android.content.Context
 ) : ViewModel() {
 
     val healthConnectManager: HealthConnectManager get() = healthRepository.healthConnectManager
@@ -278,6 +279,22 @@ class WellnessViewModel(
                     focusProgress = focusProgress,
                     moodProgress = moodProgress
                 )
+                // Persist score for Quick Settings tile and notify it to refresh
+                appContext.getSharedPreferences(
+                    com.alex.a2ndbrain.ui.widget.SenseOfDayTileService.PREFS_NAME,
+                    android.content.Context.MODE_PRIVATE
+                ).edit().putInt(
+                    com.alex.a2ndbrain.ui.widget.SenseOfDayTileService.KEY_SCORE, score
+                ).apply()
+                try {
+                    android.service.quicksettings.TileService.requestListeningState(
+                        appContext,
+                        android.content.ComponentName(
+                            appContext,
+                            com.alex.a2ndbrain.ui.widget.SenseOfDayTileService::class.java
+                        )
+                    )
+                } catch (_: Exception) { /* tile not added yet — safe to ignore */ }
             }
         }
     }
