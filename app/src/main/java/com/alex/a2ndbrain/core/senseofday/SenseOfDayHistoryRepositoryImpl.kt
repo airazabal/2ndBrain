@@ -19,7 +19,8 @@ class SenseOfDayHistoryRepositoryImpl(
         stepsProgress: Float,
         sleepProgress: Float,
         exerciseProgress: Float,
-        focusProgress: Float
+        focusProgress: Float,
+        moodProgress: Float
     ) {
         val date = sdf.format(Date())
         dao.upsert(
@@ -30,10 +31,12 @@ class SenseOfDayHistoryRepositoryImpl(
                 sleepProgress = sleepProgress,
                 exerciseProgress = exerciseProgress,
                 focusProgress = focusProgress,
-                savedAt = System.currentTimeMillis()
+                savedAt = System.currentTimeMillis(),
+                moodProgress = moodProgress
             )
         )
-        val content = "Sense of day $score/100 on $date: steps ${(stepsProgress * 100).toInt()}%, sleep ${(sleepProgress * 100).toInt()}%, exercise ${(exerciseProgress * 100).toInt()}%, focus ${(focusProgress * 100).toInt()}%"
+        val moodPart = if (moodProgress >= 0f) ", mood ${(moodProgress * 100).toInt()}%" else ""
+        val content = "Sense of day $score/100 on $date: steps ${(stepsProgress * 100).toInt()}%, sleep ${(sleepProgress * 100).toInt()}%, exercise ${(exerciseProgress * 100).toInt()}%, focus ${(focusProgress * 100).toInt()}%$moodPart"
         try { memoryRepository.insertEpisodicEvent(content, "sense_of_day") }
         catch (e: Exception) { /* non-fatal */ }
     }

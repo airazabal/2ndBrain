@@ -18,7 +18,8 @@ data class TrendsUiState(
     val avgStepsProgress: Float = 0f,
     val avgSleepProgress: Float = 0f,
     val avgExerciseProgress: Float = 0f,
-    val avgFocusProgress: Float = 0f
+    val avgFocusProgress: Float = 0f,
+    val avgMoodProgress: Float = 0f
 )
 
 class SenseOfDayTrendsViewModel(
@@ -37,6 +38,8 @@ class SenseOfDayTrendsViewModel(
                 val avg = { selector: (SenseOfDaySnapshotEntity) -> Float ->
                     if (snapshots.isNotEmpty()) snapshots.map(selector).average().toFloat() else 0f
                 }
+                val moodSnapshots = snapshots.filter { it.moodProgress >= 0f }
+                val avgMood = if (moodSnapshots.isNotEmpty()) moodSnapshots.map { it.moodProgress }.average().toFloat() else 0f
 
                 _uiState.value = TrendsUiState(
                     todayScore = todayScore,
@@ -47,7 +50,8 @@ class SenseOfDayTrendsViewModel(
                     avgStepsProgress = avg { it.stepsProgress },
                     avgSleepProgress = avg { it.sleepProgress },
                     avgExerciseProgress = avg { it.exerciseProgress },
-                    avgFocusProgress = avg { it.focusProgress }
+                    avgFocusProgress = avg { it.focusProgress },
+                    avgMoodProgress = avgMood
                 )
             }
         }

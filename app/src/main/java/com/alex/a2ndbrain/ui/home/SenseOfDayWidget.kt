@@ -27,7 +27,8 @@ private val pillarColors = listOf(
     Color(0xFF1E88E5),  // Steps — blue
     Color(0xFF7E57C2),  // Sleep — purple
     Color(0xFF43A047),  // Exercise — green
-    Color(0xFFFF9800)   // Focus — orange
+    Color(0xFFFF9800),  // Focus — orange
+    Color(0xFFEC407A)   // Mood — pink
 )
 
 @Composable
@@ -52,7 +53,8 @@ fun SenseOfDayWidget(
     val animP1 by animateFloatAsState(targetValue = pillars.getOrNull(1)?.progress ?: 0f, animationSpec = tween(700), label = "p1")
     val animP2 by animateFloatAsState(targetValue = pillars.getOrNull(2)?.progress ?: 0f, animationSpec = tween(700), label = "p2")
     val animP3 by animateFloatAsState(targetValue = pillars.getOrNull(3)?.progress ?: 0f, animationSpec = tween(700), label = "p3")
-    val animatedProgresses = listOf(animP0, animP1, animP2, animP3)
+    val animP4 by animateFloatAsState(targetValue = pillars.getOrNull(4)?.progress ?: 0f, animationSpec = tween(700), label = "p4")
+    val animatedProgresses = listOf(animP0, animP1, animP2, animP3, animP4)
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -102,7 +104,8 @@ fun SenseOfDayWidget(
 
                         val totalArc = 270f
                         val gapDeg = 4f
-                        val segmentDeg = (totalArc - 3 * gapDeg) / 4f  // ~64.5°
+                        val n = pillarColors.size
+                        val segmentDeg = (totalArc - (n - 1) * gapDeg) / n
 
                         pillarColors.forEachIndexed { i, color ->
                             val segStart = 135f + i * (segmentDeg + gapDeg)

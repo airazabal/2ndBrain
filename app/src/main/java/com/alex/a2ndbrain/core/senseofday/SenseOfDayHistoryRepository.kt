@@ -9,7 +9,8 @@ interface SenseOfDayHistoryRepository {
         stepsProgress: Float,
         sleepProgress: Float,
         exerciseProgress: Float,
-        focusProgress: Float
+        focusProgress: Float,
+        moodProgress: Float = -1f
     )
     suspend fun getStats(): Triple<Int, Int, Int>
     suspend fun getWeeklyAverages(weeks: Int = 8): List<Pair<String, Float>>

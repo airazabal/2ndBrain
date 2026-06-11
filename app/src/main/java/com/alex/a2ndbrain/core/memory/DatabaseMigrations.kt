@@ -196,6 +196,12 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_29_30 = object : Migration(29, 30) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE sense_of_day_snapshots ADD COLUMN moodProgress REAL NOT NULL DEFAULT -1")
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> = arrayOf(
         MIGRATION_14_15,
         MIGRATION_15_16,
@@ -211,6 +217,7 @@ object DatabaseMigrations {
         MIGRATION_25_26,
         MIGRATION_26_27,
         MIGRATION_27_28,
-        MIGRATION_28_29
+        MIGRATION_28_29,
+        MIGRATION_29_30
     )
 }

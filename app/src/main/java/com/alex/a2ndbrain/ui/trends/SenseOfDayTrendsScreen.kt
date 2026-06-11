@@ -34,9 +34,10 @@ private val pillarColors = listOf(
     Color(0xFF1E88E5),
     Color(0xFF7E57C2),
     Color(0xFF43A047),
-    Color(0xFFFF9800)
+    Color(0xFFFF9800),
+    Color(0xFFEC407A)
 )
-private val pillarLabels = listOf("Steps", "Sleep", "Exercise", "Focus")
+private val pillarLabels = listOf("Steps", "Sleep", "Exercise", "Focus", "Mood")
 
 private fun scoreColor(score: Float): Color {
     val hue = (score / 100f * 120f).coerceIn(0f, 120f)
@@ -73,7 +74,8 @@ fun SenseOfDayTrendsScreen(
                 stepsProgress = uiState.avgStepsProgress,
                 sleepProgress = uiState.avgSleepProgress,
                 exerciseProgress = uiState.avgExerciseProgress,
-                focusProgress = uiState.avgFocusProgress
+                focusProgress = uiState.avgFocusProgress,
+                moodProgress = uiState.avgMoodProgress
             )
         }
     }
@@ -313,9 +315,10 @@ private fun PillarAveragesCard(
     stepsProgress: Float,
     sleepProgress: Float,
     exerciseProgress: Float,
-    focusProgress: Float
+    focusProgress: Float,
+    moodProgress: Float
 ) {
-    val progresses = listOf(stepsProgress, sleepProgress, exerciseProgress, focusProgress)
+    val progresses = listOf(stepsProgress, sleepProgress, exerciseProgress, focusProgress, moodProgress)
 
     Surface(
         shape = RoundedCornerShape(16.dp),

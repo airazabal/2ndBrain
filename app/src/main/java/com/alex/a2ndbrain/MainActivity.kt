@@ -694,6 +694,7 @@ class MainActivity : ComponentActivity() {
                                                                 "Steps", "Sleep" -> navViewModel.navigateToWellness("HEALTH")
                                                                 "Exercise" -> navViewModel.navigateToWellness("EXERCISE")
                                                                 "Focus" -> navViewModel.navigateToWellness("ONLINE")
+                                                                "Mood" -> navViewModel.navigateToWellness("MOOD")
                                                             }
                                                         },
                                                         themePreference = themePreference,

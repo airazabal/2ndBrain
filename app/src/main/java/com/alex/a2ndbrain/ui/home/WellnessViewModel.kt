@@ -12,6 +12,8 @@ import com.alex.a2ndbrain.core.meditation.MeditationRepository
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
+import com.alex.a2ndbrain.core.mood.MoodLogEntity
+import com.alex.a2ndbrain.core.mood.MoodRepository
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
@@ -43,7 +45,8 @@ class WellnessViewModel(
     private val senseOfDayHistoryRepository: SenseOfDayHistoryRepository,
     private val settingsManager: CaptureSettingsManager,
     private val meditationRepository: MeditationRepository,
-    private val nearbySyncManager: NearbySyncManager
+    private val nearbySyncManager: NearbySyncManager,
+    private val moodRepository: MoodRepository
 ) : ViewModel() {
 
     val healthConnectManager: HealthConnectManager get() = healthRepository.healthConnectManager
@@ -119,6 +122,17 @@ class WellnessViewModel(
             }
             .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
+    // ── Mood ──────────────────────────────────────────────────────────────────
+    private val todayMoodFlow: StateFlow<MoodLogEntity?> = run {
+        val sinceDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        moodRepository.getLogsSinceFlow(sinceDate)
+            .map { logs ->
+                val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                logs.firstOrNull { it.date == today }
+            }
+            .stateIn(viewModelScope, SharingStarted.Lazily, null)
+    }
+
     // Private usage subscription for SenseOfDay focus pillar
     private val usageStats: StateFlow<List<UsageStatEntity>> = _minuteTicker
         .map { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
@@ -160,9 +174,9 @@ class WellnessViewModel(
             }
         }
 
-        // Recalculate Sense of Day whenever health, usage, meditation, or exercise changes
+        // Recalculate Sense of Day whenever health, usage, meditation, exercise, or mood changes
         viewModelScope.launch {
-            combine(_healthMetricsToday, usageStats, meditatedToday, exerciseTodayMinutes) { _, _, _, _ -> }
+            combine(_healthMetricsToday, usageStats, meditatedToday, exerciseTodayMinutes, todayMoodFlow) { _, _, _, _, _ -> }
                 .collect { updateSenseOfDayScore() }
         }
     }
@@ -210,7 +224,13 @@ class WellnessViewModel(
             val focusMinutes = (totalFocusMs / 60_000L).toInt()
             val focusProgress = (focusMinutes.toFloat() / digitalFocusBaseline).coerceIn(0f, 1f)
 
-            val score = ((stepsProgress + sleepProgress + exerciseProgress + focusProgress) / 4f * 100f)
+            val todayMood = todayMoodFlow.value
+            val moodProgress = todayMood?.let { ((it.mood + it.energy) / 2f - 1f) / 4f } ?: -1f
+            val moodLogged = moodProgress >= 0f
+
+            val denominator = if (moodLogged) 5f else 4f
+            val moodContribution = if (moodLogged) moodProgress else 0f
+            val score = ((stepsProgress + sleepProgress + exerciseProgress + focusProgress + moodContribution) / denominator * 100f)
                 .toInt().coerceIn(0, 100)
             _senseOfDayScore.value = score
 
@@ -223,19 +243,27 @@ class WellnessViewModel(
             val sleepGoalDisplay = if (sleepGoalHours == sleepGoalHours.toInt().toFloat())
                 "${sleepGoalHours.toInt()}h" else "${sleepGoalHours}h"
 
+            val moodEmojis = listOf("😞", "😕", "😐", "🙂", "😄")
+            val moodValue = todayMood?.let { moodEmojis.getOrElse(it.mood - 1) { "😐" } } ?: "--"
+            val moodGoalText = if (todayMood != null) "⚡${todayMood.energy}/5" else "check in"
+            val moodDisplayProgress = if (moodLogged) moodProgress else 0f
+
             _senseOfDayPillars.value = listOf(
                 SenseOfDayPillar("Steps", stepsDisplay, "/ %,d".format(stepsGoal), stepsProgress),
                 SenseOfDayPillar("Sleep", sleepDisplay, "/ $sleepGoalDisplay", sleepProgress),
                 SenseOfDayPillar("Exercise", exerciseDisplay, "/ ${exerciseGoalMinutes}m", exerciseProgress),
-                SenseOfDayPillar("Focus", focusDisplay, "/ ${digitalFocusBaseline / 60}h", focusProgress)
+                SenseOfDayPillar("Focus", focusDisplay, "/ ${digitalFocusBaseline / 60}h", focusProgress),
+                SenseOfDayPillar("Mood", moodValue, moodGoalText, moodDisplayProgress)
             )
 
             val contextText = when {
                 score >= 85 -> "Outstanding balance across all pillars today."
                 score >= 70 -> "Great progress. Keep the pillars balanced."
+                !moodLogged && score >= 50 -> "Log your mood to complete today's score."
                 stepsProgress < 0.3f && exerciseProgress < 0.3f -> "Movement is low. A short walk could flip your score."
                 sleepProgress < 0.5f -> "Poor sleep is dragging the score. Prioritize rest tonight."
                 focusProgress < 0.3f -> "Focus time is low. Try a 25-min deep-work block."
+                moodLogged && moodProgress < 0.4f -> "Mood is low — consider a break or short walk."
                 score < 20 -> "Calibrating... log some activity to update your Sense of Day."
                 else -> "Steady progress. Keep an eye on your lowest pillar."
             }
@@ -247,7 +275,8 @@ class WellnessViewModel(
                     stepsProgress = stepsProgress,
                     sleepProgress = sleepProgress,
                     exerciseProgress = exerciseProgress,
-                    focusProgress = focusProgress
+                    focusProgress = focusProgress,
+                    moodProgress = moodProgress
                 )
             }
         }

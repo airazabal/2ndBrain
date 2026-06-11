@@ -11,5 +11,6 @@ data class SenseOfDaySnapshotEntity(
     val sleepProgress: Float,
     val exerciseProgress: Float,
     val focusProgress: Float,
-    val savedAt: Long
+    val savedAt: Long,
+    val moodProgress: Float = -1f  // -1 means no check-in recorded for that day
 )

@@ -24,7 +24,7 @@ import com.alex.a2ndbrain.data.db.ConsolidatedMemoryEntity
 import com.alex.a2ndbrain.data.db.EpisodicEventDao
 import com.alex.a2ndbrain.data.db.EpisodicEventEntity
 
-@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class, HealthSnapshotEntity::class, ExerciseSessionEntity::class, TodoistCompletionEntity::class, SenseOfDaySnapshotEntity::class, MoodLogEntity::class, HabitEntity::class, HabitCompletionEntity::class, GoalEntity::class, ConsolidatedMemoryEntity::class, EpisodicEventEntity::class], version = 29, exportSchema = true)
+@Database(entities = [MemoryEntity::class, DailySummaryEntity::class, UsageStatEntity::class, HealthSnapshotEntity::class, ExerciseSessionEntity::class, TodoistCompletionEntity::class, SenseOfDaySnapshotEntity::class, MoodLogEntity::class, HabitEntity::class, HabitCompletionEntity::class, GoalEntity::class, ConsolidatedMemoryEntity::class, EpisodicEventEntity::class], version = 30, exportSchema = true)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun memoryDao(): MemoryDao
     abstract fun healthDao(): HealthDao
