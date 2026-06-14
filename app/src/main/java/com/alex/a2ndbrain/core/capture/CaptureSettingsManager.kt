@@ -24,6 +24,10 @@ class CaptureSettingsManager(private val context: Context) : SettingsRepository 
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
+            // Probe a read immediately — EncryptedSharedPreferences.create() only initialises the
+            // keyset handle; decryption (and thus KeyStoreException) happens on the first actual
+            // read. Probing here forces that failure inside this try block so recovery fires.
+            sp.getString("__probe__", null)
             // Migrate key if exists in old unencrypted prefs
             if (prefs.contains("gemini_api_key")) {
                 val oldKey = prefs.getString("gemini_api_key", "")?.trim() ?: ""
@@ -32,8 +36,9 @@ class CaptureSettingsManager(private val context: Context) : SettingsRepository 
             }
             sp
         } catch (e: Exception) {
-            // Keystore key was lost or corrupted (e.g. reinstall, backup restore, bad Keystore state).
-            // Delete both the prefs file AND the stale Keystore entry so the retry builds fresh keys.
+            // Keystore key lost or corrupted (reinstall, backup restore, bad Keystore state).
+            // Delete both the encrypted prefs file AND the stale Keystore entry, then build
+            // completely fresh keys. User will need to re-enter API keys.
             Log.w("CaptureSettingsManager", "EncryptedSharedPreferences corrupt, resetting: ${e.message}")
             File(context.filesDir.parent, "shared_prefs/secure_capture_settings.xml").delete()
             try {
