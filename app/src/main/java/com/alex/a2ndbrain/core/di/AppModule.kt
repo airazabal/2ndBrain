@@ -1,5 +1,9 @@
 package com.alex.a2ndbrain.core.di
 
+import com.alex.a2ndbrain.core.calendar.CalendarRepository
+import com.alex.a2ndbrain.core.notes.VaultRepository
+import com.alex.a2ndbrain.core.notes.VaultRepositoryImpl
+import com.alex.a2ndbrain.core.calendar.CalendarRepositoryImpl
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.reflection.ModelDownloader
@@ -47,6 +51,8 @@ import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepositoryImpl
 import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotDao
 import com.alex.a2ndbrain.core.todoist.TodoistDao
+import com.alex.a2ndbrain.core.todoist.TaskLatencyTracker
+import com.alex.a2ndbrain.core.todoist.TodoistReminderNotifier
 import com.alex.a2ndbrain.core.todoist.TodoistHabitClient
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
 import com.alex.a2ndbrain.core.todoist.TodoistRepositoryImpl
@@ -55,10 +61,18 @@ import com.alex.a2ndbrain.core.todoist.TodoistStatsRepositoryImpl
 import com.alex.a2ndbrain.data.db.ConsolidatedMemoryDao
 import com.alex.a2ndbrain.data.db.EpisodicEventDao
 import com.alex.a2ndbrain.core.domain.BuildBrainContextUseCase
+import com.alex.a2ndbrain.core.domain.ExportBackupUseCase
+import com.alex.a2ndbrain.core.domain.ImportBackupUseCase
+import com.alex.a2ndbrain.core.senseofday.ComputeSenseOfDayUseCase
 import com.alex.a2ndbrain.core.domain.ChatWithCopilotUseCase
+import com.alex.a2ndbrain.core.domain.CopilotService
 import com.alex.a2ndbrain.core.domain.GenerateWeeklyInsightUseCase
 import com.alex.a2ndbrain.core.domain.GetWeeklyHealthTrendsUseCase
+import com.alex.a2ndbrain.core.domain.MemoryRetriever
+import com.alex.a2ndbrain.core.domain.ReflectionService
 import com.alex.a2ndbrain.core.domain.RetrieveMemoriesUseCase
+import com.alex.a2ndbrain.core.goals.GoalRepository
+import com.alex.a2ndbrain.core.goals.GoalRepositoryImpl
 import com.alex.a2ndbrain.ui.exercise.ExerciseViewModel
 import com.alex.a2ndbrain.ui.todoist.TodoistViewModel
 import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsViewModel
@@ -74,11 +88,14 @@ val appModule = module {
     single<MoodDao> { get<AppDatabase>().moodDao() }
     single<HabitsDao> { get<AppDatabase>().habitsDao() }
     single { get<AppDatabase>().goalDao() }
+    single<GoalRepository> { GoalRepositoryImpl(get()) }
     single<ConsolidatedMemoryDao> { get<AppDatabase>().consolidatedMemoryDao() }
     single<EpisodicEventDao> { get<AppDatabase>().episodicEventDao() }
 
     // Repositories
     single<MemoryRepository> { MemoryRepositoryImpl(get(), get(), get()) }
+    single<CalendarRepository> { CalendarRepositoryImpl(androidContext()) }
+    single<VaultRepository> { VaultRepositoryImpl(androidContext()) }
     single<ExerciseRepository> { ExerciseRepositoryImpl(get(), androidContext(), get()) }
     single<TodoistStatsRepository> { TodoistStatsRepositoryImpl(get(), get()) }
     single<SenseOfDayHistoryRepository> { SenseOfDayHistoryRepositoryImpl(get(), get()) }
@@ -88,12 +105,15 @@ val appModule = module {
 
     // Managers
     single { TodoistHabitClient(get()) }
+    single { TaskLatencyTracker(androidContext()) }
+    single { TodoistReminderNotifier(androidContext()) }
     single { HabitSyncManager(get(), get()) }
     single { CaptureSettingsManager(androidContext()) }
     single { ClipboardCaptureManager(androidContext(), get()) }
     single { DigitalTimeManager(androidContext(), get(), get(), get()) }
     single { GeminiAgent(get()) }
     single { ReflectionManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<ReflectionService> { get<ReflectionManager>() }
     single { com.alex.a2ndbrain.core.reflection.CircadianInsightManager(androidContext(), get(), get(), get(), get()) }
     single { com.alex.a2ndbrain.core.goals.GoalProgressCalculator(get(), get(), get()) }
     single { ModelDownloader(androidContext(), get()) }
@@ -107,19 +127,24 @@ val appModule = module {
     }
     single<MeditationRepository> { ZendenceMeditationRepository(androidContext(), get(), get()) }
     single<TodoistRepository> { TodoistRepositoryImpl(get()) }
-    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { com.alex.a2ndbrain.core.sync.NearbySyncManager(androidContext(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 
     // Agent layer
     single { MemoryAgent(get(), get()) }
+    single<MemoryRetriever> { get<MemoryAgent>() }
     single { HealthAgent(get(), get()) }
     single { ReflectionAgent() }
-    single { ModelPicker(androidContext()) }
+    single { ModelPicker(androidContext(), get()) }
     single { ModelRouter(get(), get(), get()) }
     single { OrchestratorAgent(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+    single<CopilotService> { get<OrchestratorAgent>() }
     // factory = new SessionMemory per Copilot session (not a global singleton)
     factory { SessionMemory() }
 
     // Use cases
+    factory { ComputeSenseOfDayUseCase() }
+    single { ExportBackupUseCase(get(), get(), get()) }
+    single { ImportBackupUseCase(get()) }
     single { ChatWithCopilotUseCase(get()) }
     single { BuildBrainContextUseCase(get()) }
     single { RetrieveMemoriesUseCase(get()) }
@@ -131,17 +156,17 @@ val appModule = module {
     viewModel { ExerciseViewModel(get()) }
     viewModel { TodoistViewModel(get()) }
     viewModel { SenseOfDayTrendsViewModel(get()) }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), androidContext(), get()) }
-    viewModel { com.alex.a2ndbrain.ui.home.HomeTasksViewModel(get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.home.TodayAgendaViewModel(get(), get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.home.GrandCentralViewModel(get(), get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.home.WellnessViewModel(get(), get(), get(), get(), get(), get(), get(), get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeViewModel(get(), get(), get(), get(), get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.HomeTasksViewModel(get(), get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.TodayAgendaViewModel(get(), get(), get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.GrandCentralViewModel(get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.home.WellnessViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.health.HealthViewModel(get(), get(), get()) }
-    viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), androidContext(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.memories.MemoryViewModel(get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.reflection.ReflectionViewModel(get(), get(), get(), get(), get(), get(), get()) }
     viewModel { com.alex.a2ndbrain.ui.chat.CopilotViewModel(get(), get()) }
-    viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), get(), androidContext()) }
-    viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get(), androidContext()) }
+    viewModel { com.alex.a2ndbrain.ui.settings.SettingsViewModel(get(), get(), get(), get(), get(), get()) }
+    viewModel { com.alex.a2ndbrain.ui.usage.DigitalTimeViewModel(get()) }
     viewModel { com.alex.a2ndbrain.ui.search.SearchViewModel(get()) }
     viewModel { com.alex.a2ndbrain.ui.mood.MoodViewModel(get()) }
     viewModel { com.alex.a2ndbrain.ui.habits.HabitsViewModel(get()) }

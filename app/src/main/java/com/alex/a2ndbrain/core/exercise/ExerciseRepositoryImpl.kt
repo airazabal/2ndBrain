@@ -64,8 +64,8 @@ class ExerciseRepositoryImpl(
         exerciseDao.updateSession(id, type.name, durationMinutes, notes)
     }
 
-    override fun getAllSessionsFlow(): Flow<List<ExerciseSessionEntity>> =
-        exerciseDao.getAllSessionsFlow()
+    override fun getAllSessionsFlow(): Flow<List<ExerciseSession>> =
+        exerciseDao.getAllSessionsFlow().map { list -> list.map { it.toDomain() } }
 
     /**
      * 7-day consistency bars: returns exactly 7 entries from 6 days ago through today.
@@ -112,18 +112,18 @@ class ExerciseRepositoryImpl(
     }
 
     override suspend fun getRecentSessions(daysBack: Int) = withContext(Dispatchers.IO) {
-        exerciseDao.getSessionsSinceSync(sinceDate(daysBack))
+        exerciseDao.getSessionsSinceSync(sinceDate(daysBack)).map { it.toDomain() }
     }
 
     override suspend fun getModifiedSince(since: Long) = withContext(Dispatchers.IO) {
-        exerciseDao.getModifiedSince(since)
+        exerciseDao.getModifiedSince(since).map { it.toDomain() }
     }
 
     override suspend fun getById(id: String) = withContext(Dispatchers.IO) {
-        exerciseDao.getById(id)
+        exerciseDao.getById(id)?.toDomain()
     }
 
-    override suspend fun upsert(session: ExerciseSessionEntity) = withContext(Dispatchers.IO) {
-        exerciseDao.insert(session)
+    override suspend fun upsert(session: ExerciseSession) = withContext(Dispatchers.IO) {
+        exerciseDao.insert(session.toEntity())
     }
 }

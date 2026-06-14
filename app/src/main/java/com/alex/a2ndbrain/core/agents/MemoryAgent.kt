@@ -1,8 +1,11 @@
 package com.alex.a2ndbrain.core.agents
 
 import android.util.Log
+import com.alex.a2ndbrain.core.domain.Memory
+import com.alex.a2ndbrain.core.domain.MemoryRetriever
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
+import com.alex.a2ndbrain.core.memory.toDomain
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import com.alex.a2ndbrain.core.agents.ConsolidatedMemory
@@ -25,14 +28,14 @@ import com.alex.a2ndbrain.core.agents.ConsolidatedMemory
 class MemoryAgent(
     private val repo: MemoryRepository,
     private val modelRouter: ModelRouter
-) {
+) : MemoryRetriever {
 
     /**
      * Retrieve relevant memories for a given query.
      * Falls back to recent memories when query is blank.
      * Always deduplicates by id before scoring.
      */
-    suspend fun retrieve(query: String = "", limit: Int = 50): List<MemoryEntity> =
+    override suspend fun retrieve(query: String, limit: Int): List<Memory> =
         withContext(Dispatchers.IO) {
             try {
                 val candidates = if (query.isBlank()) {
@@ -44,7 +47,7 @@ class MemoryAgent(
                     (searched + recent).distinctBy { it.id }
                 }
 
-                if (query.isBlank()) {
+                val entities = if (query.isBlank()) {
                     candidates.take(limit)
                 } else {
                     candidates
@@ -53,6 +56,7 @@ class MemoryAgent(
                         .take(limit)
                         .map { it.first }
                 }
+                entities.map { it.toDomain() }
             } catch (e: Exception) {
                 Log.e("MemoryAgent", "retrieve() failed", e)
                 emptyList()

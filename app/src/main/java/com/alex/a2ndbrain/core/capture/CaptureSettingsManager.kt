@@ -238,4 +238,53 @@ class CaptureSettingsManager(private val context: Context) {
     fun setSleepGoalHoursLocal(hours: Float) { prefs.edit().putFloat("sleep_goal_hours", hours).putLong("settings_updated_at", System.currentTimeMillis()).apply() }
     fun setExerciseGoalMinutesLocal(minutes: Int) { prefs.edit().putInt("exercise_goal_minutes", minutes).putLong("settings_updated_at", System.currentTimeMillis()).apply() }
     fun setDigitalFocusBaselineMinutesLocal(minutes: Int) { prefs.edit().putInt("digital_focus_baseline_minutes", minutes).putLong("settings_updated_at", System.currentTimeMillis()).apply() }
+    // ── Conflict Dismissal ────────────────────────────────────────────────────
+    private val conflictPrefs by lazy {
+        context.getSharedPreferences("dismissed_conflicts", Context.MODE_PRIVATE)
+    }
+
+    fun getDismissedConflictIds(date: String): Set<String> =
+        conflictPrefs.getStringSet("dismissed_$date", emptySet()) ?: emptySet()
+
+    fun addDismissedConflictId(date: String, id: String) {
+        val current = conflictPrefs.getStringSet("dismissed_$date", emptySet())?.toMutableSet() ?: mutableSetOf()
+        current.add(id)
+        conflictPrefs.edit().putStringSet("dismissed_$date", current).apply()
+    }
+    // ── Quick Settings Tile ───────────────────────────────────────────────────
+    fun saveSenseOfDayScoreForTile(score: Int) {
+        context.getSharedPreferences("2ndbrain_tile", Context.MODE_PRIVATE)
+            .edit().putInt("score", score).apply()
+        try {
+            android.service.quicksettings.TileService.requestListeningState(
+                context,
+                android.content.ComponentName(
+                    context,
+                    com.alex.a2ndbrain.ui.widget.SenseOfDayTileService::class.java
+                )
+            )
+        } catch (_: Exception) { /* tile not added — safe to ignore */ }
+    }
+    // ── App Label Resolution ──────────────────────────────────────────────────
+    fun getAppLabel(packageName: String?): String {
+        if (packageName.isNullOrEmpty()) return "App"
+        return try {
+            val pm = context.packageManager
+            pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+        } catch (_: Exception) {
+            val lp = packageName.lowercase()
+            when {
+                lp.contains("gmail")      -> "Gmail"
+                lp.contains("whatsapp")   -> "WhatsApp"
+                lp.contains("messaging")  -> "Messages"
+                lp.contains("instagram")  -> "Instagram"
+                lp.contains("slack")      -> "Slack"
+                lp.contains("telegram")   -> "Telegram"
+                lp.contains("twitter") || lp.contains("x.android") -> "X"
+                lp.contains("facebook")   -> "Facebook"
+                lp.contains("discord")    -> "Discord"
+                else -> packageName.substringAfterLast(".").replaceFirstChar { it.uppercase() }
+            }
+        }
+    }
 }

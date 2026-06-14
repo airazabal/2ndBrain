@@ -4,6 +4,8 @@ import app.cash.turbine.test
 import com.alex.a2ndbrain.fakes.FakeTodoistRepository
 import com.alex.a2ndbrain.fakes.FakeTodoistStatsRepository
 import com.alex.a2ndbrain.core.todoist.TodoistTask
+import com.alex.a2ndbrain.core.todoist.TaskLatencyTracker
+import com.alex.a2ndbrain.core.todoist.TodoistReminderNotifier
 import com.alex.a2ndbrain.ui.home.HomeTasksViewModel
 import io.mockk.every
 import io.mockk.mockk
@@ -36,15 +38,10 @@ class HomeTasksViewModelTest {
         // Mock SharedPreferences to return a very recent last-notified time so the
         // hourly throttle fires immediately and maybeFireTodoistReminder returns early —
         // this prevents NotificationChannel construction, which fails on the JVM.
-        val recentTime = System.currentTimeMillis()
-        val prefs = mockk<android.content.SharedPreferences>(relaxed = true) {
-            every { getLong("last_notified_ms", 0L) } returns recentTime
-        }
-        val context = mockk<android.content.Context>(relaxed = true) {
-            every { getSharedPreferences(any(), any()) } returns prefs
-        }
+        val tracker = mockk<TaskLatencyTracker>(relaxed = true)
+        val notifier = mockk<TodoistReminderNotifier>(relaxed = true)
 
-        viewModel = HomeTasksViewModel(todoistRepo, statsRepo, context)
+        viewModel = HomeTasksViewModel(todoistRepo, statsRepo, tracker, notifier)
     }
 
     @After

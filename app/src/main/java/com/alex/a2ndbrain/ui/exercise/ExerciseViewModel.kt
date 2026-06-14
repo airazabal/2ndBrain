@@ -3,14 +3,14 @@ package com.alex.a2ndbrain.ui.exercise
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
-import com.alex.a2ndbrain.core.exercise.ExerciseSessionEntity
+import com.alex.a2ndbrain.core.exercise.ExerciseSession
 import com.alex.a2ndbrain.core.exercise.ExerciseType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 data class ExerciseUiState(
-    val sessions: List<ExerciseSessionEntity> = emptyList(),
+    val sessions: List<ExerciseSession> = emptyList(),
     val weeklyConsistency: List<Pair<String, Float>> = emptyList(),
     val todaySessionCount: Int = 0,
     val todayTotalMinutes: Int = 0,
@@ -23,7 +23,7 @@ data class ExerciseUiState(
     val durationMinutes: Int = 30,
     val notes: String = "",
     val startedAt: Long = 0L,
-    val editingSession: ExerciseSessionEntity? = null,
+    val editingSession: ExerciseSession? = null,
     val editSelectedType: ExerciseType = ExerciseType.WALKING,
     val editDurationMinutes: Int = 30,
     val editNotes: String = ""
@@ -106,8 +106,8 @@ class ExerciseViewModel(
         }
     }
 
-    fun showEditSheet(session: ExerciseSessionEntity) = _uiState.update {
-        val type = runCatching { ExerciseType.valueOf(session.type) }.getOrDefault(ExerciseType.OTHER)
+    fun showEditSheet(session: ExerciseSession) = _uiState.update {
+        val type = session.type
         it.copy(
             editingSession = session,
             editSelectedType = type,

@@ -101,7 +101,7 @@ private fun GoalCard(progress: GoalProgress, onEdit: () -> Unit, onDelete: () ->
         GoalTrend.BEHIND   -> "Behind"
         GoalTrend.CRITICAL -> "Critical"
     }
-    val typeEmoji = when (progress.goal.goalType) {
+    val typeEmoji = when (progress.goal.type) {
         GoalType.EXERCISE_SESSIONS -> "🏋️"
         GoalType.HABIT_COMPLETION  -> "✅"
         GoalType.STEPS_DAILY       -> "👟"

@@ -8,4 +8,5 @@ interface MoodRepository {
     fun getLogsSinceFlow(sinceDate: String): Flow<List<MoodLogEntity>>
     suspend fun getLogsSince(sinceDate: String): List<MoodLogEntity>
     suspend fun getLatest(): MoodLogEntity?
+    suspend fun insertLog(entity: MoodLogEntity)
 }

@@ -1,6 +1,6 @@
 package com.alex.a2ndbrain
 
-import com.alex.a2ndbrain.core.goals.GoalEntity
+import com.alex.a2ndbrain.core.goals.Goal
 import com.alex.a2ndbrain.core.goals.GoalProgressCalculator
 import com.alex.a2ndbrain.core.goals.GoalTrend
 import com.alex.a2ndbrain.core.goals.GoalType
@@ -73,7 +73,7 @@ class GoalProgressCalculatorTest {
     @Test
     fun `exercise goal ignores soft-deleted sessions`() = runTest {
         exerciseRepo.logSession(ExerciseType.WALKING, 30)
-        val id = exerciseRepo.sessions.value.first().id
+        val id = exerciseRepo.currentSessions().first().id
         exerciseRepo.deleteSession(id)
 
         val goal = goal(GoalType.EXERCISE_SESSIONS, target = 1f, period = 7)
@@ -227,12 +227,15 @@ class GoalProgressCalculatorTest {
         target: Float,
         period: Int,
         linkedHabitId: String? = null
-    ) = GoalEntity(
+    ) = Goal(
         id = "test-${type.name}",
         title = type.name,
-        type = type.name,
+        type = type,
         targetValue = target,
         periodDays = period,
-        linkedHabitId = linkedHabitId
+        isActive = true,
+        createdAt = System.currentTimeMillis(),
+        linkedHabitId = linkedHabitId,
+        linkedExerciseType = null
     )
 }

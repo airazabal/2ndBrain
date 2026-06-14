@@ -1,6 +1,5 @@
-package com.alex.a2ndbrain.ui.trends
+package com.alex.a2ndbrain.core.senseofday
 
-import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity
 import kotlin.math.sqrt
 
 object CorrelationEngine {
@@ -24,11 +23,10 @@ object CorrelationEngine {
         else        -> "No clear pattern yet — more days will sharpen this"
     }
 
-    fun buildCorrelations(sorted: List<SenseOfDaySnapshotEntity>): List<CorrelationData> {
+    fun buildCorrelations(sorted: List<SenseOfDaySnapshot>): List<CorrelationData> {
         if (sorted.size < 3) return emptyList()
         val result = mutableListOf<CorrelationData>()
 
-        // Sleep → next-day Score (1-day lag)
         val sleepVals = sorted.dropLast(1).map { it.sleepProgress }
         val scoreVals = sorted.drop(1).map { it.score / 100f }
         val rSS = pearson(sleepVals, scoreVals)
@@ -39,7 +37,6 @@ object CorrelationEngine {
             r = rSS, insight = insight(rSS, "sleep", "next-day score")
         )
 
-        // Steps × Focus (same day, only days where both have data)
         val sfDays = sorted.filter { it.stepsProgress > 0f && it.focusProgress > 0f }
         if (sfDays.size >= 3) {
             val rSF = pearson(sfDays.map { it.stepsProgress }, sfDays.map { it.focusProgress })
@@ -51,7 +48,6 @@ object CorrelationEngine {
             )
         }
 
-        // Exercise × Mood (same day, only mood-logged days)
         val emDays = sorted.filter { it.exerciseProgress > 0f && it.moodProgress >= 0f }
         if (emDays.size >= 3) {
             val rEM = pearson(emDays.map { it.exerciseProgress }, emDays.map { it.moodProgress })

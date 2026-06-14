@@ -21,8 +21,8 @@ class TodoistStatsRepositoryImpl(
         return dateFormat.format(cal.time)
     }
 
-    override fun getAllCompletionsFlow(): Flow<List<TodoistCompletionEntity>> =
-        dao.getAllCompletionsFlow()
+    override fun getAllCompletionsFlow(): Flow<List<TodoistCompletion>> =
+        dao.getAllCompletionsFlow().map { list -> list.map { it.toDomain() } }
 
     override fun getWeeklyActivity(): Flow<List<Pair<String, Int>>> {
         val since = sinceDate(6)
@@ -70,5 +70,13 @@ class TodoistStatsRepositoryImpl(
 
     override suspend fun getTotalCount(): Int = withContext(Dispatchers.IO) {
         dao.getTotalCount()
+    }
+
+    override suspend fun getAllCompletions(): List<TodoistCompletion> = withContext(Dispatchers.IO) {
+        dao.getAllCompletions().map { it.toDomain() }
+    }
+
+    override suspend fun insertCompletion(completion: TodoistCompletion) = withContext(Dispatchers.IO) {
+        dao.insert(completion.toEntity())
     }
 }

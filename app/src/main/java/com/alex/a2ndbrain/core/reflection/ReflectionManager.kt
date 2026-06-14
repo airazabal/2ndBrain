@@ -3,6 +3,8 @@ package com.alex.a2ndbrain.core.reflection
 import android.content.Context
 import android.util.Log
 import androidx.work.*
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import com.alex.a2ndbrain.core.agents.BrainContext
 import com.alex.a2ndbrain.core.agents.DriftContext
 import com.alex.a2ndbrain.core.agents.HealthAgent
@@ -14,9 +16,10 @@ import com.alex.a2ndbrain.core.agents.recallForContext
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
-import com.alex.a2ndbrain.core.memory.MemoryDao
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
+import com.alex.a2ndbrain.core.memory.toDomain
 import com.alex.a2ndbrain.core.workers.MemoryConsolidationWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -25,6 +28,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
+import com.alex.a2ndbrain.core.domain.ReflectionService
 
 /**
  * ReflectionManager — slimmed to scheduler + persistence only.
@@ -46,7 +50,7 @@ import java.util.concurrent.TimeUnit
  */
 class ReflectionManager(
     private val context: Context,
-    private val memoryDao: MemoryDao,
+    private val memoryRepository: MemoryRepository,
     private val digitalTimeManager: DigitalTimeManager,
     private val settingsManager: CaptureSettingsManager,
     private val memoryAgent: MemoryAgent,
@@ -54,7 +58,7 @@ class ReflectionManager(
     private val modelRouter: ModelRouter,
     private val usageRepository: UsageRepository,
     private val senseOfDayRepository: SenseOfDayHistoryRepository
-) {
+) : ReflectionService {
 
     // ── WorkManager scheduling ────────────────────────────────────────────
 
@@ -107,6 +111,23 @@ class ReflectionManager(
      * routes inference through ModelRouter, persists result to Room.
      * Returns null on success, error message on failure.
      */
+
+    fun enqueueManualReflection() {
+        val request = OneTimeWorkRequestBuilder<ReflectionWorker>().build()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            "manual_reflection", ExistingWorkPolicy.REPLACE, request
+        )
+    }
+
+    fun cancelManualReflection() {
+        WorkManager.getInstance(context).cancelUniqueWork("manual_reflection")
+    }
+
+    fun getManualReflectionRunning(): Flow<Boolean> =
+        WorkManager.getInstance(context)
+            .getWorkInfosForUniqueWorkFlow("manual_reflection")
+            .map { infos -> infos.any { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED } }
+
     suspend fun generateDailyReflection(): String? = withContext(Dispatchers.IO) {
         val calendar = Calendar.getInstance()
         val hour = calendar.get(Calendar.HOUR_OF_DAY)
@@ -156,7 +177,7 @@ class ReflectionManager(
             timestamp = System.currentTimeMillis(),
             modelName = modelUsed
         )
-        memoryDao.insertSummary(summaryEntity)
+        memoryRepository.insertSummary(summaryEntity)
         return@withContext null // null = success
     }
 
@@ -167,7 +188,7 @@ class ReflectionManager(
      * Uses HIGH complexity routing (gemini-2.5-flash) since this requires
      * multi-source reasoning across 7 days of data.
      */
-    suspend fun generateWeeklyCorrelation(): String? = withContext(Dispatchers.IO) {
+    override suspend fun generateWeeklyCorrelation(): String? = withContext(Dispatchers.IO) {
         val todayStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             .format(Calendar.getInstance().time)
 
@@ -179,7 +200,7 @@ class ReflectionManager(
                 set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }
             coroutineScope {
-                val memoriesDeferred = async { memoryAgent.retrieveSince(startCal.timeInMillis) }
+                val memoriesDeferred = async { memoryAgent.retrieveSince(startCal.timeInMillis).map { it.toDomain() } }
                 val longTermDeferred = async { try { memoryAgent.recallForContext("") } catch (e: Exception) { emptyList() } }
                 val healthPairDeferred = async { healthAgent.fetchAll() }
                 val weeklyTrendsDeferred = async { healthAgent.fetchWeeklyTrends() }
@@ -223,7 +244,7 @@ class ReflectionManager(
             timestamp = System.currentTimeMillis(),
             modelName = modelUsed
         )
-        memoryDao.insertSummary(summaryEntity)
+        memoryRepository.insertSummary(summaryEntity)
         return@withContext null
     }
 
@@ -259,7 +280,7 @@ class ReflectionManager(
             "Tomorrow forecast failed: ${e.message}" to "Error"
         }
 
-        memoryDao.insertSummary(DailySummaryEntity(
+        memoryRepository.insertSummary(DailySummaryEntity(
             date = todayStr,
             type = "tomorrow_forecast",
             summary = summaryText,
@@ -281,7 +302,7 @@ class ReflectionManager(
         val searchStart = if (isMorning) startOfToday - (12 * 60 * 60 * 1000L) else startOfToday
 
         return coroutineScope {
-            val memoriesDeferred = async { memoryAgent.retrieveSince(searchStart) }
+            val memoriesDeferred = async { memoryAgent.retrieveSince(searchStart).map { it.toDomain() } }
             val longTermDeferred = async { try { memoryAgent.recallForContext("") } catch (e: Exception) { emptyList() } }
             val healthPairDeferred = async { healthAgent.fetchAll() }
             val usageDeferred = async {
@@ -292,7 +313,7 @@ class ReflectionManager(
                     val snapshots = senseOfDayRepository.getRecentSnapshots(28)
                     if (snapshots.size < 7) return@async DriftContext()
                     val thisWeek = snapshots.takeLast(7)
-                    fun avg(fn: (com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity) -> Float, list: List<com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity>) =
+                    fun avg(fn: (com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshot) -> Float, list: List<com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshot>) =
                         if (list.isEmpty()) 0f else list.map(fn).average().toFloat()
                     DriftContext(
                         currentWeek = PillarAverages(

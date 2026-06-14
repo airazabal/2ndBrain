@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalFocusManager
-import com.alex.a2ndbrain.core.exercise.ExerciseSessionEntity
+import com.alex.a2ndbrain.core.exercise.ExerciseSession
 import com.alex.a2ndbrain.core.exercise.ExerciseType
 import java.text.SimpleDateFormat
 import java.util.*
@@ -37,7 +37,7 @@ private val accentGreen = Color(0xFF43A047)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExerciseScreen(
-    sessions: List<ExerciseSessionEntity>,
+    sessions: List<ExerciseSession>,
     weeklyConsistency: List<Pair<String, Float>>,
     todaySessionCount: Int,
     todayTotalMinutes: Int,
@@ -49,7 +49,7 @@ fun ExerciseScreen(
     durationMinutes: Int,
     notes: String,
     isLoading: Boolean,
-    editingSession: ExerciseSessionEntity?,
+    editingSession: ExerciseSession?,
     editSelectedType: ExerciseType,
     editDurationMinutes: Int,
     editNotes: String,
@@ -60,7 +60,7 @@ fun ExerciseScreen(
     onSetNotes: (String) -> Unit,
     onLogSession: () -> Unit,
     onDeleteSession: (String) -> Unit,
-    onEditSession: (ExerciseSessionEntity) -> Unit,
+    onEditSession: (ExerciseSession) -> Unit,
     onHideEditSheet: () -> Unit,
     onSetEditType: (ExerciseType) -> Unit,
     onSetEditDuration: (Int) -> Unit,
@@ -359,11 +359,11 @@ private fun ExerciseConsistencyBars(consistency: List<Pair<String, Float>>) {
 
 @Composable
 private fun ExerciseSessionItem(
-    session: ExerciseSessionEntity,
+    session: ExerciseSession,
     onDelete: () -> Unit,
     onEdit: () -> Unit
 ) {
-    val type = runCatching { ExerciseType.valueOf(session.type) }.getOrDefault(ExerciseType.OTHER)
+    val type = session.type
     val dateLabel = runCatching {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val display = SimpleDateFormat("MMM d", Locale.getDefault())

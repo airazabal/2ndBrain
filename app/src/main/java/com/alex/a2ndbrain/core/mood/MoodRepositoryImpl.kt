@@ -39,4 +39,6 @@ class MoodRepositoryImpl(
     override suspend fun getLogsSince(sinceDate: String) = dao.getLogsSince(sinceDate)
 
     override suspend fun getLatest() = dao.getLatest()
+
+    override suspend fun insertLog(entity: MoodLogEntity) = dao.insert(entity)
 }

@@ -118,4 +118,8 @@ class HabitRepositoryImpl(
     override suspend fun restore(id: String, todoistTaskId: String) {
         dao.restore(id, todoistTaskId, System.currentTimeMillis())
     }
+
+    override suspend fun upsertCompletion(entity: HabitCompletionEntity) {
+        dao.upsertCompletion(entity)
+    }
 }

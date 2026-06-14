@@ -4,7 +4,7 @@ import com.alex.a2ndbrain.core.agents.BrainContext
 import com.alex.a2ndbrain.core.agents.HealthContext
 import com.alex.a2ndbrain.core.agents.ReflectionAgent
 import com.alex.a2ndbrain.core.health.HealthMetrics
-import com.alex.a2ndbrain.core.memory.MemoryEntity
+import com.alex.a2ndbrain.core.domain.Memory
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -16,12 +16,7 @@ class ReflectionAgentCritiqueTest {
 
     private fun words(n: Int) = (1..n).joinToString(" ") { "word$it" }
 
-    private fun memoryWith(content: String) = MemoryEntity(
-        source = "notification",
-        packageName = null,
-        title = null,
-        content = content
-    )
+    private fun memoryWith(content: String) = Memory(id = 1L, source = "test", packageName = null, title = null, content = content, deepLink = null, isRead = false, timestamp = System.currentTimeMillis(), duplicateCount = 0, tags = null)
 
     // ── Word count ────────────────────────────────────────────────────────────
 

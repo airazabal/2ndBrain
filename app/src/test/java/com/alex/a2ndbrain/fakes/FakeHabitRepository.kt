@@ -42,6 +42,13 @@ class FakeHabitRepository : HabitRepository {
     override suspend fun findDeletedByName(name: String): HabitEntity? = null
     override suspend fun restore(id: String, todoistTaskId: String) {}
 
+    override suspend fun upsertCompletion(entity: HabitCompletionEntity) {
+        val existing = completions.value.indexOfFirst { it.habitId == entity.habitId && it.date == entity.date }
+        completions.value = if (existing >= 0)
+            completions.value.toMutableList().also { it[existing] = entity }
+        else completions.value + entity
+    }
+
     fun seedCompletions(vararg c: HabitCompletionEntity) {
         completions.value = c.toList()
     }

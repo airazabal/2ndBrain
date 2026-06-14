@@ -40,7 +40,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.documentfile.provider.DocumentFile
+import com.alex.a2ndbrain.core.notes.VaultNote
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -96,7 +96,7 @@ import androidx.lifecycle.LifecycleEventObserver
 fun HomeScreen(
     memories: List<MemoryEntity>,
     latestReflection: DailySummaryEntity?,
-    notes: List<DocumentFile>,
+    notes: List<VaultNote>,
     consolidatedUsage: List<ConsolidatedUsage>,
     onNavigateToTab: (AppTab) -> Unit,
     onNavigateToFeedWithFilter: (String) -> Unit = {},

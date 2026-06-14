@@ -9,7 +9,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.alex.a2ndbrain.MainActivity
-import com.alex.a2ndbrain.core.memory.MemoryDao
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,7 +20,7 @@ import java.util.Calendar
 
 class UnlockNudgeReceiver : BroadcastReceiver(), KoinComponent {
 
-    private val memoryDao: MemoryDao by inject()
+    private val memoryRepository: MemoryRepository by inject()
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_USER_PRESENT) return
@@ -38,7 +38,7 @@ class UnlockNudgeReceiver : BroadcastReceiver(), KoinComponent {
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
             try {
-                val summary = memoryDao.getLatestSummary()
+                val summary = memoryRepository.getLatestSummary()
                 val body = summary?.summary?.take(140)?.trimEnd()
                     ?.let { if (summary.summary.length > 140) "$it…" else it }
                     ?: "Open your 2nd Brain to review your day."

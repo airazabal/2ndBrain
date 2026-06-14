@@ -221,7 +221,7 @@ fun AppCaptureSettingsScreen(
     }
 
     // AI & Integrations state
-    val modelPicker = remember { ModelPicker(context) }
+    val modelPicker = remember { ModelPicker(context, settingsManager) }
     val modelDownloader = remember { ModelDownloader(context, scope) }
     var selectedModel by remember { mutableStateOf(settingsManager.getPreferredModelType()) }
     var availableModels by remember { mutableStateOf<List<ModelDownloader.LiteRTModel>>(emptyList()) }

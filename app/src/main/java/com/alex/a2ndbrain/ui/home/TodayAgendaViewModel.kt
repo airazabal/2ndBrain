@@ -1,12 +1,12 @@
 package com.alex.a2ndbrain.ui.home
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.core.habits.HabitSyncManager
 import com.alex.a2ndbrain.core.todoist.TaskLatencyStats
 import com.alex.a2ndbrain.core.todoist.TaskLatencyTracker
 import com.alex.a2ndbrain.core.todoist.TodoistRepository
+import com.alex.a2ndbrain.core.todoist.TodoistReminderNotifier
 import com.alex.a2ndbrain.core.todoist.TodoistStatsRepository
 import com.alex.a2ndbrain.core.todoist.TodoistTask
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +19,8 @@ class TodayAgendaViewModel(
     private val todoistRepository: TodoistRepository,
     private val habitSyncManager: HabitSyncManager,
     private val todoistStatsRepository: TodoistStatsRepository,
-    private val applicationContext: Context
+    private val taskLatencyTracker: TaskLatencyTracker,
+    private val reminderNotifier: TodoistReminderNotifier
 ) : ViewModel() {
 
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -30,7 +31,6 @@ class TodayAgendaViewModel(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val taskLatencyTracker = TaskLatencyTracker(applicationContext)
     private val _taskLatencyStats = MutableStateFlow(TaskLatencyStats())
     val taskLatencyStats: StateFlow<TaskLatencyStats> = _taskLatencyStats.asStateFlow()
 
@@ -92,7 +92,7 @@ class TodayAgendaViewModel(
             taskLatencyTracker.markSeen(split.overdue)
             _taskLatencyStats.value = taskLatencyTracker.getStats(split.overdue)
             val allPending = split.today + split.overdue
-            if (allPending.isNotEmpty()) maybeFireReminder(allPending)
+            reminderNotifier.maybeNotify(allPending)
         }
     }
 
@@ -128,38 +128,4 @@ class TodayAgendaViewModel(
         }
     }
 
-    private fun maybeFireReminder(tasks: List<TodoistTask>) {
-        val prefs = applicationContext.getSharedPreferences("todoist_reminder_prefs", Context.MODE_PRIVATE)
-        val lastMs = prefs.getLong("last_notified_ms", 0L)
-        if (System.currentTimeMillis() - lastMs < 60 * 60 * 1000L) return
-
-        val nm = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE)
-                as android.app.NotificationManager
-        val channelId = "task_reminders_v2"
-        nm.createNotificationChannel(
-            android.app.NotificationChannel(channelId, "Task Reminders", android.app.NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Hourly reminders for incomplete tasks due today."
-            }
-        )
-        val openIntent = android.app.PendingIntent.getActivity(
-            applicationContext, 9001,
-            android.content.Intent(applicationContext, com.alex.a2ndbrain.MainActivity::class.java).apply {
-                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK
-            },
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-        )
-        val title = if (tasks.size == 1) "1 task still pending" else "${tasks.size} tasks still pending"
-        val body = tasks.take(5).joinToString(" · ") { it.content }
-        val notification = androidx.core.app.NotificationCompat.Builder(applicationContext, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
-            .setAutoCancel(true)
-            .setContentIntent(openIntent)
-            .build()
-        nm.notify(9001, notification)
-        prefs.edit().putLong("last_notified_ms", System.currentTimeMillis()).apply()
-    }
 }

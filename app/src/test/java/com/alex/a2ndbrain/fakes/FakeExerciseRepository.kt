@@ -1,8 +1,11 @@
 package com.alex.a2ndbrain.fakes
 
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
+import com.alex.a2ndbrain.core.exercise.ExerciseSession
 import com.alex.a2ndbrain.core.exercise.ExerciseSessionEntity
 import com.alex.a2ndbrain.core.exercise.ExerciseType
+import com.alex.a2ndbrain.core.exercise.toDomain
+import com.alex.a2ndbrain.core.exercise.toEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
@@ -13,11 +16,12 @@ import java.util.Locale
 
 class FakeExerciseRepository : ExerciseRepository {
 
-    val sessions = MutableStateFlow<List<ExerciseSessionEntity>>(emptyList())
+    internal val entities = MutableStateFlow<List<ExerciseSessionEntity>>(emptyList())
+    fun currentSessions(): List<ExerciseSession> = entities.value.map { it.toDomain() }
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     override suspend fun logSession(type: ExerciseType, durationMinutes: Int, startedAt: Long, notes: String) {
-        sessions.value = sessions.value + ExerciseSessionEntity(
+        entities.value = entities.value + ExerciseSessionEntity(
             id = "fake-${System.currentTimeMillis()}",
             deviceId = "test-device",
             type = type.name,
@@ -31,19 +35,20 @@ class FakeExerciseRepository : ExerciseRepository {
     }
 
     override suspend fun deleteSession(id: String) {
-        sessions.value = sessions.value.map { if (it.id == id) it.copy(isDeleted = 1) else it }
+        entities.value = entities.value.map { if (it.id == id) it.copy(isDeleted = 1) else it }
     }
 
     override suspend fun updateSession(id: String, type: ExerciseType, durationMinutes: Int, notes: String) {
-        sessions.value = sessions.value.map {
+        entities.value = entities.value.map {
             if (it.id == id) it.copy(type = type.name, durationMinutes = durationMinutes, notes = notes) else it
         }
     }
 
-    override fun getAllSessionsFlow(): Flow<List<ExerciseSessionEntity>> = sessions
+    override fun getAllSessionsFlow(): Flow<List<ExerciseSession>> =
+        entities.map { list -> list.map { it.toDomain() } }
 
     override fun getWeeklyConsistency(): Flow<List<Pair<String, Float>>> =
-        sessions.map { list ->
+        entities.map { list ->
             (0..6).map { offset ->
                 val cal = Calendar.getInstance()
                 cal.add(Calendar.DAY_OF_YEAR, -(6 - offset))
@@ -64,38 +69,39 @@ class FakeExerciseRepository : ExerciseRepository {
             val cal = Calendar.getInstance(); cal.add(Calendar.DAY_OF_YEAR, -6)
             dateFormat.format(cal.time)
         }
-        val recent = sessions.value.filter { it.isDeleted == 0 && it.date >= cutoff }
+        val recent = entities.value.filter { it.isDeleted == 0 && it.date >= cutoff }
         return recent.size to recent.sumOf { it.durationMinutes }
     }
 
     override suspend fun getTodaySummary(): Pair<Int, Int> {
         val today = dateFormat.format(Date())
-        val todaySessions = sessions.value.filter { it.isDeleted == 0 && it.date == today }
+        val todaySessions = entities.value.filter { it.isDeleted == 0 && it.date == today }
         return todaySessions.size to todaySessions.sumOf { it.durationMinutes }
     }
 
-    override suspend fun getTotalSessionCount(): Int = sessions.value.count { it.isDeleted == 0 }
+    override suspend fun getTotalSessionCount(): Int = entities.value.count { it.isDeleted == 0 }
 
-    override suspend fun getRecentSessions(daysBack: Int): List<ExerciseSessionEntity> {
+    override suspend fun getRecentSessions(daysBack: Int): List<ExerciseSession> {
         val cutoff = run {
             val cal = Calendar.getInstance(); cal.add(Calendar.DAY_OF_YEAR, -daysBack)
             dateFormat.format(cal.time)
         }
-        return sessions.value.filter { it.isDeleted == 0 && it.date >= cutoff }
+        return entities.value.filter { it.isDeleted == 0 && it.date >= cutoff }.map { it.toDomain() }
     }
 
-    override suspend fun getModifiedSince(since: Long): List<ExerciseSessionEntity> =
-        sessions.value.filter { it.lastModifiedAt >= since }
+    override suspend fun getModifiedSince(since: Long): List<ExerciseSession> =
+        entities.value.filter { it.lastModifiedAt >= since }.map { it.toDomain() }
 
-    override suspend fun getById(id: String): ExerciseSessionEntity? =
-        sessions.value.find { it.id == id }
+    override suspend fun getById(id: String): ExerciseSession? =
+        entities.value.find { it.id == id }?.toDomain()
 
-    override suspend fun upsert(session: ExerciseSessionEntity) {
-        val existing = sessions.value.indexOfFirst { it.id == session.id }
-        sessions.value = if (existing >= 0) {
-            sessions.value.toMutableList().also { it[existing] = session }
+    override suspend fun upsert(session: ExerciseSession) {
+        val entity = session.toEntity()
+        val existing = entities.value.indexOfFirst { it.id == entity.id }
+        entities.value = if (existing >= 0) {
+            entities.value.toMutableList().also { it[existing] = entity }
         } else {
-            sessions.value + session
+            entities.value + entity
         }
     }
 }

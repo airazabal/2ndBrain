@@ -3,7 +3,7 @@ package com.alex.a2ndbrain.core.senseofday
 import kotlinx.coroutines.flow.Flow
 
 interface SenseOfDayHistoryRepository {
-    fun getLast14DaysFlow(): Flow<List<SenseOfDaySnapshotEntity>>
+    fun getLast14DaysFlow(): Flow<List<SenseOfDaySnapshot>>
     suspend fun saveSnapshot(
         score: Int,
         stepsProgress: Float,
@@ -14,5 +14,5 @@ interface SenseOfDayHistoryRepository {
     )
     suspend fun getStats(): Triple<Int, Int, Int>
     suspend fun getWeeklyAverages(weeks: Int = 8): List<Pair<String, Float>>
-    suspend fun getRecentSnapshots(days: Int): List<SenseOfDaySnapshotEntity>
+    suspend fun getRecentSnapshots(days: Int): List<SenseOfDaySnapshot>
 }

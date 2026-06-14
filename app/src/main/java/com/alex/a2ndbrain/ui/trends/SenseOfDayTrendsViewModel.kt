@@ -2,32 +2,20 @@ package com.alex.a2ndbrain.ui.trends
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.alex.a2ndbrain.core.senseofday.CorrelationData
+import com.alex.a2ndbrain.core.senseofday.CorrelationEngine
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
-import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity
+import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshot
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-// pillarIdx: 0=Steps,1=Sleep,2=Exercise,3=Focus,4=Mood,-1=Overall Score
-data class CorrelationData(
-    val chipLabel: String,
-    val chartTitle: String,
-    val aLabel: String,
-    val aPillarIdx: Int,
-    val aValues: List<Float>,
-    val bLabel: String,
-    val bPillarIdx: Int,
-    val bValues: List<Float>,
-    val r: Float,
-    val insight: String
-)
-
 data class TrendsUiState(
     val todayScore: Int = 0,
     val weekAvg: Int = 0,
     val monthAvg: Int = 0,
-    val last14Days: List<SenseOfDaySnapshotEntity> = emptyList(),
+    val last14Days: List<SenseOfDaySnapshot> = emptyList(),
     val weeklyAverages: List<Pair<String, Float>> = emptyList(),
     val avgStepsProgress: Float = 0f,
     val avgSleepProgress: Float = 0f,
@@ -50,7 +38,7 @@ class SenseOfDayTrendsViewModel(
                 val (todayScore, weekAvg, monthAvg) = repository.getStats()
                 val weeklyAverages = repository.getWeeklyAverages(8)
 
-                val avg = { selector: (SenseOfDaySnapshotEntity) -> Float ->
+                val avg = { selector: (SenseOfDaySnapshot) -> Float ->
                     if (snapshots.isNotEmpty()) snapshots.map(selector).average().toFloat() else 0f
                 }
                 val moodSnapshots = snapshots.filter { it.moodProgress >= 0f }
@@ -74,6 +62,6 @@ class SenseOfDayTrendsViewModel(
         }
     }
 
-    private fun buildCorrelations(sorted: List<SenseOfDaySnapshotEntity>) =
+    private fun buildCorrelations(sorted: List<SenseOfDaySnapshot>) =
         CorrelationEngine.buildCorrelations(sorted)
 }

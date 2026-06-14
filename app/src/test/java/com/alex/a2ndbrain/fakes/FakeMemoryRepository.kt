@@ -104,4 +104,13 @@ class FakeMemoryRepository : MemoryRepository {
     override suspend fun insertConsolidatedMemories(memories: List<ConsolidatedMemory>) {}
     override suspend fun pruneOldLongTermMemories(olderThan: Instant, importanceBelow: Float) {}
     override suspend fun pruneOldEpisodicEvents(olderThan: Instant) {}
+
+    override suspend fun insertSummary(summary: DailySummaryEntity) {
+        summaries.value = summaries.value + summary
+    }
+
+    override suspend fun getLatestSummary(): DailySummaryEntity? = summaries.value.maxByOrNull { it.timestamp }
+
+    override suspend fun searchSummaries(query: String): List<DailySummaryEntity> =
+        summaries.value.filter { it.summary.contains(query, ignoreCase = true) }
 }

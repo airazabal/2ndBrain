@@ -10,9 +10,7 @@ import com.google.ai.edge.litertlm.SamplerConfig
 import android.util.Log
 import java.io.File
 
-class ModelPicker(private val context: Context) {
-    private val settingsManager = CaptureSettingsManager(context)
-
+class ModelPicker(private val context: Context, private val settingsManager: CaptureSettingsManager) {
     enum class ModelType {
         GEMINI_CLOUD,
         LITERT_LOCAL, // Replaces GEMINI_NANO with the broader LiteRT-LM

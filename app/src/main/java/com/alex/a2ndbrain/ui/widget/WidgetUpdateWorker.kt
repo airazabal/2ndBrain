@@ -13,7 +13,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
-import com.alex.a2ndbrain.core.memory.MemoryDao
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.meditation.MeditationRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
@@ -33,7 +33,7 @@ class WidgetUpdateWorker(
 ) : CoroutineWorker(context, params), KoinComponent {
 
     private val healthRepository: HealthRepository by inject()
-    private val memoryDao: MemoryDao by inject()
+    private val memoryRepository: MemoryRepository by inject()
     private val usageRepository: UsageRepository by inject()
     private val meditationRepository: MeditationRepository by inject()
     private val settingsManager: CaptureSettingsManager by inject()
@@ -51,7 +51,7 @@ class WidgetUpdateWorker(
                 set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
                 set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }.timeInMillis
-            val todoistCount = memoryDao.getMemoriesByPackageSync("com.todoist")
+            val todoistCount = memoryRepository.getMemoriesByPackageSync("com.todoist")
                 .count { it.timestamp >= startOfToday }
 
             val usageStats = usageRepository.getUsageStatsForTodaySync()

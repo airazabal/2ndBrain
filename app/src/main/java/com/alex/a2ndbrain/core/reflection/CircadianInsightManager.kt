@@ -4,9 +4,9 @@ import android.content.Context
 import androidx.work.*
 import com.alex.a2ndbrain.core.agents.ModelRouter
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
-import com.alex.a2ndbrain.core.habits.HabitsDao
+import com.alex.a2ndbrain.core.habits.HabitRepository
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
-import com.alex.a2ndbrain.core.memory.MemoryDao
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -15,8 +15,8 @@ import java.util.concurrent.TimeUnit
 
 class CircadianInsightManager(
     private val context: Context,
-    private val memoryDao: MemoryDao,
-    private val habitsDao: HabitsDao,
+    private val memoryRepository: MemoryRepository,
+    private val habitRepository: HabitRepository,
     private val exerciseRepository: ExerciseRepository,
     private val modelRouter: ModelRouter
 ) {
@@ -32,12 +32,12 @@ class CircadianInsightManager(
         val habitsByHour = IntArray(24)
         val exerciseByHour = IntArray(24)
 
-        memoryDao.getMemoriesSince(cutoffMs).forEach { mem ->
+        memoryRepository.getRecentMemories(cutoffMs).forEach { mem ->
             val h = hourOf(mem.timestamp)
             notifByHour[h]++
         }
 
-        habitsDao.getAllCompletionsSince(cutoffDate).forEach { c ->
+        habitRepository.getRecentCompletions(cutoffDate).forEach { c ->
             val h = hourOf(c.completedAt)
             habitsByHour[h]++
         }
@@ -94,7 +94,7 @@ Keep the response concise — 4-6 sentences total. Be specific about hours. Do n
         }
 
         val todayStr = dateFormat.format(Date())
-        memoryDao.insertSummary(
+        memoryRepository.insertSummary(
             DailySummaryEntity(
                 date = todayStr,
                 type = "circadian_pattern",
