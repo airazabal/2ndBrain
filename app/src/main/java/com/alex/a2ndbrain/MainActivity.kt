@@ -35,7 +35,6 @@ import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
@@ -47,6 +46,7 @@ import com.alex.a2ndbrain.ui.search.SearchScreen
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.memories.MemoryViewModel
 import com.alex.a2ndbrain.ui.notes.NotesScreen
+import com.alex.a2ndbrain.ui.settings.AppCaptureSettingsScreen
 import com.alex.a2ndbrain.ui.settings.SettingsViewModel
 import com.alex.a2ndbrain.ui.theme.BrainTheme
 import com.alex.a2ndbrain.ui.wellness.WellnessScreen
@@ -532,6 +532,7 @@ class MainActivity : ComponentActivity() {
                                                     val tomorrowTimelineEvents by homeViewModel.tomorrowTimelineEvents.collectAsStateWithLifecycle()
                                                     val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
                                                     val inlineCopilotResponses by homeViewModel.inlineCopilotResponses.collectAsStateWithLifecycle()
+                                                    val p2pSyncState by homeViewModel.p2pSyncState.collectAsStateWithLifecycle()
                                                     val inlineCopilotLoading by homeViewModel.inlineCopilotLoading.collectAsStateWithLifecycle()
 
                                                     val allMemoriesForHome by homeViewModel.allMemoriesForHome.collectAsStateWithLifecycle()
@@ -662,8 +663,8 @@ class MainActivity : ComponentActivity() {
                                                             val next = if (themePreference == "DARK") "LIGHT" else "DARK"
                                                             settingsViewModel.saveThemePreference(next)
                                                         },
-                                                        lastP2pSyncTime = settingsManager.getLastP2pSyncTime(),
-                                                        consecutiveP2pSyncFailures = settingsManager.getConsecutiveP2pSyncFailures()
+                                                        lastP2pSyncTime = p2pSyncState.lastSyncMs,
+                                                        consecutiveP2pSyncFailures = p2pSyncState.failureCount
                                                     )
                                                 }
 

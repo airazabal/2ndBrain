@@ -27,6 +27,8 @@ import com.alex.a2ndbrain.core.notes.VaultNote
 import com.alex.a2ndbrain.core.notes.VaultRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
 
+data class P2pSyncState(val lastSyncMs: Long = 0L, val failureCount: Int = 0)
+
 data class SenseOfDayPillar(
     val label: String,
     val value: String,
@@ -96,6 +98,15 @@ class HomeViewModel(
 
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+
+    val p2pSyncState: StateFlow<P2pSyncState> = _minuteTicker
+        .map {
+            P2pSyncState(
+                lastSyncMs = settingsManager.getLastP2pSyncTime(),
+                failureCount = settingsManager.getConsecutiveP2pSyncFailures()
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), P2pSyncState())
 
     private val _monitoredAppsState = MutableStateFlow(settingsManager.getMonitoredApps())
     val monitoredAppsState = _monitoredAppsState.asStateFlow()
