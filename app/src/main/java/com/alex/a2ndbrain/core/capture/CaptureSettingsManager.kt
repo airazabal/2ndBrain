@@ -32,14 +32,22 @@ class CaptureSettingsManager(private val context: Context) : SettingsRepository 
             }
             sp
         } catch (e: Exception) {
-            // Keystore key was lost (e.g. after reinstall with backup restore).
-            // Wipe the stale encrypted file and start fresh — user will need to re-enter keys.
+            // Keystore key was lost or corrupted (e.g. reinstall, backup restore, bad Keystore state).
+            // Delete both the prefs file AND the stale Keystore entry so the retry builds fresh keys.
             Log.w("CaptureSettingsManager", "EncryptedSharedPreferences corrupt, resetting: ${e.message}")
             File(context.filesDir.parent, "shared_prefs/secure_capture_settings.xml").delete()
+            try {
+                val ks = java.security.KeyStore.getInstance("AndroidKeyStore")
+                ks.load(null)
+                ks.deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+            } catch (_: Exception) {}
+            val freshMasterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
             EncryptedSharedPreferences.create(
                 context,
                 "secure_capture_settings",
-                masterKey,
+                freshMasterKey,
                 EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
                 EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
             )
