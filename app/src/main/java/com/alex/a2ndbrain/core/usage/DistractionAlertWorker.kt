@@ -16,21 +16,29 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.alex.a2ndbrain.MainActivity
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 class DistractionAlertWorker(
     private val context: Context,
     params: WorkerParameters
-) : CoroutineWorker(context, params) {
+) : CoroutineWorker(context, params), KoinComponent {
+
+    private val settingsRepository: SettingsRepository by inject()
 
     override suspend fun doWork(): Result {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         if (hour < 7 || hour >= 22) return Result.success()
 
         if (!isPermissionGranted()) return Result.success()
+
+        val distractionPackages = settingsRepository.getDistractionApps()
+        val thresholdMs = settingsRepository.getDistractionThresholdMinutes() * 60_000L
 
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             .format(Calendar.getInstance().time)
@@ -48,12 +56,12 @@ class DistractionAlertWorker(
 
         val usageByPackage = stats.associate { it.packageName to it.totalTimeVisible }
 
-        for (pkg in DISTRACTION_PACKAGES) {
+        for (pkg in distractionPackages) {
             val alertKey = "alerted_${pkg}_$today"
             if (prefs.getBoolean(alertKey, false)) continue
 
             val ms = usageByPackage[pkg] ?: continue
-            if (ms < THRESHOLD_MS) continue
+            if (ms < thresholdMs) continue
 
             val appName = resolveAppName(pkg) ?: continue
             val minutes = (ms / 60_000).toInt()
@@ -116,27 +124,6 @@ class DistractionAlertWorker(
     }
 
     companion object {
-        private val THRESHOLD_MS = TimeUnit.MINUTES.toMillis(45)
-
-        val DISTRACTION_PACKAGES = setOf(
-            // Social
-            "com.instagram.android",
-            "com.zhiliaoapp.musically",       // TikTok
-            "com.twitter.android",
-            "com.facebook.katana",
-            "com.snapchat.android",
-            "com.reddit.frontpage",
-            "com.linkedin.android",
-            "com.pinterest",
-            // Entertainment
-            "com.google.android.youtube",
-            "com.netflix.mediaclient",
-            "tv.twitch.android.app",
-            "com.disney.disneyplus",
-            "com.amazon.avod.thirdpartyclient",
-            "com.hulu.plus"
-        )
-
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<DistractionAlertWorker>(15, TimeUnit.MINUTES)
                 .setConstraints(Constraints.Builder().build())

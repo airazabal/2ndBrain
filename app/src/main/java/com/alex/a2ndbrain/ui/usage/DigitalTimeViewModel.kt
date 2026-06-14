@@ -1,6 +1,5 @@
 package com.alex.a2ndbrain.ui.usage
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -20,8 +19,7 @@ import java.util.Calendar
 import java.util.Locale
 
 class DigitalTimeViewModel(
-    private val digitalTimeManager: DigitalTimeManager,
-    private val applicationContext: Context
+    private val digitalTimeManager: DigitalTimeManager
 ) : ViewModel() {
 
     private val _selectedPeriod = MutableStateFlow(TimePeriod.TODAY)

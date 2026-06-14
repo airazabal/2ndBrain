@@ -1,7 +1,7 @@
 package com.alex.a2ndbrain
 
-import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity
-import com.alex.a2ndbrain.ui.trends.CorrelationEngine
+import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshot
+import com.alex.a2ndbrain.core.senseofday.CorrelationEngine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -160,7 +160,7 @@ class CorrelationEngineTest {
         focusProgress: Float = 0.5f,
         exerciseProgress: Float = 0.4f,
         moodProgress: Float = -1f
-    ) = SenseOfDaySnapshotEntity(
+    ) = SenseOfDaySnapshot(
         date = date,
         score = score,
         stepsProgress = stepsProgress,

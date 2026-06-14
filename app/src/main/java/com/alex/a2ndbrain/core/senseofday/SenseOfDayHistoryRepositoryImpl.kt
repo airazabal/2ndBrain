@@ -2,6 +2,7 @@ package com.alex.a2ndbrain.core.senseofday
 
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -12,7 +13,8 @@ class SenseOfDayHistoryRepositoryImpl(
 
     private val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
-    override fun getLast14DaysFlow(): Flow<List<SenseOfDaySnapshotEntity>> = dao.getRecentFlow(14)
+    override fun getLast14DaysFlow(): Flow<List<SenseOfDaySnapshot>> =
+        dao.getRecentFlow(14).map { list -> list.map { it.toDomain() } }
 
     override suspend fun saveSnapshot(
         score: Int,
@@ -83,9 +85,9 @@ class SenseOfDayHistoryRepositoryImpl(
         return result
     }
 
-    override suspend fun getRecentSnapshots(days: Int): List<SenseOfDaySnapshotEntity> {
+    override suspend fun getRecentSnapshots(days: Int): List<SenseOfDaySnapshot> {
         val cal = Calendar.getInstance()
         cal.add(Calendar.DAY_OF_YEAR, -days)
-        return dao.getSince(sdf.format(cal.time))
+        return dao.getSince(sdf.format(cal.time)).map { it.toDomain() }
     }
 }

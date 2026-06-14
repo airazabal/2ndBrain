@@ -1,7 +1,7 @@
 package com.alex.a2ndbrain.core.reflection
 
 import android.content.Context
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
@@ -10,9 +10,7 @@ import com.google.ai.edge.litertlm.SamplerConfig
 import android.util.Log
 import java.io.File
 
-class ModelPicker(private val context: Context) {
-    private val settingsManager = CaptureSettingsManager(context)
-
+class ModelPicker(private val context: Context, private val settingsManager: SettingsRepository) {
     enum class ModelType {
         GEMINI_CLOUD,
         LITERT_LOCAL, // Replaces GEMINI_NANO with the broader LiteRT-LM

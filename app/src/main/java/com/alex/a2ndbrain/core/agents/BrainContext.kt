@@ -1,11 +1,11 @@
 package com.alex.a2ndbrain.core.agents
 
 import com.alex.a2ndbrain.TimelineEvent
-import com.alex.a2ndbrain.core.exercise.ExerciseSessionEntity
+import com.alex.a2ndbrain.core.domain.Memory
+import com.alex.a2ndbrain.core.exercise.ExerciseSession
 import com.alex.a2ndbrain.core.health.HealthMetrics
 import com.alex.a2ndbrain.core.meditation.MeditationSession
 import com.alex.a2ndbrain.core.meditation.StreakResult
-import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.habits.HabitCompletionEntity
 import com.alex.a2ndbrain.core.habits.HabitEntity
@@ -17,7 +17,7 @@ import com.alex.a2ndbrain.core.mood.MoodLogEntity
  * Never holds DAOs, Managers, or Contexts — data only.
  */
 data class BrainContext(
-    val memories: List<MemoryEntity> = emptyList(),
+    val memories: List<Memory> = emptyList(),
     val health: HealthContext = HealthContext(),
     val usageStats: List<UsageStatEntity> = emptyList(),
     val meditation: MeditationContext = MeditationContext(),
@@ -45,7 +45,7 @@ data class MeditationContext(
 )
 
 data class ExerciseContext(
-    val recentSessions: List<ExerciseSessionEntity> = emptyList()
+    val recentSessions: List<ExerciseSession> = emptyList()
 )
 
 data class MoodContext(

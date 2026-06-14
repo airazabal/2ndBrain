@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import com.alex.a2ndbrain.core.domain.CopilotService
 
 /**
  * OrchestratorAgent — single entry point for all AI-powered features.
@@ -44,7 +45,7 @@ class OrchestratorAgent(
     private val moodRepository: MoodRepository,
     private val habitRepository: HabitRepository,
     private val senseOfDayRepository: SenseOfDayHistoryRepository
-) {
+) : CopilotService {
 
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
@@ -126,7 +127,7 @@ class OrchestratorAgent(
                     val snapshots = senseOfDayRepository.getRecentSnapshots(28)
                     if (snapshots.size < 7) return@async DriftContext()
                     val thisWeek = snapshots.takeLast(7)
-                    fun avg(fn: (com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity) -> Float, list: List<com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity>) =
+                    fun avg(fn: (com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshot) -> Float, list: List<com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshot>) =
                         if (list.isEmpty()) 0f else list.map(fn).average().toFloat()
                     DriftContext(
                         currentWeek = PillarAverages(
@@ -224,19 +225,19 @@ class OrchestratorAgent(
      * topics. The enriched prompt (question + relevant data) is injected only for
      * the current turn at inference time.
      */
-    suspend fun chat(
-        userMessage: String,
+    override suspend fun chat(
+        message: String,
         sessionMemory: SessionMemory,
-        dynamicContextFlags: DynamicContextFlags = DynamicContextFlags.fromMessage(userMessage)
+        flags: DynamicContextFlags
     ): Pair<String, String> {
         Log.d("OrchestratorAgent", "chat() — ${sessionMemory.messageCount()} prior turns")
         return try {
-            val ctx = buildContext(query = userMessage, flags = dynamicContextFlags)
-            val enrichedPrompt = buildCopilotPrompt(userMessage, ctx, dynamicContextFlags)
+            val ctx = buildContext(query = message, flags = flags)
+            val enrichedPrompt = buildCopilotPrompt(message, ctx, flags)
 
             // Store the raw question so prior turns don't pollute the context
             // window with stale data dumps from previous topics.
-            sessionMemory.add(AgentMessage("user", userMessage))
+            sessionMemory.add(AgentMessage("user", message))
 
             // For inference, swap the last history entry for the enriched version
             // so only the current turn carries its data context.
@@ -259,7 +260,7 @@ class OrchestratorAgent(
     }
 
     private fun buildCopilotPrompt(
-        userMessage: String,
+        message: String,
         ctx: BrainContext,
         flags: DynamicContextFlags
     ): String = buildString {
@@ -295,8 +296,7 @@ class OrchestratorAgent(
             append("EXERCISE (last 7 days):\n")
             append("- Sessions: ${sessions.size}, total time: ${totalMins / 60}h ${totalMins % 60}m\n")
             sessions.take(5).forEach { s ->
-                val type = runCatching { com.alex.a2ndbrain.core.exercise.ExerciseType.valueOf(s.type).displayName }
-                    .getOrDefault(s.type)
+                val type = s.type.displayName
                 val dur = if (s.durationMinutes >= 60) "${s.durationMinutes / 60}h ${s.durationMinutes % 60}m"
                           else "${s.durationMinutes}m"
                 val notes = if (s.notes.isNotBlank()) " — ${s.notes}" else ""
@@ -346,7 +346,7 @@ class OrchestratorAgent(
         }
 
         if (flags.includeMemories && ctx.memories.isNotEmpty()) {
-            val lower = userMessage.lowercase(java.util.Locale.getDefault())
+            val lower = message.lowercase(java.util.Locale.getDefault())
             val isFinanceQuery = DynamicContextFlags.FINANCE_KEYWORDS.any { lower.matchesKeyword(it) }
             val header = if (isFinanceQuery)
                 "CAPTURED MEMORIES (search ALL sources — notifications, SMS, email, clipboard — for bank/payment/shopping entries):\n"
@@ -364,7 +364,7 @@ class OrchestratorAgent(
             append("\n")
         }
 
-        append("USER'S QUESTION: $userMessage\n")
+        append("USER'S QUESTION: $message\n")
     }
 }
 

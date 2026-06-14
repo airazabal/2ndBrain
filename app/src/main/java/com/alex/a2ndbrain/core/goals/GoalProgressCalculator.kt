@@ -15,22 +15,22 @@ class GoalProgressCalculator(
 ) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
-    suspend fun compute(goals: List<GoalEntity>): List<GoalProgress> = coroutineScope {
-        goals.filter { it.isActive == 1 }.map { goal ->
+    suspend fun compute(goals: List<Goal>): List<GoalProgress> = coroutineScope {
+        goals.filter { it.isActive }.map { goal ->
             async {
                 try { computeSingle(goal) } catch (e: Exception) { null }
             }
         }.mapNotNull { it.await() }
     }
 
-    private suspend fun computeSingle(goal: GoalEntity): GoalProgress {
+    private suspend fun computeSingle(goal: Goal): GoalProgress {
         val cutoffDate = dateFormat.format(Date(System.currentTimeMillis() - goal.periodDays * 86_400_000L))
 
-        val (current, displayCurrent, displayTarget) = when (goal.goalType) {
+        val (current, displayCurrent, displayTarget) = when (goal.type) {
             GoalType.EXERCISE_SESSIONS -> {
                 val sessions = exerciseRepository.getRecentSessions(goal.periodDays)
                 val count = sessions.count {
-                    goal.linkedExerciseType == null || it.type.equals(goal.linkedExerciseType, ignoreCase = true)
+                    goal.linkedExerciseType == null || it.type.name.equals(goal.linkedExerciseType, ignoreCase = true)
                 }.toFloat()
                 val target = goal.targetValue.toInt()
                 Triple(count, "${count.toInt()} sessions", "$target sessions")

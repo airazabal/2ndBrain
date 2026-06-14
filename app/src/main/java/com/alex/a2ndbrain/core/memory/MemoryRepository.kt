@@ -11,6 +11,8 @@ interface MemoryRepository {
     fun getAllMemoriesFlow(): Flow<List<MemoryEntity>>
     fun getAllSummariesFlow(): Flow<List<DailySummaryEntity>>
     suspend fun getAllSummariesSync(): List<DailySummaryEntity>
+    suspend fun insertSummary(summary: DailySummaryEntity)
+    suspend fun getLatestSummary(): DailySummaryEntity?
     suspend fun getRecentMemoriesSync(): List<MemoryEntity>
     suspend fun searchMemoriesSync(query: String): List<MemoryEntity>
     suspend fun insertMemory(memory: MemoryEntity)
@@ -26,6 +28,7 @@ interface MemoryRepository {
     suspend fun findExisting(source: String, packageName: String?, title: String?, content: String): MemoryEntity?
     suspend fun getRecentMemories(startTime: Long): List<MemoryEntity>
     suspend fun getMemoriesByPackageSync(packageName: String): List<MemoryEntity>
+    suspend fun searchSummaries(query: String): List<DailySummaryEntity>
     suspend fun deleteMemoriesByPackage(packageName: String)
 
     // Long-term memory consolidation

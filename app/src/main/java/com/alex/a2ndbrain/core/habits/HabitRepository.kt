@@ -23,4 +23,5 @@ interface HabitRepository {
     suspend fun getById(id: String): HabitEntity?
     suspend fun findDeletedByName(name: String): HabitEntity?
     suspend fun restore(id: String, todoistTaskId: String)
+    suspend fun upsertCompletion(entity: HabitCompletionEntity)
 }

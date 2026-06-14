@@ -1,14 +1,12 @@
 package com.alex.a2ndbrain.ui.home
 
-import android.content.Context
-import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.ConflictSeverity
 import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.TimelineConflict
 import com.alex.a2ndbrain.TimelineEvent
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -23,7 +21,13 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import com.alex.a2ndbrain.core.calendar.CalendarRepository
+import com.alex.a2ndbrain.core.notes.ObsidianTimeParser
+import com.alex.a2ndbrain.core.notes.VaultNote
+import com.alex.a2ndbrain.core.notes.VaultRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
+
+data class P2pSyncState(val lastSyncMs: Long = 0L, val failureCount: Int = 0)
 
 data class SenseOfDayPillar(
     val label: String,
@@ -39,10 +43,11 @@ typealias EmailTriageResult = GrandCentralResult
 class HomeViewModel(
     private val memoryRepository: MemoryRepository,
     private val usageRepository: UsageRepository,
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val reflectionManager: ReflectionManager,
-    private val applicationContext: Context,
-    private val nearbySyncManager: NearbySyncManager
+    private val nearbySyncManager: NearbySyncManager,
+    private val calendarRepository: CalendarRepository,
+    private val vaultRepository: VaultRepository
 ) : ViewModel() {
 
     private val _lastRefreshedAt = MutableStateFlow(System.currentTimeMillis())
@@ -94,6 +99,15 @@ class HomeViewModel(
     val allMemoriesForHome: StateFlow<List<MemoryEntity>> = memoryRepository.getAllMemoriesFlow()
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
+    val p2pSyncState: StateFlow<P2pSyncState> = _minuteTicker
+        .map {
+            P2pSyncState(
+                lastSyncMs = settingsManager.getLastP2pSyncTime(),
+                failureCount = settingsManager.getConsecutiveP2pSyncFailures()
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), P2pSyncState())
+
     private val _monitoredAppsState = MutableStateFlow(settingsManager.getMonitoredApps())
     val monitoredAppsState = _monitoredAppsState.asStateFlow()
 
@@ -101,7 +115,7 @@ class HomeViewModel(
         _monitoredAppsState.value = settingsManager.getMonitoredApps()
     }
 
-    private val _vaultNotes = MutableStateFlow<List<DocumentFile>>(emptyList())
+    private val _vaultNotes = MutableStateFlow<List<VaultNote>>(emptyList())
     val vaultNotes = _vaultNotes.asStateFlow()
 
     private val _inlineCopilotResponses = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -143,7 +157,7 @@ class HomeViewModel(
                 mem.content.lowercase().contains("reminder")
             )
         }.mapNotNull { mem ->
-            val timeMatch = findTimePattern(mem.content) ?: findTimePattern(mem.title ?: "")
+            val timeMatch = ObsidianTimeParser.findTimePattern(mem.content) ?: ObsidianTimeParser.findTimePattern(mem.title ?: "")
             val (timeStr, minutes) = if (timeMatch != null) {
                 timeMatch
             } else {
@@ -181,37 +195,28 @@ class HomeViewModel(
         val isObsidianMonitored = monitoredApps.isEmpty() || monitoredApps.contains("md.obsidian")
         if (isObsidianMonitored) {
             notes.take(5).forEach { note ->
-                try {
-                    applicationContext.contentResolver.openInputStream(note.uri)?.use { inputStream ->
-                        val reader = java.io.BufferedReader(java.io.InputStreamReader(inputStream))
-                        var line = reader.readLine()
-                        while (line != null) {
-                            val timeMatch = findTimePattern(line)
-                            if (timeMatch != null) {
-                                val cleanTitle = cleanAgendaLine(line, timeMatch.first)
-                                val deterministicId = "obsidian_${note.name.hashCode()}_${timeMatch.first.hashCode()}_${cleanTitle.hashCode()}"
-                                timelineList.add(
-                                    TimelineEvent(
-                                        id = deterministicId,
-                                        time = timeMatch.first,
-                                        title = cleanTitle,
-                                        description = "Captured from Obsidian Note: ${note.name ?: "Unnamed"}\nLine Content: $line",
-                                        appName = "Obsidian",
-                                        sourcePackage = "obsidian",
-                                        minutesFromMidnight = timeMatch.second
-                                    )
-                                )
-                            }
-                            line = reader.readLine()
-                        }
+                vaultRepository.readNoteLines(note.uri).forEach { line ->
+                    val timeMatch = ObsidianTimeParser.findTimePattern(line)
+                    if (timeMatch != null) {
+                        val cleanTitle = ObsidianTimeParser.cleanAgendaLine(line, timeMatch.first)
+                        val deterministicId = "obsidian_${note.name.hashCode()}_${timeMatch.first.hashCode()}_${cleanTitle.hashCode()}"
+                        timelineList.add(
+                            TimelineEvent(
+                                id = deterministicId,
+                                time = timeMatch.first,
+                                title = cleanTitle,
+                                description = "Captured from Obsidian Note: ${note.name.ifEmpty { "Unnamed" }}\nLine Content: $line",
+                                appName = "Obsidian",
+                                sourcePackage = "obsidian",
+                                minutesFromMidnight = timeMatch.second
+                            )
+                        )
                     }
-                } catch (e: Exception) {
-                    android.util.Log.e("2ndBrain", "Failed to parse Obsidian note: ${note.name}", e)
                 }
             }
         }
 
-        timelineList.addAll(queryGoogleCalendarEvents(startOfToday, startOfToday + DAY_MS))
+        timelineList.addAll(calendarRepository.getEventsForRange(startOfToday, startOfToday + DAY_MS))
 
         val cleanRegex = Regex("[^a-z0-9 ]")
         val normalizedTitles = timelineList.map { it.title.trim().lowercase(Locale.getDefault()).replace(cleanRegex, "") }
@@ -248,71 +253,18 @@ class HomeViewModel(
                 set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
             }.timeInMillis
             val events = mutableListOf<TimelineEvent>()
-            queryGoogleCalendarEvents(startOfTomorrow, startOfTomorrow + DAY_MS).forEach { events.add(it) }
+            calendarRepository.getEventsForRange(startOfTomorrow, startOfTomorrow + DAY_MS).forEach { events.add(it) }
             events.sortedBy { it.minutesFromMidnight }
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
-    private fun queryGoogleCalendarEvents(startMs: Long, endMs: Long): List<TimelineEvent> {
-        return try {
-            val uri = android.net.Uri.parse("content://com.android.calendar/instances/when/$startMs/$endMs")
-            val projection = arrayOf("title", "begin", "allDay", "eventId")
-            val cursor = applicationContext.contentResolver.query(uri, projection, null, null, "begin ASC")
-                ?: return emptyList()
-            val results = mutableListOf<TimelineEvent>()
-            cursor.use { c ->
-                val titleIdx = c.getColumnIndex("title")
-                val beginIdx = c.getColumnIndex("begin")
-                val allDayIdx = c.getColumnIndex("allDay")
-                val eventIdIdx = c.getColumnIndex("eventId")
-                while (c.moveToNext()) {
-                    val title = c.getString(titleIdx) ?: continue
-                    val begin = c.getLong(beginIdx)
-                    val allDay = c.getInt(allDayIdx) == 1
-                    if (allDay) continue
-                    val eventId = if (eventIdIdx >= 0) c.getLong(eventIdIdx).toString() else begin.toString()
-                    val cal = Calendar.getInstance().apply { timeInMillis = begin }
-                    val hour = cal.get(Calendar.HOUR_OF_DAY)
-                    val min = cal.get(Calendar.MINUTE)
-                    val totalMinutes = hour * 60 + min
-                    val displayHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
-                    val ampm = if (hour >= 12) "PM" else "AM"
-                    val timeStr = "$displayHour:${min.toString().padStart(2, '0')} $ampm"
-                    results.add(
-                        TimelineEvent(
-                            id = "cal_${eventId}_$begin",
-                            time = timeStr,
-                            title = title,
-                            description = title,
-                            appName = "Calendar",
-                            sourcePackage = "calendar",
-                            minutesFromMidnight = totalMinutes
-                        )
-                    )
-                }
-            }
-            results
-        } catch (e: Exception) {
-            android.util.Log.e("2ndBrain", "Calendar provider query failed", e)
-            emptyList()
-        }
-    }
 
     // ── Conflict Detection ────────────────────────────────────────────────────
-    private val _conflictPrefs = applicationContext.getSharedPreferences("dismissed_conflicts", Context.MODE_PRIVATE)
-    private fun persistedDismissedIds(): Set<String> {
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        return _conflictPrefs.getStringSet("dismissed_$today", emptySet()) ?: emptySet()
-    }
-    private fun persistDismiss(id: String) {
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-        val key = "dismissed_$today"
-        val current = _conflictPrefs.getStringSet(key, emptySet())?.toMutableSet() ?: mutableSetOf()
-        current.add(id)
-        _conflictPrefs.edit().putStringSet(key, current).apply()
-    }
-
-    private val _dismissedConflictIds = MutableStateFlow<Set<String>>(persistedDismissedIds())
+    private val _dismissedConflictIds = MutableStateFlow<Set<String>>(
+        settingsManager.getDismissedConflictIds(
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        )
+    )
     val dismissedConflictIds = _dismissedConflictIds.asStateFlow()
 
     private val _localComputedConflicts: StateFlow<List<TimelineConflict>> = combine(
@@ -393,7 +345,9 @@ class HomeViewModel(
 
     fun dismissConflict(id: String) {
         _dismissedConflictIds.value = _dismissedConflictIds.value + id
-        persistDismiss(id)
+        settingsManager.addDismissedConflictId(
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()), id
+        )
         nearbySyncManager.addDismissedConflict(id)
     }
 
@@ -410,17 +364,9 @@ class HomeViewModel(
     }
 
     fun loadVaultNotes() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val vaultUri = settingsManager.getObsidianVaultUri()
-            if (vaultUri.isNotBlank()) {
-                try {
-                    val root = DocumentFile.fromTreeUri(applicationContext, android.net.Uri.parse(vaultUri))
-                    val notes = root?.listFiles()
-                        ?.filter { it.isFile && it.name?.endsWith(".md") == true }
-                        ?.sortedByDescending { it.lastModified() } ?: emptyList()
-                    _vaultNotes.value = notes
-                } catch (e: Exception) { /* invalid URI or permissions */ }
-            }
+            _vaultNotes.value = vaultRepository.listMarkdownNotes(vaultUri)
         }
     }
 
@@ -452,63 +398,7 @@ class HomeViewModel(
         }
     }
 
-    private fun findTimePattern(line: String): Pair<String, Int>? {
-        val regex1 = Regex("(?:\\b|@|at\\s+)(\\d{1,2}):(\\d{2})\\s*(AM|PM|am|pm)?\\b")
-        val match1 = regex1.find(line)
-        if (match1 != null) {
-            val hourStr = match1.groupValues[1]; val minStr = match1.groupValues[2]; val ampm = match1.groupValues[3]
-            var hour = hourStr.toIntOrNull() ?: return null
-            val min = minStr.toIntOrNull() ?: return null
-            var parsedTimeStr = "$hour:${min.toString().padStart(2, '0')}"
-            if (ampm.isNotBlank()) {
-                val suffix = ampm.uppercase(); parsedTimeStr += " $suffix"
-                if (suffix == "PM" && hour < 12) hour += 12
-                if (suffix == "AM" && hour == 12) hour = 0
-            } else { if (hour >= 24) return null }
-            val totalMinutes = hour * 60 + min
-            val displayHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
-            val displayAmpm = if (hour >= 12) "PM" else "AM"
-            return Pair("$displayHour:${min.toString().padStart(2, '0')} $displayAmpm", totalMinutes)
-        }
-        val regex2 = Regex("(?:\\b|@|at\\s+)(\\d{1,2})\\s*(AM|PM|am|pm)\\b")
-        val match2 = regex2.find(line)
-        if (match2 != null) {
-            val hourStr = match2.groupValues[1]; val ampm = match2.groupValues[2]
-            var hour = hourStr.toIntOrNull() ?: return null
-            if (hour > 12) return null
-            val suffix = ampm.uppercase()
-            val totalMinutes = when { suffix == "PM" && hour < 12 -> (hour + 12) * 60; suffix == "AM" && hour == 12 -> 0; else -> hour * 60 }
-            return Pair("$hour:00 $suffix", totalMinutes)
-        }
-        val regex3 = Regex("(?:@|at\\s+)([01]\\d|2[0-3])([0-5]\\d)\\b")
-        val match3 = regex3.find(line)
-        if (match3 != null) {
-            val hour = match3.groupValues[1].toIntOrNull() ?: return null
-            val min = match3.groupValues[2].toIntOrNull() ?: return null
-            val totalMinutes = hour * 60 + min
-            val displayHour = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
-            val displayAmpm = if (hour >= 12) "PM" else "AM"
-            return Pair("$displayHour:${min.toString().padStart(2, '0')} $displayAmpm", totalMinutes)
-        }
-        return null
-    }
 
-    private fun cleanAgendaLine(line: String, timeStr: String): String {
-        var cleaned = line
-            .replace(Regex("^\\s*[-*+]\\s*(\\[[ xX]])?\\s*"), "")
-            .replace(Regex("(?:@|at\\s+)?\\b\\d{1,2}:\\d{2}\\s*(?:AM|PM|am|pm)?\\b"), "")
-            .replace(Regex("(?:@|at\\s+)?\\b\\d{1,2}\\s*(?:AM|PM|am|pm)\\b"), "")
-            .replace(Regex("(?:@|at\\s+)(?:[01]\\d|2[0-3])[0-5]\\d\\b"), "")
-            .replace(Regex("\\b(?:at|@)\\b"), "")
-            .trim()
-        if (cleaned.isBlank()) {
-            val rawSnippet = line.replace(Regex("^\\s*[-*+]\\s*(\\[[ xX]])?\\s*"), "").trim()
-            cleaned = if (rawSnippet.isNotEmpty() && rawSnippet != timeStr)
-                rawSnippet.take(25) + if (rawSnippet.length > 25) "..." else ""
-            else "Scheduled Time Block"
-        }
-        return cleaned
-    }
 
     companion object {
         private const val DAY_MS = 24 * 60 * 60 * 1000L

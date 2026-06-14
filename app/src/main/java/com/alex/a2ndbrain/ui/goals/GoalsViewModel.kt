@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.goals.*
+import com.alex.a2ndbrain.core.goals.Goal
 import com.alex.a2ndbrain.core.habits.HabitEntity
 import com.alex.a2ndbrain.core.habits.HabitRepository
 import kotlinx.coroutines.Dispatchers
@@ -29,7 +30,7 @@ data class GoalsUiState(
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class GoalsViewModel(
-    private val goalDao: GoalDao,
+    private val goalRepository: GoalRepository,
     private val calculator: GoalProgressCalculator,
     private val habitRepository: HabitRepository,
     private val exerciseRepository: ExerciseRepository
@@ -49,7 +50,7 @@ class GoalsViewModel(
         // Recompute whenever goals, exercise sessions, or habit completions change.
         viewModelScope.launch {
             combine(
-                goalDao.getActiveGoalsFlow(),
+                goalRepository.getActiveGoalsFlow(),
                 exerciseRepository.getAllSessionsFlow(),
                 habitRepository.getCompletionsForDateFlow(today)
             ) { goals, _, _ -> goals }
@@ -59,11 +60,11 @@ class GoalsViewModel(
 
     fun refresh() {
         viewModelScope.launch(Dispatchers.IO) {
-            recompute(goalDao.getActiveGoals())
+            recompute(goalRepository.getActiveGoals())
         }
     }
 
-    private fun recompute(goals: List<GoalEntity>) {
+    private fun recompute(goals: List<Goal>) {
         viewModelScope.launch(Dispatchers.IO) {
             _state.update { it.copy(isLoading = true) }
             val progresses = calculator.compute(goals)
@@ -76,9 +77,9 @@ class GoalsViewModel(
             sheetType = GoalType.EXERCISE_SESSIONS, sheetTarget = "", sheetPeriod = 7, sheetLinkedHabitId = null)
     }
 
-    fun showEditSheet(goal: GoalEntity) = _state.update {
+    fun showEditSheet(goal: Goal) = _state.update {
         it.copy(showSheet = true, editingGoalId = goal.id,
-            sheetTitle = goal.title, sheetType = goal.goalType,
+            sheetTitle = goal.title, sheetType = goal.type,
             sheetTarget = if (goal.targetValue % 1 == 0f) goal.targetValue.toInt().toString() else goal.targetValue.toString(),
             sheetPeriod = goal.periodDays, sheetLinkedHabitId = goal.linkedHabitId)
     }
@@ -97,16 +98,18 @@ class GoalsViewModel(
         if (s.sheetTitle.isBlank()) return
         _state.update { it.copy(isSaving = true) }
         viewModelScope.launch(Dispatchers.IO) {
-            val existing = s.editingGoalId?.let { goalDao.getById(it) }
-            goalDao.upsert(
-                GoalEntity(
+            val existing = s.editingGoalId?.let { goalRepository.getById(it) }
+            goalRepository.upsert(
+                Goal(
                     id = s.editingGoalId ?: java.util.UUID.randomUUID().toString(),
                     title = s.sheetTitle.trim(),
-                    type = s.sheetType.name,
+                    type = s.sheetType,
                     targetValue = target,
                     periodDays = s.sheetPeriod,
+                    isActive = true,
+                    createdAt = existing?.createdAt ?: System.currentTimeMillis(),
                     linkedHabitId = s.sheetLinkedHabitId,
-                    createdAt = existing?.createdAt ?: System.currentTimeMillis()
+                    linkedExerciseType = null
                 )
             )
             _state.update { it.copy(isSaving = false, showSheet = false) }
@@ -115,7 +118,7 @@ class GoalsViewModel(
 
     fun deleteGoal(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            goalDao.delete(id)
+            goalRepository.delete(id)
         }
     }
 }

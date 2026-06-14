@@ -40,7 +40,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.documentfile.provider.DocumentFile
+import com.alex.a2ndbrain.core.notes.VaultNote
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -96,7 +96,7 @@ import androidx.lifecycle.LifecycleEventObserver
 fun HomeScreen(
     memories: List<MemoryEntity>,
     latestReflection: DailySummaryEntity?,
-    notes: List<DocumentFile>,
+    notes: List<VaultNote>,
     consolidatedUsage: List<ConsolidatedUsage>,
     onNavigateToTab: (AppTab) -> Unit,
     onNavigateToFeedWithFilter: (String) -> Unit = {},
@@ -142,6 +142,8 @@ fun HomeScreen(
     onPillarClick: (String) -> Unit = {},
     themePreference: String = "SYSTEM",
     onThemeToggle: () -> Unit = {},
+    lastP2pSyncTime: Long = 0L,
+    consecutiveP2pSyncFailures: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -215,6 +217,13 @@ fun HomeScreen(
                 senseOfDayContext     = senseOfDayContext,
                 senseOfDayPillars     = senseOfDayPillars,
             )
+            if (lastP2pSyncTime > 0L) {
+                P2pSyncStatusChip(
+                    lastSyncTime = lastP2pSyncTime,
+                    failureCount = consecutiveP2pSyncFailures,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
         }
 
         // Grand Central
@@ -1313,6 +1322,40 @@ fun GlassmorphicConflictCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun P2pSyncStatusChip(
+    lastSyncTime: Long,
+    failureCount: Int,
+    modifier: Modifier = Modifier
+) {
+    val now = System.currentTimeMillis()
+    val elapsedMs = now - lastSyncTime
+    val isWarning = failureCount >= 3 || elapsedMs > 2 * 60 * 60 * 1000L
+
+    val label = if (isWarning) {
+        "Sync unavailable"
+    } else {
+        val mins = (elapsedMs / 60_000).toInt()
+        when {
+            mins < 1 -> "Synced just now"
+            mins < 60 -> "Synced ${mins}m ago"
+            else -> "Synced ${mins / 60}h ago"
+        }
+    }
+
+    val tint = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
+    val icon = if (isWarning) Icons.Default.Warning else Icons.Default.Hub
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(12.dp), tint = tint)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tint)
     }
 }
 

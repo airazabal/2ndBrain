@@ -39,6 +39,10 @@ class MemoryRepositoryImpl(
     override fun getAllSummariesFlow(): Flow<List<DailySummaryEntity>> = memoryDao.getAllSummaries()
     override suspend fun getAllSummariesSync(): List<DailySummaryEntity> = memoryDao.getAllSummariesSync()
 
+    override suspend fun insertSummary(summary: DailySummaryEntity) = memoryDao.insertSummary(summary)
+
+    override suspend fun getLatestSummary(): DailySummaryEntity? = memoryDao.getLatestSummary()
+
     override suspend fun getRecentMemoriesSync(): List<MemoryEntity> = memoryDao.getRecentMemoriesSync()
     override suspend fun searchMemoriesSync(query: String): List<MemoryEntity> = memoryDao.searchMemoriesSync(query)
 
@@ -73,6 +77,9 @@ class MemoryRepositoryImpl(
 
     override suspend fun getMemoriesByPackageSync(packageName: String): List<MemoryEntity> =
         memoryDao.getMemoriesByPackageSync(packageName)
+
+    override suspend fun searchSummaries(query: String): List<DailySummaryEntity> =
+        memoryDao.searchSummaries(query)
 
     override suspend fun deleteMemoriesByPackage(packageName: String) {
         memoryDao.deleteMemoriesByPackage(packageName)

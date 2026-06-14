@@ -965,6 +965,8 @@ fun VoiceRecordingDialog(
     var isRecording by remember { mutableStateOf(true) }
     var secondsElapsed by remember { mutableStateOf(0) }
     var transcribedText by remember { mutableStateOf("") }
+    var isEditingTranscript by remember { mutableStateOf(false) }
+    var editableText by remember { mutableStateOf("") }
 
     val speechRecognizer = remember { android.speech.SpeechRecognizer.createSpeechRecognizer(context) }
     val recognizerIntent = remember {
@@ -1027,67 +1029,96 @@ fun VoiceRecordingDialog(
             onDismiss()
         },
         confirmButton = {
-            Button(
-                onClick = {
-                    isRecording = false
-                    try { speechRecognizer.stopListening() } catch (_: Exception) {}
-                    val finalTranscript = transcribedText.ifBlank {
-                        val sdf = SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault())
-                        "Voice Note captured on ${sdf.format(Date())}"
-                    }
-                    onFinished(finalTranscript, "")
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Text("Stop & Save", color = Color.White)
+            if (isEditingTranscript) {
+                Button(
+                    onClick = { onFinished(editableText, "") },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Save to Vault", color = Color.White)
+                }
+            } else {
+                Button(
+                    onClick = {
+                        isRecording = false
+                        try { speechRecognizer.stopListening() } catch (_: Exception) {}
+                        val finalTranscript = transcribedText.ifBlank {
+                            val sdf = SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault())
+                            "Voice Note captured on ${sdf.format(Date())}"
+                        }
+                        editableText = finalTranscript
+                        isEditingTranscript = true
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Stop & Review", color = Color.White)
+                }
             }
         },
+        dismissButton = if (isEditingTranscript) {
+            { OutlinedButton(onClick = { isRecording = false; onDismiss() }) { Text("Discard") } }
+        } else null,
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(12.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(PastelRed)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
+            if (isEditingTranscript) {
                 Text(
-                    text = "Listening to your thoughts...",
+                    text = "Review your note",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(PastelRed)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Listening to your thoughts...",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         },
         text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val mins = secondsElapsed / 60
-                val secs = secondsElapsed % 60
-                Text(
-                    text = String.format(Locale.getDefault(), "%02d:%02d", mins, secs),
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface
+            if (isEditingTranscript) {
+                OutlinedTextField(
+                    value = editableText,
+                    onValueChange = { editableText = it },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp),
+                    label = { Text("Edit transcript") },
+                    shape = RoundedCornerShape(12.dp)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                // Show dynamic transcript box as they speak
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth().height(100.dp)
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(modifier = Modifier.padding(12.dp)) {
-                        Text(
-                            text = transcribedText.ifBlank { "Start speaking to record a transcript..." },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (transcribedText.isBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    val mins = secondsElapsed / 60
+                    val secs = secondsElapsed % 60
+                    Text(
+                        text = String.format(Locale.getDefault(), "%02d:%02d", mins, secs),
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(100.dp)
+                    ) {
+                        Box(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = transcribedText.ifBlank { "Start speaking to record a transcript..." },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (transcribedText.isBlank()) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurface,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }

@@ -35,7 +35,7 @@ import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
@@ -46,6 +46,7 @@ import com.alex.a2ndbrain.ui.search.SearchScreen
 import com.alex.a2ndbrain.ui.memories.MemoryScreen
 import com.alex.a2ndbrain.ui.memories.MemoryViewModel
 import com.alex.a2ndbrain.ui.notes.NotesScreen
+import com.alex.a2ndbrain.ui.settings.AppCaptureSettingsScreen
 import com.alex.a2ndbrain.ui.settings.SettingsViewModel
 import com.alex.a2ndbrain.ui.theme.BrainTheme
 import com.alex.a2ndbrain.ui.wellness.WellnessScreen
@@ -65,7 +66,7 @@ import org.koin.androidx.viewmodel.ext.android.viewModel as koinActivityViewMode
 
 class MainActivity : ComponentActivity() {
     private val clipboardCaptureManager: ClipboardCaptureManager by inject()
-    private val settingsManager: CaptureSettingsManager by inject()
+    private val settingsManager: SettingsRepository by inject()
     private val reflectionPicker: ReflectionManager by inject()
     private val digitalTimeManager: DigitalTimeManager by inject()
     private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager by inject()
@@ -196,19 +197,6 @@ class MainActivity : ComponentActivity() {
                             ) ?: ""
                             flat.contains(cn.flattenToString())
                         }
-                        val isUsageAccessGranted = remember(setupCompleted) {
-                            try {
-                                val appOps =
-                                    context.getSystemService(APP_OPS_SERVICE) as android.app.AppOpsManager
-                                appOps.checkOpNoThrow(
-                                    android.app.AppOpsManager.OPSTR_GET_USAGE_STATS,
-                                    android.os.Process.myUid(), context.packageName
-                                ) == android.app.AppOpsManager.MODE_ALLOWED
-                            } catch (e: Exception) {
-                                false
-                            }
-                        }
-
                         PermissionWizardScreen(
                             permissions = listOf(
                                 WizardPermission(
@@ -220,49 +208,6 @@ class MainActivity : ComponentActivity() {
                                     isGranted = isNotificationListenerGranted,
                                     actionLabel = "Enable",
                                     onAction = { startActivity(android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }
-                                ),
-                                WizardPermission(
-                                    icon = Icons.Default.Schedule,
-                                    iconTint = androidx.compose.ui.graphics.Color(0xFF26A69A),
-                                    title = "Usage Access",
-                                    description = "Tracks your screen time per app so the AI can spot digital patterns.",
-                                    isRequired = true,
-                                    isGranted = isUsageAccessGranted,
-                                    actionLabel = "Enable",
-                                    onAction = { startActivity(android.content.Intent(android.provider.Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
-                                ),
-                                WizardPermission(
-                                    icon = Icons.Default.Favorite,
-                                    iconTint = androidx.compose.ui.graphics.Color(0xFFEF5350),
-                                    title = "Health Connect",
-                                    description = "Syncs steps, sleep, and heart rate from your smartwatch.",
-                                    isRequired = false,
-                                    isGranted = false,
-                                    actionLabel = "Connect",
-                                    onAction = {
-                                        try {
-                                            startActivity(android.content.Intent("androidx.health.ACTION_HEALTH_CONNECT_SETTINGS"))
-                                        } catch (e: Exception) {
-                                            startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS))
-                                        }
-                                    }
-                                ),
-                                WizardPermission(
-                                    icon = Icons.Default.LocationOn,
-                                    iconTint = androidx.compose.ui.graphics.Color(0xFFFF7043),
-                                    title = "Location & Bluetooth",
-                                    description = "Required for P2P device sync between your phone and tablet.",
-                                    isRequired = false,
-                                    isGranted = hasSyncPermissions(),
-                                    actionLabel = "Enable",
-                                    onAction = {
-                                        startActivity(
-                                            android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-                                                .apply {
-                                                    data =
-                                                        android.net.Uri.parse("package:${packageName}")
-                                                })
-                                    }
                                 )
                             ),
                             onContinue = {
@@ -587,6 +532,7 @@ class MainActivity : ComponentActivity() {
                                                     val tomorrowTimelineEvents by homeViewModel.tomorrowTimelineEvents.collectAsStateWithLifecycle()
                                                     val timelineConflicts by homeViewModel.timelineConflicts.collectAsStateWithLifecycle()
                                                     val inlineCopilotResponses by homeViewModel.inlineCopilotResponses.collectAsStateWithLifecycle()
+                                                    val p2pSyncState by homeViewModel.p2pSyncState.collectAsStateWithLifecycle()
                                                     val inlineCopilotLoading by homeViewModel.inlineCopilotLoading.collectAsStateWithLifecycle()
 
                                                     val allMemoriesForHome by homeViewModel.allMemoriesForHome.collectAsStateWithLifecycle()
@@ -716,7 +662,9 @@ class MainActivity : ComponentActivity() {
                                                         onThemeToggle = {
                                                             val next = if (themePreference == "DARK") "LIGHT" else "DARK"
                                                             settingsViewModel.saveThemePreference(next)
-                                                        }
+                                                        },
+                                                        lastP2pSyncTime = p2pSyncState.lastSyncMs,
+                                                        consecutiveP2pSyncFailures = p2pSyncState.failureCount
                                                     )
                                                 }
 
@@ -765,9 +713,32 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 }
 
-                                                AppTab.WELLNESS -> WellnessScreen(
-                                                    initialTab = wellnessInitialTab
-                                                )
+                                                AppTab.WELLNESS -> {
+                                                    val healthGrantedForWellness by wellnessViewModel.healthPermissionsGranted.collectAsStateWithLifecycle()
+                                                    if (!healthGrantedForWellness) {
+                                                        PermissionWizardScreen(
+                                                            permissions = listOf(
+                                                                WizardPermission(
+                                                                    icon = Icons.Default.Favorite,
+                                                                    iconTint = androidx.compose.ui.graphics.Color(0xFFEF5350),
+                                                                    title = "Health Connect",
+                                                                    description = "Syncs steps, sleep, and heart rate for your Wellness dashboard.",
+                                                                    isRequired = true,
+                                                                    isGranted = false,
+                                                                    actionLabel = "Connect",
+                                                                    onAction = {
+                                                                        requestHealthPermissionLauncher.launch(
+                                                                            wellnessViewModel.healthConnectManager.permissions
+                                                                        )
+                                                                    }
+                                                                )
+                                                            ),
+                                                            onContinue = {}
+                                                        )
+                                                    } else {
+                                                        WellnessScreen(initialTab = wellnessInitialTab)
+                                                    }
+                                                }
 
                                                 AppTab.NOTES -> NotesScreen(
                                                     settingsManager = settingsManager,

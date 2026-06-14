@@ -5,7 +5,7 @@ import android.content.Context
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.*
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.UsageRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
 class DigitalTimeManager(
     private val context: Context,
     private val usageRepository: UsageRepository,
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val memoryRepository: MemoryRepository
 ) {
     private val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager

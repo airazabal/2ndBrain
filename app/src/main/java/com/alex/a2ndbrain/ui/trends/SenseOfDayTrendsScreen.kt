@@ -28,7 +28,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshotEntity
+import com.alex.a2ndbrain.core.senseofday.CorrelationData
+import com.alex.a2ndbrain.core.senseofday.SenseOfDaySnapshot
 import java.text.SimpleDateFormat
 import java.util.*
 import kotlin.math.abs
@@ -142,7 +143,7 @@ private fun ScoreStatCard(title: String, score: Int, icon: ImageVector, modifier
 // ─── 14-day daily bar chart ──────────────────────────────────────────────────
 
 @Composable
-private fun DailyBarsCard(snapshots: List<SenseOfDaySnapshotEntity>) {
+private fun DailyBarsCard(snapshots: List<SenseOfDaySnapshot>) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,

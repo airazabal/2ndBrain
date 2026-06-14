@@ -2,7 +2,7 @@ package com.alex.a2ndbrain.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.health.HealthMetrics
@@ -14,6 +14,7 @@ import com.alex.a2ndbrain.core.meditation.StreakResult
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
 import com.alex.a2ndbrain.core.mood.MoodLogEntity
 import com.alex.a2ndbrain.core.mood.MoodRepository
+import com.alex.a2ndbrain.core.senseofday.ComputeSenseOfDayUseCase
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
 import com.alex.a2ndbrain.core.sync.NearbySyncManager
 import com.alex.a2ndbrain.core.usage.UsageRepository
@@ -43,11 +44,11 @@ class WellnessViewModel(
     private val exerciseRepository: ExerciseRepository,
     private val usageRepository: UsageRepository,
     private val senseOfDayHistoryRepository: SenseOfDayHistoryRepository,
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val meditationRepository: MeditationRepository,
     private val nearbySyncManager: NearbySyncManager,
     private val moodRepository: MoodRepository,
-    private val appContext: android.content.Context
+    private val computeSenseOfDay: ComputeSenseOfDayUseCase
 ) : ViewModel() {
 
     val healthConnectManager: HealthConnectManager get() = healthRepository.healthConnectManager
@@ -91,7 +92,7 @@ class WellnessViewModel(
                     cal.add(Calendar.DAY_OF_YEAR, -6)
                     SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
                 }
-                sessions.count { it.isDeleted == 0 && it.date >= cutoff }
+                sessions.count { !it.isDeleted && it.date >= cutoff }
             }
             .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
@@ -103,7 +104,7 @@ class WellnessViewModel(
                     cal.add(Calendar.DAY_OF_YEAR, -6)
                     SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(cal.time)
                 }
-                sessions.filter { it.isDeleted == 0 && it.date >= cutoff }.sumOf { it.durationMinutes }
+                sessions.filter { !it.isDeleted && it.date >= cutoff }.sumOf { it.durationMinutes }
             }
             .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
@@ -111,7 +112,7 @@ class WellnessViewModel(
         exerciseRepository.getAllSessionsFlow()
             .combine(_minuteTicker) { sessions, _ ->
                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                sessions.filter { it.isDeleted == 0 && it.date == today }.sumOf { it.durationMinutes }
+                sessions.filter { !it.isDeleted && it.date == today }.sumOf { it.durationMinutes }
             }
             .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
@@ -119,7 +120,7 @@ class WellnessViewModel(
         exerciseRepository.getAllSessionsFlow()
             .combine(_minuteTicker) { sessions, _ ->
                 val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                sessions.count { it.isDeleted == 0 && it.date == today }
+                sessions.count { !it.isDeleted && it.date == today }
             }
             .stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
@@ -216,25 +217,25 @@ class WellnessViewModel(
             val steps = _healthMetricsToday.value.steps
             val sleepMinutes = _healthMetricsToday.value.sleepMinutes
             val todayExerciseMins = exerciseTodayMinutes.value
-
-            val stepsProgress = (steps.toFloat() / stepsGoal).coerceIn(0f, 1f)
-            val sleepProgress = (sleepMinutes / 60f / sleepGoalHours).coerceIn(0f, 1f)
-            val exerciseProgress = (todayExerciseMins.toFloat() / exerciseGoalMinutes).coerceIn(0f, 1f)
-
-            val totalFocusMs = usageStats.value.sumOf { it.totalTimeVisibleMs }
-            val focusMinutes = (totalFocusMs / 60_000L).toInt()
-            val focusProgress = (focusMinutes.toFloat() / digitalFocusBaseline).coerceIn(0f, 1f)
-
+            val focusMinutes = (usageStats.value.sumOf { it.totalTimeVisibleMs } / 60_000L).toInt()
             val todayMood = todayMoodFlow.value
-            val moodProgress = todayMood?.let { ((it.mood + it.energy) / 2f - 1f) / 4f } ?: -1f
-            val moodLogged = moodProgress >= 0f
 
-            val denominator = if (moodLogged) 5f else 4f
-            val moodContribution = if (moodLogged) moodProgress else 0f
-            val score = ((stepsProgress + sleepProgress + exerciseProgress + focusProgress + moodContribution) / denominator * 100f)
-                .toInt().coerceIn(0, 100)
-            _senseOfDayScore.value = score
+            val result = computeSenseOfDay(
+                steps = steps,
+                sleepMinutes = sleepMinutes,
+                exerciseMinutes = todayExerciseMins,
+                focusMinutes = focusMinutes,
+                todayMood = todayMood,
+                stepsGoal = stepsGoal,
+                sleepGoalHours = sleepGoalHours,
+                exerciseGoalMinutes = exerciseGoalMinutes,
+                digitalFocusBaselineMinutes = digitalFocusBaseline
+            )
 
+            _senseOfDayScore.value = result.score
+            _senseOfDayContext.value = result.contextText
+
+            // Build display strings (presentation formatting stays in ViewModel)
             val stepsDisplay = if (steps > 0) "%,d".format(steps) else "0"
             val sleepH = sleepMinutes / 60; val sleepM = sleepMinutes % 60
             val sleepDisplay = if (sleepMinutes > 0) "${sleepH}h ${sleepM}m" else "--"
@@ -243,58 +244,28 @@ class WellnessViewModel(
             val focusDisplay = if (focusMinutes >= 60) "${focusH}h ${focusM}m" else "${focusMinutes}m"
             val sleepGoalDisplay = if (sleepGoalHours == sleepGoalHours.toInt().toFloat())
                 "${sleepGoalHours.toInt()}h" else "${sleepGoalHours}h"
-
             val moodEmojis = listOf("😞", "😕", "😐", "🙂", "😄")
             val moodValue = todayMood?.let { moodEmojis.getOrElse(it.mood - 1) { "😐" } } ?: "--"
             val moodGoalText = if (todayMood != null) "⚡${todayMood.energy}/5" else "check in"
-            val moodDisplayProgress = if (moodLogged) moodProgress else 0f
 
             _senseOfDayPillars.value = listOf(
-                SenseOfDayPillar("Steps", stepsDisplay, "/ %,d".format(stepsGoal), stepsProgress),
-                SenseOfDayPillar("Sleep", sleepDisplay, "/ $sleepGoalDisplay", sleepProgress),
-                SenseOfDayPillar("Exercise", exerciseDisplay, "/ ${exerciseGoalMinutes}m", exerciseProgress),
-                SenseOfDayPillar("Focus", focusDisplay, "/ ${digitalFocusBaseline / 60}h", focusProgress),
-                SenseOfDayPillar("Mood", moodValue, moodGoalText, moodDisplayProgress)
+                SenseOfDayPillar("Steps", stepsDisplay, "/ %,d".format(stepsGoal), result.stepsProgress),
+                SenseOfDayPillar("Sleep", sleepDisplay, "/ $sleepGoalDisplay", result.sleepProgress),
+                SenseOfDayPillar("Exercise", exerciseDisplay, "/ ${exerciseGoalMinutes}m", result.exerciseProgress),
+                SenseOfDayPillar("Focus", focusDisplay, "/ ${digitalFocusBaseline / 60}h", result.focusProgress),
+                SenseOfDayPillar("Mood", moodValue, moodGoalText, result.moodProgress)
             )
-
-            val contextText = when {
-                score >= 85 -> "Outstanding balance across all pillars today."
-                score >= 70 -> "Great progress. Keep the pillars balanced."
-                !moodLogged && score >= 50 -> "Log your mood to complete today's score."
-                stepsProgress < 0.3f && exerciseProgress < 0.3f -> "Movement is low. A short walk could flip your score."
-                sleepProgress < 0.5f -> "Poor sleep is dragging the score. Prioritize rest tonight."
-                focusProgress < 0.3f -> "Focus time is low. Try a 25-min deep-work block."
-                moodLogged && moodProgress < 0.4f -> "Mood is low — consider a break or short walk."
-                score < 20 -> "Calibrating... log some activity to update your Sense of Day."
-                else -> "Steady progress. Keep an eye on your lowest pillar."
-            }
-            _senseOfDayContext.value = contextText
 
             withContext(Dispatchers.IO) {
                 senseOfDayHistoryRepository.saveSnapshot(
-                    score = score,
-                    stepsProgress = stepsProgress,
-                    sleepProgress = sleepProgress,
-                    exerciseProgress = exerciseProgress,
-                    focusProgress = focusProgress,
-                    moodProgress = moodProgress
+                    score = result.score,
+                    stepsProgress = result.stepsProgress,
+                    sleepProgress = result.sleepProgress,
+                    exerciseProgress = result.exerciseProgress,
+                    focusProgress = result.focusProgress,
+                    moodProgress = result.moodProgress
                 )
-                // Persist score for Quick Settings tile and notify it to refresh
-                appContext.getSharedPreferences(
-                    com.alex.a2ndbrain.ui.widget.SenseOfDayTileService.PREFS_NAME,
-                    android.content.Context.MODE_PRIVATE
-                ).edit().putInt(
-                    com.alex.a2ndbrain.ui.widget.SenseOfDayTileService.KEY_SCORE, score
-                ).apply()
-                try {
-                    android.service.quicksettings.TileService.requestListeningState(
-                        appContext,
-                        android.content.ComponentName(
-                            appContext,
-                            com.alex.a2ndbrain.ui.widget.SenseOfDayTileService::class.java
-                        )
-                    )
-                } catch (_: Exception) { /* tile not added yet — safe to ignore */ }
+                settingsManager.saveSenseOfDayScoreForTile(result.score)
             }
         }
     }

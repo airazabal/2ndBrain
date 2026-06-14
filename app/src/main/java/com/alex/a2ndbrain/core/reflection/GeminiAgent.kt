@@ -7,10 +7,10 @@ import kotlinx.coroutines.withContext
 import com.google.ai.client.generativeai.type.RequestOptions
 import android.util.Log
 
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.agents.AgentMessage
 
-class GeminiAgent(private val settingsManager: CaptureSettingsManager) {
+class GeminiAgent(private val settingsManager: SettingsRepository) {
 
     // Instance-scoped — each GeminiAgent instance tracks its own last-good model.
     // Previously a companion object var, which caused silent model downgrade to persist

@@ -1,10 +1,9 @@
 package com.alex.a2ndbrain.ui.home
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.core.agents.ModelRouter
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.deduplicateMemories
@@ -24,8 +23,7 @@ import java.util.Calendar
 class GrandCentralViewModel(
     private val memoryRepository: MemoryRepository,
     private val modelRouter: ModelRouter,
-    private val settingsManager: CaptureSettingsManager,
-    private val applicationContext: Context
+    private val settingsManager: SettingsRepository
 ) : ViewModel() {
 
     private val _monitoredAppsState = MutableStateFlow(settingsManager.getMonitoredApps())
@@ -85,22 +83,7 @@ class GrandCentralViewModel(
         }
         _grandCentralResult.value = GrandCentralResult(isLoading = true)
 
-        val pm = applicationContext.packageManager
-        fun appLabel(pkg: String?): String {
-            if (pkg.isNullOrEmpty()) return "App"
-            return try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() }
-            catch (e: Exception) {
-                val lp = pkg.lowercase()
-                when {
-                    lp.contains("gmail") -> "Gmail"; lp.contains("whatsapp") -> "WhatsApp"
-                    lp.contains("messaging") -> "Messages"; lp.contains("instagram") -> "Instagram"
-                    lp.contains("slack") -> "Slack"; lp.contains("telegram") -> "Telegram"
-                    lp.contains("twitter") || lp.contains("x.android") -> "X"
-                    lp.contains("facebook") -> "Facebook"; lp.contains("discord") -> "Discord"
-                    else -> pkg.substringAfterLast(".").replaceFirstChar { it.uppercase() }
-                }
-            }
-        }
+        fun appLabel(pkg: String?): String = settingsManager.getAppLabel(pkg)
 
         val items = deduplicateMemories(notifications).map { it.primary }.take(40)
         val snippets = items.joinToString("\n") { m ->

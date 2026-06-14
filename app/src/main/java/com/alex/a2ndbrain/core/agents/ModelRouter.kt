@@ -1,7 +1,7 @@
 package com.alex.a2ndbrain.core.agents
 
 import android.util.Log
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.reflection.GeminiAgent
 import com.alex.a2ndbrain.core.reflection.ModelPicker
 import kotlinx.coroutines.withTimeout
@@ -19,7 +19,7 @@ import kotlinx.coroutines.withTimeout
  * ReflectionManager.runChatInference() is the legacy path — new code uses this class.
  */
 class ModelRouter(
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val geminiAgent: GeminiAgent,
     private val modelPicker: ModelPicker
 ) {
@@ -68,8 +68,8 @@ class ModelRouter(
                         result.text to "${result.modelName} ($elapsed)"
                     }
                 } catch (e: Exception) {
-                    Log.e("ModelRouter", "Inference failed for $preferredModel", e)
-                    "AI response timed out or failed. Please try again." to "Timeout"
+                    Log.e("ModelRouter", "Inference failed for $preferredModel, falling back to local", e)
+                    localFallback(prompt)
                 }
             }
         }
@@ -124,11 +124,24 @@ class ModelRouter(
                         result.text to "${result.modelName} ($elapsed)"
                     }
                 } catch (e: Exception) {
-                    Log.e("ModelRouter", "Multi-turn inference failed", e)
-                    "AI response timed out. Please try again." to "Timeout"
+                    Log.e("ModelRouter", "Multi-turn inference failed, falling back to local", e)
+                    val currentPrompt = history.lastOrNull { it.role == "user" }?.content
+                        ?: return "No message to respond to." to "Empty"
+                    localFallback(currentPrompt)
                 }
             }
         }
+    }
+
+    private suspend fun localFallback(prompt: String): Pair<String, String> = try {
+        val start = System.currentTimeMillis()
+        val raw = modelPicker.runLiteRTInference(prompt)
+        val elapsed = "%.1fs".format((System.currentTimeMillis() - start) / 1000f)
+        val model = settingsManager.getSelectedLiteRTModel()
+        cleanLiteRTResponse(raw) to "LiteRT ($model) · offline fallback · $elapsed"
+    } catch (e: Exception) {
+        Log.e("ModelRouter", "Local fallback also failed", e)
+        "Cloud unreachable and offline model unavailable. Please try again later." to "offline fallback"
     }
 
     private fun cleanLiteRTResponse(response: String): String =

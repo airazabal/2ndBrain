@@ -3,8 +3,8 @@ package com.alex.a2ndbrain.ui.search
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
-import com.alex.a2ndbrain.core.memory.MemoryDao
 import com.alex.a2ndbrain.core.memory.MemoryEntity
+import com.alex.a2ndbrain.core.memory.MemoryRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +27,7 @@ data class SearchResults(
 
 @OptIn(FlowPreview::class)
 class SearchViewModel(
-    private val memoryDao: MemoryDao
+    private val memoryRepository: MemoryRepository
 ) : ViewModel() {
 
     private val _query = MutableStateFlow("")
@@ -42,8 +42,8 @@ class SearchViewModel(
                     return@flow
                 }
                 emit(SearchResults(isLoading = true))
-                val memories = memoryDao.searchMemoriesSync(q).take(20)
-                val summaries = memoryDao.searchSummaries(q)
+                val memories = memoryRepository.searchMemoriesSync(q).take(20)
+                val summaries = memoryRepository.searchSummaries(q)
                 emit(SearchResults(memories, summaries))
             }.flowOn(Dispatchers.IO)
         }

@@ -20,7 +20,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.alex.a2ndbrain.core.todoist.TodoistCompletionEntity
+import com.alex.a2ndbrain.core.todoist.TodoistCompletion
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -28,7 +28,7 @@ private val accentRed = Color(0xFFE44332)
 
 @Composable
 fun TodoistScreen(
-    completions: List<TodoistCompletionEntity>,
+    completions: List<TodoistCompletion>,
     weeklyActivity: List<Pair<String, Int>>,
     todayCount: Int,
     weeklyCount: Int,
@@ -263,7 +263,7 @@ private fun TodoistActivityBars(weeklyActivity: List<Pair<String, Int>>) {
 }
 
 @Composable
-private fun TodoistCompletionItem(completion: TodoistCompletionEntity) {
+private fun TodoistCompletionItem(completion: TodoistCompletion) {
     val timeLabel = remember(completion.completedAt) {
         val sdf = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
         sdf.format(Date(completion.completedAt))

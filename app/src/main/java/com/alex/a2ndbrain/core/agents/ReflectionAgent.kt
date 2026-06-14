@@ -245,9 +245,7 @@ class ReflectionAgent {
                     append("PAST 7 DAYS EXERCISE:\n")
                     append("- Sessions: ${sessions.size}, total: ${totalMins / 60}h ${totalMins % 60}m\n")
                     sessions.forEach { s ->
-                        val exType = runCatching {
-                            com.alex.a2ndbrain.core.exercise.ExerciseType.valueOf(s.type).displayName
-                        }.getOrDefault(s.type)
+                        val exType = s.type.displayName
                         val dur = if (s.durationMinutes >= 60) "${s.durationMinutes / 60}h ${s.durationMinutes % 60}m"
                                   else "${s.durationMinutes}m"
                         val notes = if (s.notes.isNotBlank()) " — ${s.notes}" else ""
@@ -260,9 +258,7 @@ class ReflectionAgent {
                         val totalMins = todaySessions.sumOf { it.durationMinutes }
                         append("EXERCISE TODAY:\n")
                         todaySessions.forEach { s ->
-                            val exType = runCatching {
-                                com.alex.a2ndbrain.core.exercise.ExerciseType.valueOf(s.type).displayName
-                            }.getOrDefault(s.type)
+                            val exType = s.type.displayName
                             val dur = if (s.durationMinutes >= 60) "${s.durationMinutes / 60}h ${s.durationMinutes % 60}m"
                                       else "${s.durationMinutes}m"
                             val notes = if (s.notes.isNotBlank()) " — ${s.notes}" else ""
@@ -272,9 +268,7 @@ class ReflectionAgent {
                     } else {
                         val recentSession = ctx.exercise.recentSessions.firstOrNull()
                         if (recentSession != null) {
-                            val exType = runCatching {
-                                com.alex.a2ndbrain.core.exercise.ExerciseType.valueOf(recentSession.type).displayName
-                            }.getOrDefault(recentSession.type)
+                            val exType = recentSession.type.displayName
                             append("RECENT EXERCISE:\n")
                             append("- Last session: ${recentSession.date} $exType ${recentSession.durationMinutes}m\n")
                         }

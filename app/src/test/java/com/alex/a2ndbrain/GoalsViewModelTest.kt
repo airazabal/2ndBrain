@@ -1,9 +1,11 @@
 package com.alex.a2ndbrain
 
 import app.cash.turbine.test
+import com.alex.a2ndbrain.core.goals.Goal
 import com.alex.a2ndbrain.core.goals.GoalEntity
 import com.alex.a2ndbrain.core.goals.GoalProgress
 import com.alex.a2ndbrain.core.goals.GoalProgressCalculator
+import com.alex.a2ndbrain.core.goals.GoalRepositoryImpl
 import com.alex.a2ndbrain.core.goals.GoalTrend
 import com.alex.a2ndbrain.core.goals.GoalType
 import com.alex.a2ndbrain.core.exercise.ExerciseType
@@ -49,7 +51,7 @@ class GoalsViewModelTest {
         coEvery { healthRepo.getPeriodMetrics(any()) } returns Pair(emptyList(), false)
 
         calculator = GoalProgressCalculator(exerciseRepo, habitRepo, healthRepo)
-        viewModel = GoalsViewModel(dao, calculator, habitRepo, exerciseRepo)
+        viewModel = GoalsViewModel(GoalRepositoryImpl(dao), calculator, habitRepo, exerciseRepo)
     }
 
     @After
@@ -61,7 +63,6 @@ class GoalsViewModelTest {
 
     @Test
     fun `showAddSheet clears all sheet fields`() = runTest {
-        // Pre-populate some state by simulating a previous edit
         val goal = seedGoal()
         viewModel.showEditSheet(goal)
         advanceUntilIdle()
@@ -81,14 +82,11 @@ class GoalsViewModelTest {
 
     @Test
     fun `showEditSheet pre-fills state from goal`() = runTest {
-        val goal = GoalEntity(
-            id = "g1",
-            title = "Run 3x/week",
-            type = GoalType.EXERCISE_SESSIONS.name,
-            targetValue = 3f,
-            periodDays = 7
+        val goal = Goal(
+            id = "g1", title = "Run 3x/week", type = GoalType.EXERCISE_SESSIONS,
+            targetValue = 3f, periodDays = 7, isActive = true,
+            createdAt = System.currentTimeMillis(), linkedHabitId = null, linkedExerciseType = null
         )
-
         viewModel.showEditSheet(goal)
 
         val state = viewModel.state.value
@@ -102,23 +100,23 @@ class GoalsViewModelTest {
 
     @Test
     fun `showEditSheet formats decimal target without trailing zero`() = runTest {
-        val goal = GoalEntity(
-            id = "g2", title = "Sleep", type = GoalType.SLEEP_DAILY.name,
-            targetValue = 7.5f, periodDays = 7
+        val goal = Goal(
+            id = "g2", title = "Sleep", type = GoalType.SLEEP_DAILY,
+            targetValue = 7.5f, periodDays = 7, isActive = true,
+            createdAt = System.currentTimeMillis(), linkedHabitId = null, linkedExerciseType = null
         )
         viewModel.showEditSheet(goal)
-
         assertEquals("7.5", viewModel.state.value.sheetTarget)
     }
 
     @Test
     fun `showEditSheet formats integer target without decimal point`() = runTest {
-        val goal = GoalEntity(
-            id = "g3", title = "Steps", type = GoalType.STEPS_DAILY.name,
-            targetValue = 10000f, periodDays = 7
+        val goal = Goal(
+            id = "g3", title = "Steps", type = GoalType.STEPS_DAILY,
+            targetValue = 10000f, periodDays = 7, isActive = true,
+            createdAt = System.currentTimeMillis(), linkedHabitId = null, linkedExerciseType = null
         )
         viewModel.showEditSheet(goal)
-
         assertEquals("10000", viewModel.state.value.sheetTarget)
     }
 
@@ -145,10 +143,8 @@ class GoalsViewModelTest {
         viewModel.showAddSheet()
         viewModel.setTitle("  ")
         viewModel.setTarget("3")
-
         viewModel.saveGoal()
         advanceUntilIdle()
-
         assertTrue(dao.upserted.isEmpty())
     }
 
@@ -157,10 +153,8 @@ class GoalsViewModelTest {
         viewModel.showAddSheet()
         viewModel.setTitle("My Goal")
         viewModel.setTarget("abc")
-
         viewModel.saveGoal()
         advanceUntilIdle()
-
         assertTrue(dao.upserted.isEmpty())
     }
 
@@ -169,7 +163,6 @@ class GoalsViewModelTest {
     @Test
     fun `saveGoal in edit mode reuses same id`() = runTest {
         val original = seedGoal(id = "original-id", title = "Old Title")
-
         viewModel.showEditSheet(original)
         viewModel.setTitle("New Title")
         viewModel.saveGoal()
@@ -184,7 +177,6 @@ class GoalsViewModelTest {
     fun `saveGoal in edit mode preserves original createdAt`() = runTest {
         val createdAt = 1_700_000_000_000L
         val original = seedGoal(id = "g99", createdAt = createdAt)
-
         viewModel.showEditSheet(original)
         viewModel.setTitle("Updated")
         viewModel.saveGoal()
@@ -195,15 +187,13 @@ class GoalsViewModelTest {
 
     @Test
     fun `saveGoal in add mode generates different id each time`() = runTest {
-        // Use Turbine to wait for each save to complete (sheet closes on success)
         viewModel.state.test {
-            awaitItem() // initial state
+            awaitItem()
 
             viewModel.showAddSheet()
             viewModel.setTitle("Goal A")
             viewModel.setTarget("3")
             viewModel.saveGoal()
-            // Wait until sheet closes (isSaving → false, showSheet → false)
             var s = awaitItem()
             while (s.showSheet || s.isSaving) s = awaitItem()
 
@@ -228,10 +218,8 @@ class GoalsViewModelTest {
         viewModel.showAddSheet()
         viewModel.setTitle("Test")
         viewModel.setTarget("5")
-
         viewModel.saveGoal()
         advanceUntilIdle()
-
         assertTrue(!viewModel.state.value.showSheet)
     }
 
@@ -242,14 +230,11 @@ class GoalsViewModelTest {
         val goal = seedGoal(type = GoalType.EXERCISE_SESSIONS, target = 3f)
 
         viewModel.state.test {
-            // Drain until we see the goal appear in progresses (initial compute from seeded goal)
             var s = awaitItem()
             while (s.progresses.isEmpty()) s = awaitItem()
 
-            // Adding a session should trigger recompute via getAllSessionsFlow
             exerciseRepo.logSession(ExerciseType.WALKING, 30)
 
-            // Wait for an update where the session is counted
             s = awaitItem()
             while (s.progresses.firstOrNull { it.goal.id == goal.id }?.currentValue?.toInt() != 1) {
                 s = awaitItem()
@@ -263,11 +248,9 @@ class GoalsViewModelTest {
 
     @Test
     fun `deleteGoal removes from dao`() = runTest {
-        val goal = seedGoal(id = "del-1")
-
+        seedGoal(id = "del-1")
         viewModel.deleteGoal("del-1")
         advanceUntilIdle()
-
         assertTrue("del-1" in dao.deleted)
     }
 
@@ -279,17 +262,21 @@ class GoalsViewModelTest {
         type: GoalType = GoalType.EXERCISE_SESSIONS,
         target: Float = 3f,
         createdAt: Long = System.currentTimeMillis()
-    ): GoalEntity {
-        val goal = GoalEntity(
+    ): Goal {
+        val entity = GoalEntity(
             id = id, title = title,
             type = type.name, targetValue = target,
             periodDays = 7, createdAt = createdAt
         )
-        dao.seed(goal)
-        return goal
+        dao.seed(entity)
+        return Goal(
+            id = id, title = title, type = type, targetValue = target,
+            periodDays = 7, isActive = true, createdAt = createdAt,
+            linkedHabitId = null, linkedExerciseType = null
+        )
     }
 
-    private fun fakeProgress(goal: GoalEntity) = GoalProgress(
+    private fun fakeProgress(goal: Goal) = GoalProgress(
         goal = goal, currentValue = 0f, progressFraction = 0f,
         trend = GoalTrend.CRITICAL, displayCurrent = "0", displayTarget = "3"
     )
