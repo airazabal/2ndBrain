@@ -1,7 +1,7 @@
 package com.alex.a2ndbrain.core.todoist
 
 import android.util.Log
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -22,7 +22,7 @@ data class TodoistHabitTask(
     val isRecurring: Boolean = false
 )
 
-class TodoistHabitClient(private val settings: CaptureSettingsManager) {
+class TodoistHabitClient(private val settings: SettingsRepository) {
 
     // ── Project lookup ────────────────────────────────────────────────────────
 
