@@ -6,7 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -16,6 +16,7 @@ class P2pSyncWorker(
 ) : CoroutineWorker(context, params), KoinComponent {
 
     private val nearbySyncManager: NearbySyncManager by inject()
+    private val settingsRepository: SettingsRepository by inject()
 
     override suspend fun doWork(): Result {
         // If the app is actively in the foreground (status is not Idle), skip background sync
@@ -33,7 +34,6 @@ class P2pSyncWorker(
             return Result.failure()
         }
 
-        val syncSettings = CaptureSettingsManager(applicationContext)
         try {
             // Start sync in background
             nearbySyncManager.startSync(force = false)
@@ -52,20 +52,20 @@ class P2pSyncWorker(
             nearbySyncManager.stopSync()
 
             return if (syncResult is NearbySyncManager.SyncStatus.Success) {
-                syncSettings.setLastP2pSyncTime(System.currentTimeMillis())
-                syncSettings.setLastP2pSyncSuccess(true)
-                syncSettings.setConsecutiveP2pSyncFailures(0)
+                settingsRepository.setLastP2pSyncTime(System.currentTimeMillis())
+                settingsRepository.setLastP2pSyncSuccess(true)
+                settingsRepository.setConsecutiveP2pSyncFailures(0)
                 Result.success()
             } else {
-                syncSettings.setLastP2pSyncSuccess(false)
-                syncSettings.setConsecutiveP2pSyncFailures(syncSettings.getConsecutiveP2pSyncFailures() + 1)
+                settingsRepository.setLastP2pSyncSuccess(false)
+                settingsRepository.setConsecutiveP2pSyncFailures(settingsRepository.getConsecutiveP2pSyncFailures() + 1)
                 Result.retry()
             }
         } catch (e: Exception) {
             Log.e("P2pSyncWorker", "Exception in P2P background sync worker", e)
             nearbySyncManager.stopSync()
-            syncSettings.setLastP2pSyncSuccess(false)
-            syncSettings.setConsecutiveP2pSyncFailures(syncSettings.getConsecutiveP2pSyncFailures() + 1)
+            settingsRepository.setLastP2pSyncSuccess(false)
+            settingsRepository.setConsecutiveP2pSyncFailures(settingsRepository.getConsecutiveP2pSyncFailures() + 1)
             return Result.failure()
         }
     }

@@ -1,6 +1,6 @@
 package com.alex.a2ndbrain.core.domain
 
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import org.json.JSONArray
@@ -9,7 +9,7 @@ import org.json.JSONObject
 class ExportBackupUseCase(
     private val memoryRepository: MemoryRepository,
     private val healthRepository: HealthRepository,
-    private val settingsManager: CaptureSettingsManager
+    private val settingsManager: SettingsRepository
 ) {
     suspend operator fun invoke(): String {
         val monitoredApps = settingsManager.getMonitoredApps()

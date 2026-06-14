@@ -1,7 +1,7 @@
 package com.alex.a2ndbrain.core.agents
 
 import android.util.Log
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.reflection.GeminiAgent
 import com.alex.a2ndbrain.core.reflection.ModelPicker
 import kotlinx.coroutines.withTimeout
@@ -19,7 +19,7 @@ import kotlinx.coroutines.withTimeout
  * ReflectionManager.runChatInference() is the legacy path — new code uses this class.
  */
 class ModelRouter(
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val geminiAgent: GeminiAgent,
     private val modelPicker: ModelPicker
 ) {

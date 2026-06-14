@@ -36,6 +36,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
 import com.alex.a2ndbrain.core.reflection.ReflectionManager
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
@@ -65,7 +66,7 @@ import org.koin.androidx.viewmodel.ext.android.viewModel as koinActivityViewMode
 
 class MainActivity : ComponentActivity() {
     private val clipboardCaptureManager: ClipboardCaptureManager by inject()
-    private val settingsManager: CaptureSettingsManager by inject()
+    private val settingsManager: SettingsRepository by inject()
     private val reflectionPicker: ReflectionManager by inject()
     private val digitalTimeManager: DigitalTimeManager by inject()
     private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager by inject()

@@ -3,7 +3,7 @@ package com.alex.a2ndbrain.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.alex.a2ndbrain.core.agents.ModelRouter
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.deduplicateMemories
@@ -23,7 +23,7 @@ import java.util.Calendar
 class GrandCentralViewModel(
     private val memoryRepository: MemoryRepository,
     private val modelRouter: ModelRouter,
-    private val settingsManager: CaptureSettingsManager
+    private val settingsManager: SettingsRepository
 ) : ViewModel() {
 
     private val _monitoredAppsState = MutableStateFlow(settingsManager.getMonitoredApps())

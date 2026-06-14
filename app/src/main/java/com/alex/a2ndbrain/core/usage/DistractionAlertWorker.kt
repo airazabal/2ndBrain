@@ -16,16 +16,20 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.alex.a2ndbrain.MainActivity
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 class DistractionAlertWorker(
     private val context: Context,
     params: WorkerParameters
-) : CoroutineWorker(context, params) {
+) : CoroutineWorker(context, params), KoinComponent {
+
+    private val settingsRepository: SettingsRepository by inject()
 
     override suspend fun doWork(): Result {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -33,9 +37,8 @@ class DistractionAlertWorker(
 
         if (!isPermissionGranted()) return Result.success()
 
-        val settingsManager = CaptureSettingsManager(context)
-        val distractionPackages = settingsManager.getDistractionApps()
-        val thresholdMs = settingsManager.getDistractionThresholdMinutes() * 60_000L
+        val distractionPackages = settingsRepository.getDistractionApps()
+        val thresholdMs = settingsRepository.getDistractionThresholdMinutes() * 60_000L
 
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
             .format(Calendar.getInstance().time)

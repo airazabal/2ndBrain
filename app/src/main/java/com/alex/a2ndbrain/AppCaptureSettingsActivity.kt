@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -58,10 +59,10 @@ class AppCaptureSettingsActivity : ComponentActivity() {
     private val memoryRepository: MemoryRepository by inject()
     private val usageRepository: UsageRepository by inject()
     private val nearbySyncManager: NearbySyncManager by inject()
+    private val settingsManager: SettingsRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val settingsManager = CaptureSettingsManager(this)
         setContent {
             var themePreference by remember { mutableStateOf(settingsManager.getThemePreference()) }
             val isDark = when (themePreference) {
@@ -101,7 +102,7 @@ class AppCaptureSettingsActivity : ComponentActivity() {
 
 @Composable
 fun AppCaptureSettingsScreen(
-    settingsManager: CaptureSettingsManager,
+    settingsManager: SettingsRepository,
     onBack: () -> Unit,
     onRestartService: () -> Unit,
     onUnmonitoredAppRemoved: (String) -> Unit = {},

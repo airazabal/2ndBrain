@@ -15,7 +15,7 @@ import org.koin.android.ext.android.inject
 class NotificationCaptureService : NotificationListenerService() {
 
     private val memoryRepository: MemoryRepository by inject()
-    private val settingsManager: CaptureSettingsManager by inject()
+    private val settingsManager: SettingsRepository by inject()
     private val applicationScope: CoroutineScope by inject()
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

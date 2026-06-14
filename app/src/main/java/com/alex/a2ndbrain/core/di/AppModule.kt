@@ -5,6 +5,7 @@ import com.alex.a2ndbrain.core.notes.VaultRepository
 import com.alex.a2ndbrain.core.notes.VaultRepositoryImpl
 import com.alex.a2ndbrain.core.calendar.CalendarRepositoryImpl
 import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.memory.AppDatabase
 import com.alex.a2ndbrain.core.reflection.ModelDownloader
 import com.alex.a2ndbrain.core.reflection.ModelPicker
@@ -108,7 +109,7 @@ val appModule = module {
     single { TaskLatencyTracker(androidContext()) }
     single { TodoistReminderNotifier(androidContext()) }
     single { HabitSyncManager(get(), get()) }
-    single { CaptureSettingsManager(androidContext()) }
+    single<SettingsRepository> { CaptureSettingsManager(androidContext()) }
     single { ClipboardCaptureManager(androidContext(), get()) }
     single { DigitalTimeManager(androidContext(), get(), get(), get()) }
     single { GeminiAgent(get()) }

@@ -1,7 +1,7 @@
 package com.alex.a2ndbrain.core.todoist
 
 import android.util.Log
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -11,7 +11,7 @@ import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.TimeZone
 
-class TodoistRepositoryImpl(private val settingsManager: CaptureSettingsManager) : TodoistRepository {
+class TodoistRepositoryImpl(private val settingsManager: SettingsRepository) : TodoistRepository {
 
     private val baseUrl = "https://api.todoist.com/api/v1"
 

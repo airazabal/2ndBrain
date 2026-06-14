@@ -2,7 +2,7 @@ package com.alex.a2ndbrain.ui.reflection
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.health.HealthMetrics
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
@@ -23,7 +23,7 @@ class ReflectionViewModel(
     private val usageRepository: UsageRepository,
     private val getWeeklyHealthTrends: GetWeeklyHealthTrendsUseCase,
     private val generateWeeklyInsight: GenerateWeeklyInsightUseCase,
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val reflectionManager: ReflectionManager,
     private val circadianInsightManager: CircadianInsightManager
 ) : ViewModel() {

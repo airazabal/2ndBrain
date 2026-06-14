@@ -11,7 +11,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import com.alex.a2ndbrain.ConflictSeverity
 import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.TimelineConflict
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.habits.HabitCompletionEntity
 import com.alex.a2ndbrain.core.exercise.ExerciseSession
@@ -57,7 +57,7 @@ class NearbySyncManager(
     private val moodRepository: MoodRepository,
     private val todoistStatsRepository: TodoistStatsRepository,
     private val memoryRepository: MemoryRepository,
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val habitRepository: HabitRepository
 ) {
     private val _meditationSyncTrigger = MutableSharedFlow<Unit>(replay = 0)

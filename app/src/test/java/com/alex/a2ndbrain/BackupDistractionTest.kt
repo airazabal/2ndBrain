@@ -1,6 +1,6 @@
 package com.alex.a2ndbrain
 
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.domain.ExportBackupUseCase
 import com.alex.a2ndbrain.core.domain.ImportBackupUseCase
 import com.alex.a2ndbrain.core.health.HealthRepository
@@ -19,7 +19,7 @@ import org.junit.Test
 
 class BackupDistractionTest {
 
-    private val settings = mockk<CaptureSettingsManager>(relaxed = true)
+    private val settings = mockk<SettingsRepository>(relaxed = true)
     private val healthRepo = mockk<HealthRepository>(relaxed = true)
     private val memoryRepo = FakeMemoryRepository()
 

@@ -6,7 +6,7 @@ import com.alex.a2ndbrain.ConflictSeverity
 import com.alex.a2ndbrain.ConflictType
 import com.alex.a2ndbrain.TimelineConflict
 import com.alex.a2ndbrain.TimelineEvent
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.memory.MemoryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.memory.UsageStatEntity
@@ -41,7 +41,7 @@ typealias EmailTriageResult = GrandCentralResult
 class HomeViewModel(
     private val memoryRepository: MemoryRepository,
     private val usageRepository: UsageRepository,
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val reflectionManager: ReflectionManager,
     private val nearbySyncManager: NearbySyncManager,
     private val calendarRepository: CalendarRepository,

@@ -14,7 +14,7 @@ import com.alex.a2ndbrain.core.agents.PillarAverages
 import com.alex.a2ndbrain.core.agents.ReflectionAgent
 import com.alex.a2ndbrain.core.agents.recallForContext
 import com.alex.a2ndbrain.core.senseofday.SenseOfDayHistoryRepository
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.memory.DailySummaryEntity
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.usage.DigitalTimeManager
@@ -52,7 +52,7 @@ class ReflectionManager(
     private val context: Context,
     private val memoryRepository: MemoryRepository,
     private val digitalTimeManager: DigitalTimeManager,
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val memoryAgent: MemoryAgent,
     private val healthAgent: HealthAgent,
     private val modelRouter: ModelRouter,

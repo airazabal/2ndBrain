@@ -12,7 +12,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.health.HealthRepository
 import com.alex.a2ndbrain.core.meditation.MeditationRepository
@@ -36,7 +36,7 @@ class WidgetUpdateWorker(
     private val memoryRepository: MemoryRepository by inject()
     private val usageRepository: UsageRepository by inject()
     private val meditationRepository: MeditationRepository by inject()
-    private val settingsManager: CaptureSettingsManager by inject()
+    private val settingsManager: SettingsRepository by inject()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {

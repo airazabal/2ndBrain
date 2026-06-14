@@ -2,7 +2,7 @@ package com.alex.a2ndbrain.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.memory.MemoryRepository
 import com.alex.a2ndbrain.core.domain.ExportBackupUseCase
 import com.alex.a2ndbrain.core.domain.ImportBackupUseCase
@@ -16,7 +16,7 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(
     private val memoryRepository: MemoryRepository,
     private val usageRepository: UsageRepository,
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager,
     private val exportBackup: ExportBackupUseCase,
     private val importBackup: ImportBackupUseCase

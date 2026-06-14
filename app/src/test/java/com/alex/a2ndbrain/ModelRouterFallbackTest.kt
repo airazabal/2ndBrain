@@ -1,7 +1,7 @@
 package com.alex.a2ndbrain
 
 import com.alex.a2ndbrain.core.agents.ModelRouter
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.reflection.GeminiAgent
 import com.alex.a2ndbrain.core.reflection.ModelPicker
 import com.alex.a2ndbrain.core.reflection.SummaryResult
@@ -18,7 +18,7 @@ import org.junit.Test
 
 class ModelRouterFallbackTest {
 
-    private val settings = mockk<CaptureSettingsManager>(relaxed = true)
+    private val settings = mockk<SettingsRepository>(relaxed = true)
     private val geminiAgent = mockk<GeminiAgent>(relaxed = true)
     private val modelPicker = mockk<ModelPicker>(relaxed = true)
     private lateinit var router: ModelRouter

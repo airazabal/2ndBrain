@@ -30,7 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
 import com.alex.a2ndbrain.BuildConfig
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,7 +38,7 @@ import java.util.Locale
 
 @Composable
 fun NotesScreen(
-    settingsManager: CaptureSettingsManager,
+    settingsManager: SettingsRepository,
     onCopilotClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {

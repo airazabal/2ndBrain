@@ -1,10 +1,10 @@
 package com.alex.a2ndbrain.core.domain
 
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import org.json.JSONObject
 
 class ImportBackupUseCase(
-    private val settingsManager: CaptureSettingsManager
+    private val settingsManager: SettingsRepository
 ) {
     suspend operator fun invoke(json: String) {
         val obj = JSONObject(json)

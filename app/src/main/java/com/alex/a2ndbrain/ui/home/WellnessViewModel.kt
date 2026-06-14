@@ -2,7 +2,7 @@ package com.alex.a2ndbrain.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.exercise.ExerciseRepository
 import com.alex.a2ndbrain.core.health.HealthConnectManager
 import com.alex.a2ndbrain.core.health.HealthMetrics
@@ -44,7 +44,7 @@ class WellnessViewModel(
     private val exerciseRepository: ExerciseRepository,
     private val usageRepository: UsageRepository,
     private val senseOfDayHistoryRepository: SenseOfDayHistoryRepository,
-    private val settingsManager: CaptureSettingsManager,
+    private val settingsManager: SettingsRepository,
     private val meditationRepository: MeditationRepository,
     private val nearbySyncManager: NearbySyncManager,
     private val moodRepository: MoodRepository,
