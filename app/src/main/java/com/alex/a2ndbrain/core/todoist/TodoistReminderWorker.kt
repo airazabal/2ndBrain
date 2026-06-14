@@ -14,20 +14,24 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.alex.a2ndbrain.MainActivity
-import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
+import com.alex.a2ndbrain.core.capture.SettingsRepository
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import org.koin.core.component.KoinComponent
+import org.koin.core.component.inject
 
 class TodoistReminderWorker(
     private val context: Context,
     params: WorkerParameters
-) : CoroutineWorker(context, params) {
+) : CoroutineWorker(context, params), KoinComponent {
+
+    private val settingsRepository: SettingsRepository by inject()
 
     override suspend fun doWork(): Result {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
         if (hour < 7 || hour >= 22) return Result.success()
 
-        val repository = TodoistRepositoryImpl(CaptureSettingsManager(context))
+        val repository = TodoistRepositoryImpl(settingsRepository)
 
         val tasks = try {
             repository.getTodayTasks()
