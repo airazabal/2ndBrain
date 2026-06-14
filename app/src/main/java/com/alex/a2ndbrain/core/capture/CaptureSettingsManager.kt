@@ -265,6 +265,38 @@ class CaptureSettingsManager(private val context: Context) {
             )
         } catch (_: Exception) { /* tile not added — safe to ignore */ }
     }
+    // ── Distraction Tracking ──────────────────────────────────────────────────
+    fun getDistractionApps(): Set<String> {
+        val default = setOf(
+            "com.instagram.android", "com.zhiliaoapp.musically", "com.twitter.android",
+            "com.facebook.katana", "com.snapchat.android", "com.reddit.frontpage",
+            "com.linkedin.android", "com.pinterest", "com.google.android.youtube",
+            "com.netflix.mediaclient", "tv.twitch.android.app", "com.disney.disneyplus",
+            "com.amazon.avod.thirdpartyclient", "com.hulu.plus"
+        )
+        return prefs.getStringSet("distraction_apps", default) ?: default
+    }
+
+    fun setDistractionApps(apps: Set<String>) {
+        prefs.edit().putStringSet("distraction_apps", apps).apply()
+    }
+
+    fun getDistractionThresholdMinutes(): Int = prefs.getInt("distraction_threshold_mins", 45)
+
+    fun setDistractionThresholdMinutes(mins: Int) {
+        prefs.edit().putInt("distraction_threshold_mins", mins).apply()
+    }
+
+    // ── P2P Sync Status ───────────────────────────────────────────────────────
+    fun getLastP2pSyncTime(): Long = prefs.getLong("p2p_last_sync_time", 0L)
+    fun setLastP2pSyncTime(time: Long) { prefs.edit().putLong("p2p_last_sync_time", time).apply() }
+
+    fun getLastP2pSyncSuccess(): Boolean = prefs.getBoolean("p2p_last_sync_success", false)
+    fun setLastP2pSyncSuccess(success: Boolean) { prefs.edit().putBoolean("p2p_last_sync_success", success).apply() }
+
+    fun getConsecutiveP2pSyncFailures(): Int = prefs.getInt("p2p_sync_failure_count", 0)
+    fun setConsecutiveP2pSyncFailures(count: Int) { prefs.edit().putInt("p2p_sync_failure_count", count).apply() }
+
     // ── App Label Resolution ──────────────────────────────────────────────────
     fun getAppLabel(packageName: String?): String {
         if (packageName.isNullOrEmpty()) return "App"

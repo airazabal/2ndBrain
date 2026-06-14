@@ -39,5 +39,12 @@ class ImportBackupUseCase(
             settingsManager.setExerciseGoalMinutes(obj.getInt("exerciseGoalMinutes"))
         if (obj.has("digitalFocusBaselineMinutes"))
             settingsManager.setDigitalFocusBaselineMinutes(obj.getInt("digitalFocusBaselineMinutes"))
+        val distractionAppsArray = obj.optJSONArray("distractionApps")
+        if (distractionAppsArray != null) {
+            val apps = (0 until distractionAppsArray.length()).map { distractionAppsArray.getString(it) }.toSet()
+            settingsManager.setDistractionApps(apps)
+        }
+        if (obj.has("distractionThresholdMinutes"))
+            settingsManager.setDistractionThresholdMinutes(obj.getInt("distractionThresholdMinutes"))
     }
 }

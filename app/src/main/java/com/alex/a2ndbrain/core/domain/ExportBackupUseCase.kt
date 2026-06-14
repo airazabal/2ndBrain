@@ -77,6 +77,8 @@ class ExportBackupUseCase(
             put("sleepGoalHours", settingsManager.getSleepGoalHours())
             put("exerciseGoalMinutes", settingsManager.getExerciseGoalMinutes())
             put("digitalFocusBaselineMinutes", settingsManager.getDigitalFocusBaselineMinutes())
+            put("distractionApps", JSONArray().also { arr -> settingsManager.getDistractionApps().forEach { arr.put(it) } })
+            put("distractionThresholdMinutes", settingsManager.getDistractionThresholdMinutes())
         }.toString(2)
     }
 }

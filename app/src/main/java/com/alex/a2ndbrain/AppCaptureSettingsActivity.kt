@@ -234,6 +234,11 @@ fun AppCaptureSettingsScreen(
     var geminiModel by remember { mutableStateOf(settingsManager.getGeminiModel()) }
     var todoistApiToken by remember { mutableStateOf(settingsManager.getTodoistApiToken()) }
 
+    // Distraction Tracking state
+    var distractionApps by remember { mutableStateOf(settingsManager.getDistractionApps()) }
+    var distractionThreshold by remember { mutableStateOf(settingsManager.getDistractionThresholdMinutes().toFloat()) }
+    var distractionExpanded by remember { mutableStateOf(false) }
+
     // Daily Goals state
     var stepsGoalText by remember { mutableStateOf(settingsManager.getStepsGoal().toString()) }
     var sleepGoalText by remember { mutableStateOf(settingsManager.getSleepGoalHours().let {
@@ -801,6 +806,83 @@ fun AppCaptureSettingsScreen(
                                     Column(modifier = Modifier.padding(start = 8.dp)) {
                                         Text(appName, style = MaterialTheme.typography.bodyMedium)
                                         Text(pkg.packageName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Distraction Tracking ──────────────────────────────────────────────
+        item { SettingsSectionLabel("Distraction Tracking") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { distractionExpanded = !distractionExpanded }.padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Distraction apps & threshold", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "${distractionApps.size} app${if (distractionApps.size == 1) "" else "s"} · Alert after ${distractionThreshold.toInt()} min",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(if (distractionExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+                    }
+
+                    AnimatedVisibility(visible = distractionExpanded) {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Alert threshold", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Slider(
+                                value = distractionThreshold,
+                                onValueChange = { distractionThreshold = it },
+                                onValueChangeFinished = { settingsManager.setDistractionThresholdMinutes(distractionThreshold.toInt()) },
+                                valueRange = 15f..120f,
+                                steps = 20,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Text(
+                                "Alert after ${distractionThreshold.toInt()} minutes on a tracked app",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Tracked apps", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (monitoredApps.isEmpty()) {
+                                Text(
+                                    "No apps selected in Monitored Apps. Add apps there first.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            } else {
+                                monitoredApps.sorted().forEach { pkg ->
+                                    val appName = try {
+                                        packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString()
+                                    } catch (_: Exception) { pkg.substringAfterLast(".").replaceFirstChar { it.uppercase() } }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Checkbox(
+                                            checked = distractionApps.contains(pkg),
+                                            onCheckedChange = { checked ->
+                                                val current = distractionApps.toMutableSet()
+                                                if (checked) current.add(pkg) else current.remove(pkg)
+                                                distractionApps = current
+                                                settingsManager.setDistractionApps(current)
+                                            }
+                                        )
+                                        Column(modifier = Modifier.padding(start = 8.dp)) {
+                                            Text(appName, style = MaterialTheme.typography.bodyMedium)
+                                            Text(pkg, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                                        }
                                     }
                                 }
                             }

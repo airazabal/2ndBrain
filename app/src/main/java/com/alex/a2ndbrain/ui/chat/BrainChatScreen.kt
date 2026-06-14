@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -319,7 +320,7 @@ private fun ChatBubble(
                         } else {
                             Spacer(modifier = Modifier.width(1.dp))
                         }
-                        
+
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -327,7 +328,7 @@ private fun ChatBubble(
                             if (isThisMessageSpeaking) {
                                 SoundwavePulse(color = MaterialTheme.colorScheme.primary)
                             }
-                            
+
                             IconButton(
                                 onClick = onSpeakClick,
                                 modifier = Modifier.size(24.dp)
@@ -339,6 +340,26 @@ private fun ChatBubble(
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
+                        }
+                    }
+                    if (message.wasFallback) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                modifier = Modifier.size(11.dp),
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "Cloud unreachable · Answered via offline model",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 9.sp
+                            )
                         }
                     }
                 }

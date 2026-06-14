@@ -6,6 +6,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
+import com.alex.a2ndbrain.core.capture.CaptureSettingsManager
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -32,6 +33,7 @@ class P2pSyncWorker(
             return Result.failure()
         }
 
+        val syncSettings = CaptureSettingsManager(applicationContext)
         try {
             // Start sync in background
             nearbySyncManager.startSync(force = false)
@@ -39,24 +41,31 @@ class P2pSyncWorker(
             // Wait for success, failure or timeout (60 seconds)
             val syncResult = withTimeoutOrNull(60000) {
                 nearbySyncManager.syncStatus.first { status ->
-                    status is NearbySyncManager.SyncStatus.Success || 
+                    status is NearbySyncManager.SyncStatus.Success ||
                     status is NearbySyncManager.SyncStatus.Failed
                 }
             }
 
             Log.d("P2pSyncWorker", "P2P background sync finished with: $syncResult")
-            
+
             // Clean up resources immediately to save battery
             nearbySyncManager.stopSync()
 
             return if (syncResult is NearbySyncManager.SyncStatus.Success) {
+                syncSettings.setLastP2pSyncTime(System.currentTimeMillis())
+                syncSettings.setLastP2pSyncSuccess(true)
+                syncSettings.setConsecutiveP2pSyncFailures(0)
                 Result.success()
             } else {
+                syncSettings.setLastP2pSyncSuccess(false)
+                syncSettings.setConsecutiveP2pSyncFailures(syncSettings.getConsecutiveP2pSyncFailures() + 1)
                 Result.retry()
             }
         } catch (e: Exception) {
             Log.e("P2pSyncWorker", "Exception in P2P background sync worker", e)
             nearbySyncManager.stopSync()
+            syncSettings.setLastP2pSyncSuccess(false)
+            syncSettings.setConsecutiveP2pSyncFailures(syncSettings.getConsecutiveP2pSyncFailures() + 1)
             return Result.failure()
         }
     }

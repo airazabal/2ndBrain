@@ -44,7 +44,8 @@ data class ChatMessage(
     val text: String,
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis(),
-    val modelUsed: String? = null
+    val modelUsed: String? = null,
+    val wasFallback: Boolean = false
 )
 
 data class ConsolidatedUsage(

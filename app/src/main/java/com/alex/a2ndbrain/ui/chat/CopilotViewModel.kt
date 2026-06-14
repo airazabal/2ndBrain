@@ -54,7 +54,8 @@ class CopilotViewModel(
                 _chatMessages.value = _chatMessages.value + ChatMessage(
                     text = replyText,
                     isUser = false,
-                    modelUsed = modelUsed
+                    modelUsed = modelUsed,
+                    wasFallback = modelUsed.contains("offline fallback")
                 )
             } catch (e: Exception) {
                 _chatMessages.value = _chatMessages.value + ChatMessage(
