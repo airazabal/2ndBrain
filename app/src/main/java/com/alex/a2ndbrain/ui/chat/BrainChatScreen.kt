@@ -468,13 +468,13 @@ private fun ThinkingBubble() {
     }
 }
 
-private data class ModelChipData(
+internal data class ModelChipData(
     val label: String,
     val elapsed: String,
     val isLocal: Boolean
 )
 
-private fun parseModelChip(raw: String?): ModelChipData? {
+internal fun parseModelChip(raw: String?): ModelChipData? {
     if (raw.isNullOrBlank() || raw == "Empty") return null
     val elapsed = Regex("(\\d+\\.\\d+s)").find(raw)?.value ?: ""
     return when {

@@ -25,7 +25,7 @@ import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsViewModel
 import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
 import org.koin.androidx.compose.koinViewModel
 
-private enum class WellnessGroup(val label: String) {
+internal enum class WellnessGroup(val label: String) {
     BODY("Body"),
     MIND("Mind"),
     HABITS("Habits"),
@@ -33,7 +33,7 @@ private enum class WellnessGroup(val label: String) {
     INSIGHTS("Insights")
 }
 
-private enum class WellnessLeaf(val label: String, val group: WellnessGroup) {
+internal enum class WellnessLeaf(val label: String, val group: WellnessGroup) {
     HEALTH("Health", WellnessGroup.BODY),
     EXERCISE("Exercise", WellnessGroup.BODY),
     MOOD("Mood", WellnessGroup.MIND),
@@ -49,7 +49,7 @@ private enum class WellnessLeaf(val label: String, val group: WellnessGroup) {
 private val groupLeaves: Map<WellnessGroup, List<WellnessLeaf>> =
     WellnessLeaf.entries.groupBy { it.group }
 
-private fun resolveInitialLeaf(initialTab: String): WellnessLeaf = when (initialTab) {
+internal fun resolveInitialLeaf(initialTab: String): WellnessLeaf = when (initialTab) {
     "EXERCISE"   -> WellnessLeaf.EXERCISE
     "MOOD"       -> WellnessLeaf.MOOD
     "MEDITATION" -> WellnessLeaf.MEDITATION
