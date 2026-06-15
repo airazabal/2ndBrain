@@ -79,6 +79,12 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Mood quick-log from notification action -->
+        <receiver
+            android:name=".core.mood.MoodQuickLogReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- Habit Alarms & Broadcast Receivers -->
         <!-- Proactive unlock nudge -->
         <receiver

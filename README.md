@@ -12,7 +12,7 @@
 - **Instant Data Cleaning**: Unmonitoring or deselecting an app instantly cleans up and deletes all its historical notifications and usage statistics from the database.
 - **Duplicate Merging**: Smartly merges repetitive notifications to keep your feed clean.
 - **Collapsible App & Day Feed**: Memory feed organizes captured events by app sources under collapsible daily sections, showing single-line quick summaries with direct launch/copy quick actions.
-- **Smart Folders & Dynamic Tagging**: Dynamically tags incoming captures (e.g. `#Work`, `#Health`, `#Social`, `#Finance`, `#Reference`) and allows instant filtering via a glassmorphic top-level horizontal chip selector.
+- **Smart Folders & Dynamic Tagging**: Dynamically tags incoming captures (e.g. `#Work`, `#Health`, `#Social`, `#Finance`, `#Reference`) and allows instant filtering via a **Filters** button that opens a searchable bottom sheet listing all captured apps with checkboxes, an Unread-only toggle, and All/None shortcuts.
 - **⚡ Real-Time Group Highlights**: Heuristically extracts high-signal values (such as physical steps or purchase dollars) and displays an aggregated group highlight (e.g. *"⚡ Logged 3 payments totaling $15.50."*).
 - **Optimistic UI Updates**: Mark-as-read/unread actions are reflected instantly in the UI without waiting for a database round-trip, eliminating visible lag.
 - **Individual Mark Unread**: Toggle individual messages back to unread from within any expanded app group.
@@ -28,6 +28,11 @@
 - **Contextual Narrative**: A one-line advisory beneath the ring explains the weakest pillar and suggests a corrective action.
 - **Configurable Goals**: Set your personal daily targets in Settings → Daily Goals: step count, sleep hours, exercise minutes, and digital focus baseline.
 - **Trends History** (Wellness → Trends tab): Daily snapshots are persisted automatically. The Trends tab shows Today / 7-day / 30-day average score cards, a 14-day daily bar chart (bars colored red→yellow→green by score), an 8-week weekly averages chart, and pillar average rings showing your 14-day mean completion per pillar.
+
+### 😊 Mood Tracking
+- **Daily Check-in Notification**: A notification fires at 3 PM each day with 5 inline emoji buttons (😩 😕 😐 🙂 😄). Tap once to log your mood without opening the app — the notification auto-dismisses.
+- **Mood History**: Full log with 14-day trend indicator in Wellness → Mind → Mood.
+- **Sense of Day Integration**: Mood feeds into the daily score alongside steps, sleep, exercise, and focus.
 
 ### ⌚ Smartwatch & Physical Wellness (Health Connect)
 - **Central Health Sync**: Integrates with Android **Health Connect** to seamlessly read smartwatch wellness data (e.g., Google Fit, Samsung Health, Zepp/Amazfit).
@@ -67,9 +72,10 @@
 
 ### 🏠 Grand Central — Unified AI Command Center
 - **Grand Central Card**: Replaces the old "Needs Attention" card with a unified command center that runs a single AI pass over *all* today's unread notifications (Gmail, Messages, Instagram, Todoist, and every other monitored app) and returns both suggested actions and contextual topic categories.
+- **Time-Aware Collapse**: Grand Central auto-expands in the morning (5–11 AM) and collapses by default in the afternoon/evening, showing only compact summary chips (e.g. `2 alerts`, `3 actions`). Tap the header to toggle at any time.
 - **AI Notification Triage**: Gemini analyzes up to 20 unread notifications in one shot and groups them into semantic topic categories (e.g., 📦 Deliveries, 💬 Conversations, 💼 Work Actions) — each with an emoji, category name, item count, and collapsible item list showing the source app badge.
 - **Suggested Actions**: High-priority items that need a response are surfaced at the top as a dedicated "Suggested Actions" section, separate from informational categories.
-- **RIGHT NOW Alerts**: Time-sensitive local signals (imminent calendar events ≤15 min, sleep deficit, elevated heart rate, low step count, schedule conflicts) appear above the AI content so nothing urgent is buried.
+- **RIGHT NOW Alerts**: Time-sensitive local signals (imminent calendar events ≤15 min, sleep deficit, elevated heart rate, low step count, schedule conflicts) always visible regardless of card collapse state.
 - **Feed Category Sync**: The same AI categories flow directly into the Feed screen — today's notifications are grouped by AI topic (emoji + category name headers) instead of by app name. Yesterday and older entries continue to group by app as before.
 - **Reflection Advisory Snippet**: The latest AI reflection's Advisory & Focus section is displayed as a numbered bullet list at the bottom of the card, giving a quick glance at today's top AI recommendations.
 - **Auto-Expiring Schedule Conflicts**: "Schedule Crunch" alerts automatically disappear once both conflicting events have passed — no stale warnings lingering all day.
@@ -79,6 +85,7 @@
 ### 🤖 AI Intelligence & Private Co-Pilot
 - **💬 Interactive Co-Pilot Chat**: A beautiful sidebar-driven bubble log to ask direct questions about your captures, clipboard logs, and daily usage. It pulls relevant DB context in real-time.
 - **🔍 Universal Memory Search**: Co-Pilot queries search across all captured sources — Gmail, SMS, WhatsApp, clipboard, and every notification — with up to 50 scored candidates and 20 shown to the model. Each memory entry includes its source app and title so the AI can distinguish between an email, a text message, and a notification from the same sender.
+- **Model Routing Indicator**: Each AI response shows a styled chip — `⚡ On-device · 1.2s` (purple) for LiteRT or `☁ Gemini · 3.4s` (blue) for cloud — so you always know which model answered and how fast it was.
 - **Draggable Co-Pilot FAB**: The floating action button can be repositioned anywhere on screen by long-pressing and dragging. Position is clamped to screen bounds and saved across recompositions.
 - **Dynamic Context Routing**: Automatically selects between on-device (Qwen-0.6B via LiteRT) and cloud (Gemini API) models based on query length and complexity to prevent overload and maximize quality.
 - **Morning Briefings**: Generates a "game plan" between 4 AM - 11 AM based on upcoming meetings, yesterday's unfinished tasks, and recent exercise activity.
@@ -90,7 +97,7 @@
 ### 🕒 Digital Time & Nearby Sync
 - **📊 Habit Correlation Engine**: An active insight block correlating distraction trends (like spending 60+ mins on social media apps) against focused productivity tool usage.
 - **Direct P2P Device Sync**: Secure peer-to-peer bidirectional sync of **screen time statistics and meditation sessions** between your nearby devices using the **Google Nearby Connections API** (no internet or local router connection required).
-- **Settings-Based Sync Control**: Sync is managed from the Settings tab — start, stop, and monitor connection status without leaving the app.
+- **Settings-Based Sync Control**: Sync is managed from Settings → Sync & Data via a single toggle switch. The Settings icon shows a dot badge while a sync session is active. Sync status ("Synced 2h ago") is also surfaced as a chip on the Home screen.
 - **Automatic UI Refresh**: After a sync completes, Digital Time and Zen screens refresh automatically without manual intervention.
 - **Periodic Background Sync**: Automatically triggers a background sync session every 15 minutes via **WorkManager**, featuring safety guards to skip execution while the app is in the foreground to prevent UI conflicts.
 - **Consolidated View**: See total time spent per app across your entire device ecosystem.
@@ -107,7 +114,9 @@
 
 ## 🎨 Modern Design
 - **Craft-Inspired UI**: Minimalist aesthetic with hero headers and pastel accent coding.
-- **Sidebar Navigation**: Efficient vertical `NavigationRail` for quick switching between Home, Feed, Brain, Notes, Time, Zen, Co-pilot, and Settings.
+- **Sidebar Navigation**: Efficient vertical `NavigationRail` for quick switching between Home, Feed, Wellness, Notes, Co-pilot, and Settings.
+- **Wellness Tab Groups**: The Wellness screen uses 5 top-level groups (Body / Mind / Habits / Time / Insights), each with a segmented picker for 2 sub-screens — replacing a previously unwieldy 10-tab scroll row.
+- **Settings Sections**: Settings is organised into 6 labelled sections (Permissions & Access, Daily Goals, Connections, Capture, Sync & Data, Developer) for quick findability.
 - **Responsive Feedback**: Real-time loading indicators for AI generation, data syncing, and offline thinking models.
 
 ---

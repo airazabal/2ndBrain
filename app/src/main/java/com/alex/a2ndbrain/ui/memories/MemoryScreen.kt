@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MemoryScreen(
     memories: List<MemoryEntity>,
@@ -83,6 +85,8 @@ fun MemoryScreen(
     }
     var showUnreadOnly by remember(initialFilter) { mutableStateOf(startsUnreadOnly) }
     var showRecordingDialog by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
+    var filterAppSearch by remember { mutableStateOf("") }
     var expandedAppGroups by remember(initialFilter) {
         mutableStateOf(
             when {
@@ -248,82 +252,75 @@ fun MemoryScreen(
             )
         }
 
-        // Dynamic app filter chip row
+        // Filter row — compact button + active filter pills
         item {
-            val chips = listOf("All") + availableApps
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+            val activeCount = selectedApps.size + (if (showUnreadOnly) 1 else 0)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 2.dp)
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Unread chip
-                item {
-                    val primary = MaterialTheme.colorScheme.primary
-                    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { showUnreadOnly = !showUnreadOnly },
-                        color = if (showUnreadOnly) primary else surfaceVariant.copy(alpha = 0.35f),
-                        shape = RoundedCornerShape(20.dp)
+                // Filter button with badge
+                Surface(
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable { showFilterSheet = true },
+                    color = if (activeCount > 0) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Tune,
+                            contentDescription = "Filters",
+                            modifier = Modifier.size(14.dp),
+                            tint = if (activeCount > 0) MaterialTheme.colorScheme.onPrimary
+                                   else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         Text(
-                            text = "Unread",
+                            text = if (activeCount > 0) "Filters · $activeCount" else "Filters",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (showUnreadOnly) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            color = if (activeCount > 0) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-                items(chips.size) { idx ->
-                    val chip = chips[idx]
-                    val isSelected = if (chip == "All") selectedApps.isEmpty()
-                                     else selectedApps.contains(chip)
-                    val primary = MaterialTheme.colorScheme.primary
-                    val surfaceVariant = MaterialTheme.colorScheme.surfaceVariant
+
+                // Active app pills (up to 2 shown inline for quick removal)
+                selectedApps.take(2).forEach { app ->
                     Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable {
-                                selectedApps = when {
-                                    chip == "All" -> emptySet()
-                                    selectedApps.contains(chip) -> selectedApps - chip
-                                    else -> selectedApps + chip
-                                }
-                            },
-                        color = if (isSelected) primary else surfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable { selectedApps = selectedApps - app },
+                        color = MaterialTheme.colorScheme.primaryContainer,
                         shape = RoundedCornerShape(20.dp)
                     ) {
                         Text(
-                            text = chip,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSelected) MaterialTheme.colorScheme.onPrimary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            text = "$app ✕",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                         )
                     }
                 }
-                item {
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { onNotesSelected() },
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        shape = RoundedCornerShape(20.dp)
-                    ) {
-                        Text(
-                            text = "Notes",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
-                    }
+                if (selectedApps.size > 2) {
+                    Text("+${selectedApps.size - 2} more", fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                // Notes shortcut
+                Surface(
+                    modifier = Modifier.clip(RoundedCornerShape(20.dp)).clickable { onNotesSelected() },
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(20.dp)
+                ) {
+                    Text("Notes", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                 }
             }
         }
@@ -478,6 +475,104 @@ fun MemoryScreen(
                 onSearchQueryChange(preview)
             }
         )
+    }
+
+    if (showFilterSheet) {
+        val filteredApps = if (filterAppSearch.isBlank()) availableApps
+                           else availableApps.filter { it.contains(filterAppSearch, ignoreCase = true) }
+        ModalBottomSheet(onDismissRequest = { showFilterSheet = false; filterAppSearch = "" }) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Filter Feed", style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold)
+                    val hasActive = selectedApps.isNotEmpty() || showUnreadOnly
+                    if (hasActive) {
+                        TextButton(onClick = { selectedApps = emptySet(); showUnreadOnly = false }) {
+                            Text("Clear all")
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                // Unread toggle
+                Row(
+                    modifier = Modifier.fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showUnreadOnly = !showUnreadOnly }
+                        .padding(vertical = 10.dp, horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Unread only", style = MaterialTheme.typography.bodyMedium)
+                    Switch(checked = showUnreadOnly, onCheckedChange = { showUnreadOnly = it })
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                // App search
+                Text("APPS", style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    letterSpacing = 0.8.sp,
+                    modifier = Modifier.padding(bottom = 8.dp))
+
+                OutlinedTextField(
+                    value = filterAppSearch,
+                    onValueChange = { filterAppSearch = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search apps") },
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    trailingIcon = {
+                        if (filterAppSearch.isNotEmpty()) {
+                            IconButton(onClick = { filterAppSearch = "" }) { Text("✕") }
+                        }
+                    }
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                // All / None shortcuts
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = { selectedApps = availableApps.toSet() }) {
+                        Text("All", style = MaterialTheme.typography.labelSmall)
+                    }
+                    TextButton(onClick = { selectedApps = emptySet() }) {
+                        Text("None", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+
+                // App list
+                filteredApps.forEach { app ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .clickable {
+                                selectedApps = if (selectedApps.contains(app))
+                                    selectedApps - app else selectedApps + app
+                            }
+                            .padding(vertical = 6.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(app, style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f))
+                        Checkbox(
+                            checked = selectedApps.contains(app),
+                            onCheckedChange = { checked ->
+                                selectedApps = if (checked) selectedApps + app else selectedApps - app
+                            }
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                }
+            }
+        }
     }
 }
 

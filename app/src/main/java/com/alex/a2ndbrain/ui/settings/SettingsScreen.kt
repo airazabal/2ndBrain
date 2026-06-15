@@ -62,6 +62,7 @@ fun AppCaptureSettingsScreen(
     val context = LocalContext.current
     val packageManager = context.packageManager
     val scope = rememberCoroutineScope()
+
     val createBackupLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
@@ -156,7 +157,7 @@ fun AppCaptureSettingsScreen(
     }
 
     var isListenerEnabled by remember { mutableStateOf(false) }
-    var showDebugLogs by remember { mutableStateOf(false) }
+    var developerExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -166,7 +167,6 @@ fun AppCaptureSettingsScreen(
         }
     }
 
-    // AI & Integrations state
     val modelPicker = remember { ModelPicker(context, settingsManager) }
     val modelDownloader = remember { ModelDownloader(context, scope) }
     var selectedModel by remember { mutableStateOf(settingsManager.getPreferredModelType()) }
@@ -180,12 +180,10 @@ fun AppCaptureSettingsScreen(
     var geminiModel by remember { mutableStateOf(settingsManager.getGeminiModel()) }
     var todoistApiToken by remember { mutableStateOf(settingsManager.getTodoistApiToken()) }
 
-    // Distraction Tracking state
     var distractionApps by remember { mutableStateOf(settingsManager.getDistractionApps()) }
     var distractionThreshold by remember { mutableStateOf(settingsManager.getDistractionThresholdMinutes().toFloat()) }
     var distractionExpanded by remember { mutableStateOf(false) }
 
-    // Daily Goals state
     var stepsGoalText by remember { mutableStateOf(settingsManager.getStepsGoal().toString()) }
     var sleepGoalText by remember { mutableStateOf(settingsManager.getSleepGoalHours().let {
         if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString()
@@ -249,13 +247,10 @@ fun AppCaptureSettingsScreen(
         }
 
         // ── Permissions & Access ───────────────────────────────────────────────
-        item {
-            SettingsSectionLabel("Permissions & Access")
-        }
+        item { SettingsSectionLabel("Permissions & Access") }
         item {
             Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    // Notification Listener
                     PermissionRow(
                         label = "Notification Access",
                         subtitle = if (isListenerEnabled) "Granted — capturing notifications" else "Required for notification capture",
@@ -290,7 +285,6 @@ fun AppCaptureSettingsScreen(
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
-                    // Usage Access
                     PermissionRow(
                         label = "Usage Access",
                         subtitle = "Required for screen time tracking",
@@ -300,7 +294,6 @@ fun AppCaptureSettingsScreen(
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
-                    // Calendar
                     PermissionRow(
                         label = "Calendar",
                         subtitle = if (hasCalendarPermission) "Granted — Google Calendar events shown on home timeline" else "Optional — shows Google Calendar events on home",
@@ -310,126 +303,68 @@ fun AppCaptureSettingsScreen(
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
 
-                    // Restart service + debug
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedButton(onClick = onRestartService) { Text("Restart Capture Service") }
-                        TextButton(onClick = { showDebugLogs = !showDebugLogs }) {
-                            Text(if (showDebugLogs) "Hide Logs" else "Show Logs", fontSize = 12.sp)
-                        }
-                    }
-                    if (showDebugLogs) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            shape = RoundedCornerShape(4.dp),
-                            modifier = Modifier.fillMaxWidth().heightIn(max = 120.dp)
-                        ) {
-                            LazyColumn(modifier = Modifier.padding(8.dp)) {
-                                items(debugEvents) { log ->
-                                    Text(log, style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
-                                }
-                            }
-                        }
-                    }
+                    OutlinedButton(onClick = onRestartService) { Text("Restart Capture Service") }
                 }
             }
         }
 
-        // ── Nearby Sync ───────────────────────────────────────────────────────
-        item { SettingsSectionLabel("Nearby Sync") }
+        // ── Daily Goals ───────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Daily Goals") }
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = cardShape,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        val statusText = when (syncStatus) {
-                            NearbySyncManager.SyncStatus.Idle -> "Sync screen time, health, and meditations with nearby devices."
-                            NearbySyncManager.SyncStatus.Scanning -> "Searching for nearby devices..."
-                            is NearbySyncManager.SyncStatus.Connecting -> "Connecting to ${syncStatus.deviceName}..."
-                            is NearbySyncManager.SyncStatus.Syncing -> "Syncing data..."
-                            is NearbySyncManager.SyncStatus.Success -> "Successfully synchronized!"
-                            is NearbySyncManager.SyncStatus.Failed -> "Sync failed: ${syncStatus.reason}"
-                        }
-                        Text(
-                            text = statusText,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        val lastSyncLabel = remember(lastSyncTimestamp) {
-                            if (lastSyncTimestamp == 0L) {
-                                "Never synced"
-                            } else {
-                                val now = System.currentTimeMillis()
-                                val diffMs = now - lastSyncTimestamp
-                                val diffMin = diffMs / 60_000
-                                val diffH = diffMs / 3_600_000
-                                val diffD = diffMs / 86_400_000
-                                when {
-                                    diffMin < 1 -> "Last synced just now"
-                                    diffMin < 60 -> "Last synced ${diffMin}m ago"
-                                    diffH < 24 -> "Last synced ${diffH}h ago"
-                                    else -> "Last synced ${diffD}d ago"
-                                }
-                            }
-                        }
-                        Text(
-                            text = lastSyncLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    val isBusy = syncStatus is NearbySyncManager.SyncStatus.Scanning ||
-                            syncStatus is NearbySyncManager.SyncStatus.Connecting ||
-                            syncStatus is NearbySyncManager.SyncStatus.Syncing
-                    Button(
-                        onClick = {
-                            if (isBusy) {
-                                onStopSync()
-                            } else {
-                                val hasPerms = permissionsToRequest.all {
-                                    androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                                }
-                                if (hasPerms) onStartSync(true) else syncPermissionLauncher.launch(permissionsToRequest)
-                            }
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        text = "Set your daily targets to power the Sense of Day score.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    GoalTextField(
+                        label = "Daily Steps Goal",
+                        value = stepsGoalText,
+                        unit = "steps",
+                        onValueChange = {
+                            stepsGoalText = it
+                            it.toIntOrNull()?.let { v -> settingsManager.setStepsGoalLocal(v) }
                         },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isBusy) MaterialTheme.colorScheme.error.copy(alpha = 0.12f) else MaterialTheme.colorScheme.primary,
-                            contentColor = if (isBusy) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        if (syncStatus is NearbySyncManager.SyncStatus.Syncing) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 2.dp)
-                        } else {
-                            val btnLabel = when (syncStatus) {
-                                is NearbySyncManager.SyncStatus.Scanning,
-                                is NearbySyncManager.SyncStatus.Connecting -> "Stop"
-                                is NearbySyncManager.SyncStatus.Failed -> "Retry"
-                                else -> "Sync Now"
-                            }
-                            Text(btnLabel, style = MaterialTheme.typography.labelMedium)
-                        }
-                    }
+                        onDone = { stepsGoalText.toIntOrNull()?.let { settingsManager.setStepsGoal(it) } }
+                    )
+                    GoalTextField(
+                        label = "Sleep Goal",
+                        value = sleepGoalText,
+                        unit = "hours",
+                        onValueChange = {
+                            sleepGoalText = it
+                            it.toFloatOrNull()?.let { v -> settingsManager.setSleepGoalHoursLocal(v) }
+                        },
+                        onDone = { sleepGoalText.toFloatOrNull()?.let { settingsManager.setSleepGoalHours(it) } }
+                    )
+                    GoalTextField(
+                        label = "Daily Exercise Goal",
+                        value = exerciseGoalText,
+                        unit = "min",
+                        onValueChange = {
+                            exerciseGoalText = it
+                            it.toIntOrNull()?.let { v -> settingsManager.setExerciseGoalMinutesLocal(v) }
+                        },
+                        onDone = { exerciseGoalText.toIntOrNull()?.let { settingsManager.setExerciseGoalMinutes(it) } }
+                    )
+                    GoalTextField(
+                        label = "Digital Focus Baseline",
+                        value = focusGoalText,
+                        unit = "min/day",
+                        onValueChange = {
+                            focusGoalText = it
+                            it.toIntOrNull()?.let { v -> settingsManager.setDigitalFocusBaselineMinutesLocal(v) }
+                        },
+                        onDone = { focusGoalText.toIntOrNull()?.let { settingsManager.setDigitalFocusBaselineMinutes(it) } }
+                    )
                 }
             }
         }
 
-        // ── AI & Integrations ─────────────────────────────────────────────────
-        item { SettingsSectionLabel("AI & Integrations") }
+        // ── Connections ────────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Connections") }
 
-        // Mode selector
         item {
             Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -451,12 +386,11 @@ fun AppCaptureSettingsScreen(
             }
         }
 
-        // Gemini Cloud settings (shown only when GEMINI_CLOUD is selected)
         if (selectedModel == "GEMINI_CLOUD") {
             item {
                 Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Gemini Cloud Settings", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text("Gemini Cloud", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                         OutlinedTextField(
                             value = geminiApiKey,
                             onValueChange = { geminiApiKey = it; settingsManager.saveGeminiApiKey(it) },
@@ -479,7 +413,6 @@ fun AppCaptureSettingsScreen(
             }
         }
 
-        // LiteRT local models (shown when LITERT_LOCAL or AUTO selects local)
         if (selectedModel == "LITERT_LOCAL" || (selectedModel == "AUTO" && modelPicker.getBestModel() == ModelPicker.ModelType.LITERT_LOCAL)) {
             item {
                 Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
@@ -582,7 +515,6 @@ fun AppCaptureSettingsScreen(
             }
         }
 
-        // Todoist integration (always visible)
         item {
             Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -605,92 +537,9 @@ fun AppCaptureSettingsScreen(
             }
         }
 
-        // ── Daily Goals (Sense of Day) ────────────────────────────────────────
-        item { SettingsSectionLabel("Daily Goals") }
-        item {
-            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(
-                        text = "Set your daily targets to power the Sense of Day score.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    GoalTextField(
-                        label = "Daily Steps Goal",
-                        value = stepsGoalText,
-                        unit = "steps",
-                        onValueChange = {
-                            stepsGoalText = it
-                            it.toIntOrNull()?.let { v -> settingsManager.setStepsGoalLocal(v) }
-                        },
-                        onDone = {
-                            stepsGoalText.toIntOrNull()?.let { settingsManager.setStepsGoal(it) }
-                        }
-                    )
-                    GoalTextField(
-                        label = "Sleep Goal",
-                        value = sleepGoalText,
-                        unit = "hours",
-                        onValueChange = {
-                            sleepGoalText = it
-                            it.toFloatOrNull()?.let { v -> settingsManager.setSleepGoalHoursLocal(v) }
-                        },
-                        onDone = {
-                            sleepGoalText.toFloatOrNull()?.let { settingsManager.setSleepGoalHours(it) }
-                        }
-                    )
-                    GoalTextField(
-                        label = "Daily Exercise Goal",
-                        value = exerciseGoalText,
-                        unit = "min",
-                        onValueChange = {
-                            exerciseGoalText = it
-                            it.toIntOrNull()?.let { v -> settingsManager.setExerciseGoalMinutesLocal(v) }
-                        },
-                        onDone = {
-                            exerciseGoalText.toIntOrNull()?.let { settingsManager.setExerciseGoalMinutes(it) }
-                        }
-                    )
-                    GoalTextField(
-                        label = "Digital Focus Baseline",
-                        value = focusGoalText,
-                        unit = "min/day",
-                        onValueChange = {
-                            focusGoalText = it
-                            it.toIntOrNull()?.let { v -> settingsManager.setDigitalFocusBaselineMinutesLocal(v) }
-                        },
-                        onDone = {
-                            focusGoalText.toIntOrNull()?.let { settingsManager.setDigitalFocusBaselineMinutes(it) }
-                        }
-                    )
-                }
-            }
-        }
+        // ── Capture ────────────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Capture") }
 
-        // ── Backup & Restore ──────────────────────────────────────────────────
-        item { SettingsSectionLabel("Backup & Restore") }
-        item {
-            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Full export: monitored apps, captures (90 days), reflections, and health snapshots.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { createBackupLauncher.launch("2ndbrain-backup.json") }, modifier = Modifier.weight(1f)) {
-                            Text("Export")
-                        }
-                        OutlinedButton(onClick = { openBackupLauncher.launch(arrayOf("application/json")) }, modifier = Modifier.weight(1f)) {
-                            Text("Restore")
-                        }
-                    }
-                }
-            }
-        }
-
-        // ── Monitored Apps ────────────────────────────────────────────────────
-        item { SettingsSectionLabel("Monitored Apps") }
         item {
             Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
                 Column {
@@ -701,7 +550,7 @@ fun AppCaptureSettingsScreen(
                     ) {
                         Column {
                             val count = monitoredApps.size
-                            Text("App filter", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Monitored Apps", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             Text(
                                 if (count == 0) "All notifications captured" else "$count app${if (count == 1) "" else "s"} selected",
                                 style = MaterialTheme.typography.bodySmall,
@@ -761,8 +610,6 @@ fun AppCaptureSettingsScreen(
             }
         }
 
-        // ── Distraction Tracking ──────────────────────────────────────────────
-        item { SettingsSectionLabel("Distraction Tracking") }
         item {
             Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
                 Column {
@@ -772,7 +619,7 @@ fun AppCaptureSettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column {
-                            Text("Distraction apps & threshold", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Distraction Tracking", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             Text(
                                 "${distractionApps.size} app${if (distractionApps.size == 1) "" else "s"} · Alert after ${distractionThreshold.toInt()} min",
                                 style = MaterialTheme.typography.bodySmall,
@@ -838,10 +685,141 @@ fun AppCaptureSettingsScreen(
             }
         }
 
+        // ── Sync & Data ────────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Sync & Data") }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = cardShape,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Nearby Sync", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        val statusText = when (syncStatus) {
+                            NearbySyncManager.SyncStatus.Idle -> "Sync screen time, health, and meditations with nearby devices."
+                            NearbySyncManager.SyncStatus.Scanning -> "Searching for nearby devices..."
+                            is NearbySyncManager.SyncStatus.Connecting -> "Connecting to ${syncStatus.deviceName}..."
+                            is NearbySyncManager.SyncStatus.Syncing -> "Syncing data..."
+                            is NearbySyncManager.SyncStatus.Success -> "Successfully synchronized!"
+                            is NearbySyncManager.SyncStatus.Failed -> "Sync failed: ${syncStatus.reason}"
+                        }
+                        Text(
+                            text = statusText,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val lastSyncLabel = remember(lastSyncTimestamp) {
+                            if (lastSyncTimestamp == 0L) {
+                                "Never synced"
+                            } else {
+                                val now = System.currentTimeMillis()
+                                val diffMs = now - lastSyncTimestamp
+                                val diffMin = diffMs / 60_000
+                                val diffH = diffMs / 3_600_000
+                                val diffD = diffMs / 86_400_000
+                                when {
+                                    diffMin < 1 -> "Last synced just now"
+                                    diffMin < 60 -> "Last synced ${diffMin}m ago"
+                                    diffH < 24 -> "Last synced ${diffH}h ago"
+                                    else -> "Last synced ${diffD}d ago"
+                                }
+                            }
+                        }
+                        Text(
+                            text = lastSyncLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                    val isBusy = syncStatus is NearbySyncManager.SyncStatus.Scanning ||
+                            syncStatus is NearbySyncManager.SyncStatus.Connecting ||
+                            syncStatus is NearbySyncManager.SyncStatus.Syncing
+                    if (syncStatus is NearbySyncManager.SyncStatus.Syncing) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary)
+                    } else {
+                        Switch(
+                            checked = isBusy,
+                            onCheckedChange = { on ->
+                                if (on) {
+                                    val hasPerms = permissionsToRequest.all {
+                                        androidx.core.content.ContextCompat.checkSelfPermission(context, it) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                    }
+                                    if (hasPerms) onStartSync(false) else syncPermissionLauncher.launch(permissionsToRequest)
+                                } else {
+                                    onStopSync()
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Backup & Restore", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = "Full export: monitored apps, captures (90 days), reflections, and health snapshots.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { createBackupLauncher.launch("2ndbrain-backup.json") }, modifier = Modifier.weight(1f)) {
+                            Text("Export")
+                        }
+                        OutlinedButton(onClick = { openBackupLauncher.launch(arrayOf("application/json")) }, modifier = Modifier.weight(1f)) {
+                            Text("Restore")
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Developer ──────────────────────────────────────────────────────────
+        item { SettingsSectionLabel("Developer") }
+        item {
+            Card(modifier = Modifier.fillMaxWidth(), colors = cardColors, shape = cardShape) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { developerExpanded = !developerExpanded }.padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text("Capture Debug Log", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text("Live event stream from the notification capture service", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Icon(if (developerExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null)
+                    }
+                    AnimatedVisibility(visible = developerExpanded) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp)
+                        ) {
+                            LazyColumn(modifier = Modifier.padding(12.dp)) {
+                                items(debugEvents) { log ->
+                                    Text(log, style = androidx.compose.ui.text.TextStyle(fontSize = 10.sp, fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         item { Spacer(modifier = Modifier.height(24.dp)) }
     }
 
-    // Add Custom Model dialog
     if (showAddCustomModelDialog) {
         AlertDialog(
             onDismissRequest = { showAddCustomModelDialog = false },
@@ -868,7 +846,6 @@ fun AppCaptureSettingsScreen(
         )
     }
 
-    // Model Library dialog
     if (showModelLibraryDialog) {
         AlertDialog(
             onDismissRequest = { showModelLibraryDialog = false },
