@@ -9,5 +9,11 @@ data class TodoistCompletionEntity(
     val taskId: String,
     val taskContent: String,
     val completedAt: Long,
-    val date: String   // "yyyy-MM-dd"
-)
+    val date: String,   // "yyyy-MM-dd"
+    val status: String = STATUS_COMPLETED
+) {
+    companion object {
+        const val STATUS_COMPLETED = "COMPLETED"
+        const val STATUS_MISSED    = "MISSED"
+    }
+}

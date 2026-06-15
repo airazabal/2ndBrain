@@ -13,7 +13,9 @@ data class TodoistUiState(
     val weeklyActivity: List<Pair<String, Int>> = emptyList(),
     val todayCount: Int = 0,
     val weeklyCount: Int = 0,
-    val totalCount: Int = 0
+    val totalCount: Int = 0,
+    val todayMissedCount: Int = 0,
+    val weeklyMissedCount: Int = 0
 )
 
 class TodoistViewModel(
@@ -42,8 +44,16 @@ class TodoistViewModel(
             val today = repository.getTodayCount()
             val weekly = repository.getWeeklyCount()
             val total = repository.getTotalCount()
+            val todayMissed = repository.getTodayMissedCount()
+            val weeklyMissed = repository.getWeeklyMissedCount()
             _uiState.update {
-                it.copy(todayCount = today, weeklyCount = weekly, totalCount = total)
+                it.copy(
+                    todayCount = today,
+                    weeklyCount = weekly,
+                    totalCount = total,
+                    todayMissedCount = todayMissed,
+                    weeklyMissedCount = weeklyMissed
+                )
             }
         }
     }

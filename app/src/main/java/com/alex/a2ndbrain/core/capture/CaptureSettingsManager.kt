@@ -332,4 +332,11 @@ class CaptureSettingsManager(private val context: Context) : SettingsRepository 
             }
         }
     }
+
+    private val fabPrefs by lazy { context.getSharedPreferences("fab_position", android.content.Context.MODE_PRIVATE) }
+    override fun getFabOffsetX(): Float = fabPrefs.getFloat("x", 0f)
+    override fun getFabOffsetY(): Float = fabPrefs.getFloat("y", 0f)
+    override fun saveFabPosition(x: Float, y: Float) {
+        fabPrefs.edit().putFloat("x", x).putFloat("y", y).apply()
+    }
 }

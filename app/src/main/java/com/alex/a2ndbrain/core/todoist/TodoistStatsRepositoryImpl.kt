@@ -53,11 +53,26 @@ class TodoistStatsRepositoryImpl(
                 taskId = taskId,
                 taskContent = taskContent,
                 completedAt = now,
-                date = dateFormat.format(Date(now))
+                date = dateFormat.format(Date(now)),
+                status = TodoistCompletionEntity.STATUS_COMPLETED
             )
         )
         try { memoryRepository.insertEpisodicEvent("Completed task: $taskContent", "task") }
         catch (e: Exception) { /* non-fatal */ }
+    }
+
+    override suspend fun saveMissed(taskId: String, taskContent: String) = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        dao.insert(
+            TodoistCompletionEntity(
+                id = UUID.randomUUID().toString(),
+                taskId = taskId,
+                taskContent = taskContent,
+                completedAt = now,
+                date = dateFormat.format(Date(now)),
+                status = TodoistCompletionEntity.STATUS_MISSED
+            )
+        )
     }
 
     override suspend fun getTodayCount(): Int = withContext(Dispatchers.IO) {
@@ -70,6 +85,14 @@ class TodoistStatsRepositoryImpl(
 
     override suspend fun getTotalCount(): Int = withContext(Dispatchers.IO) {
         dao.getTotalCount()
+    }
+
+    override suspend fun getTodayMissedCount(): Int = withContext(Dispatchers.IO) {
+        dao.getMissedCountForDate(dateFormat.format(Date()))
+    }
+
+    override suspend fun getWeeklyMissedCount(): Int = withContext(Dispatchers.IO) {
+        dao.getMissedCountSince(sinceDate(6))
     }
 
     override suspend fun getAllCompletions(): List<TodoistCompletion> = withContext(Dispatchers.IO) {

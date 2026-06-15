@@ -18,6 +18,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -94,7 +96,14 @@ fun SenseOfDayWidget(
             ) {
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(100.dp)
+                    modifier = Modifier
+                        .size(100.dp)
+                        .clearAndSetSemantics {
+                            contentDescription = buildString {
+                                append("Sense of Day score: $score out of 100.")
+                                if (context.isNotBlank()) append(" $context")
+                            }
+                        }
                 ) {
                     Canvas(modifier = Modifier.size(100.dp)) {
                         val strokePx = 11.dp.toPx()
@@ -199,6 +208,14 @@ private fun PillarIndicator(
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
+            .clearAndSetSemantics {
+                contentDescription = buildString {
+                    append("${pillar.label} pillar: ${pillar.value}")
+                    if (pillar.progress >= 1f) append(", goal met")
+                    else if (pillar.goalText.isNotBlank()) append(", goal: ${pillar.goalText}")
+                    append(". Tap to open.")
+                }
+            }
             .clickable(onClick = onClick)
             .padding(4.dp)
     ) {

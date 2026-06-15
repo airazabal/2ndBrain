@@ -100,4 +100,9 @@ interface SettingsRepository {
     fun setLastP2pSyncSuccess(success: Boolean)
     fun getConsecutiveP2pSyncFailures(): Int
     fun setConsecutiveP2pSyncFailures(count: Int)
+
+    // Co-pilot FAB position
+    fun getFabOffsetX(): Float
+    fun getFabOffsetY(): Float
+    fun saveFabPosition(x: Float, y: Float)
 }

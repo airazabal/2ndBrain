@@ -133,6 +133,7 @@ fun HomeScreen(
     taskLatencyStats: TaskLatencyStats = TaskLatencyStats(),
     agendaLoading: Boolean = false,
     onCompleteTask: (String) -> Unit = {},
+    onDismissOverdue: (String) -> Unit = {},
     onToggleHabit: (String) -> Unit = {},
     onRefreshAgenda: () -> Unit = {},
     onRefreshIntervalChange: (Int) -> Unit = {},
@@ -313,7 +314,9 @@ fun HomeScreen(
                 // Overdue section
                 if (overdueItems.isNotEmpty()) {
                     AgendaSectionLabel("OVERDUE", Color(0xFFE53935))
-                    overdueItems.forEach { item -> AgendaItemRow(item, taskLatencyStats, onCompleteTask, onToggleHabit) }
+                    overdueItems.forEach { item ->
+                        AgendaItemRow(item, taskLatencyStats, onCompleteTask, onToggleHabit, onDismissOverdue)
+                    }
                     Spacer(Modifier.height(12.dp))
                 }
 
@@ -376,7 +379,8 @@ private fun AgendaItemRow(
     item: TodayAgendaItem,
     taskLatencyStats: com.alex.a2ndbrain.core.todoist.TaskLatencyStats,
     onCompleteTask: (String) -> Unit,
-    onToggleHabit: (String) -> Unit
+    onToggleHabit: (String) -> Unit,
+    onDismissOverdue: (String) -> Unit = {}
 ) {
     val overdueColor = Color(0xFFE53935)
     val doneColor = Color(0xFF43A047)
@@ -452,6 +456,20 @@ private fun AgendaItemRow(
                 Surface(shape = RoundedCornerShape(4.dp), color = overdueColor.copy(alpha = 0.1f)) {
                     Text("${staleDays}d", style = MaterialTheme.typography.labelSmall,
                         color = overdueColor, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                }
+            }
+            // Dismiss button — only on overdue tasks, not on completed or upcoming
+            if (item.isOverdue && !item.isCompleted) {
+                IconButton(
+                    onClick = { onDismissOverdue(item.id) },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Skip for today",
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f),
+                        modifier = Modifier.size(14.dp)
+                    )
                 }
             }
         }
