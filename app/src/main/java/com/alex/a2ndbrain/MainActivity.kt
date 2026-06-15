@@ -481,7 +481,17 @@ class MainActivity : ComponentActivity() {
                                         ) {
                                             navTabs.forEach { (label, icon, tab) ->
                                                 NavigationRailItem(
-                                                    icon = { Icon(icon, contentDescription = label) },
+                                                    icon = {
+                                                        if (tab == AppTab.FEED && feedUnreadCount > 0) {
+                                                            BadgedBox(badge = {
+                                                                Badge { Text(if (feedUnreadCount > 99) "99+" else feedUnreadCount.toString()) }
+                                                            }) {
+                                                                Icon(icon, contentDescription = label)
+                                                            }
+                                                        } else {
+                                                            Icon(icon, contentDescription = label)
+                                                        }
+                                                    },
                                                     label = { Text(label) },
                                                     selected = currentTab == tab,
                                                     onClick = { navViewModel.setTab(tab) },
