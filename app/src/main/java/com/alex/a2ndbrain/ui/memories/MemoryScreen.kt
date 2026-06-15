@@ -49,6 +49,9 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.produceState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -123,21 +126,37 @@ fun MemoryScreen(
         if (pruned != selectedApps) selectedApps = pruned
     }
 
-    val dayGroups by remember(memories, monitoredApps, showUnreadOnly) {
-        derivedStateOf {
-        val filtered = memories.map { memory ->
-            val override = localReadOverrides[memory.id]
+    // Capture stable snapshots of all state needed for the computation so the
+    // background coroutine doesn't capture mutable Compose state references.
+    val memoriesSnapshot      = memories
+    val monitoredSnapshot     = monitoredApps
+    val selectedAppsSnapshot  = selectedApps
+    val showUnreadSnapshot    = showUnreadOnly
+    val overridesSnapshot     = localReadOverrides
+    val grandCentralSnapshot  = grandCentralResult
+
+    // produceState launches a new coroutine on Dispatchers.Default whenever any
+    // key changes, keeping deduplicateMemories (O(n²) Levenshtein) off the
+    // composition thread so it never contributes to frame drops while scrolling.
+    val dayGroups by produceState(
+        initialValue = emptyList<DayGroup>(),
+        memoriesSnapshot, monitoredSnapshot, selectedAppsSnapshot,
+        showUnreadSnapshot, overridesSnapshot, grandCentralSnapshot
+    ) {
+        value = withContext(Dispatchers.Default) {
+        val filtered = memoriesSnapshot.map { memory ->
+            val override = overridesSnapshot[memory.id]
             if (override != null) memory.copy(isRead = override) else memory
         }.filter { memory ->
             val appName = getAppName(context, memory.packageName, memory.source)
-            val appMatch = if (selectedApps.isNotEmpty()) {
-                selectedApps.contains(appName)
+            val appMatch = if (selectedAppsSnapshot.isNotEmpty()) {
+                selectedAppsSnapshot.contains(appName)
             } else {
-                monitoredApps.isEmpty() ||
+                monitoredSnapshot.isEmpty() ||
                     memory.source != "notification" ||
-                    monitoredApps.contains(memory.packageName)
+                    monitoredSnapshot.contains(memory.packageName)
             }
-            appMatch && (!showUnreadOnly || !memory.isRead)
+            appMatch && (!showUnreadSnapshot || !memory.isRead)
         }
 
         val sdf = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault())
@@ -146,15 +165,14 @@ fun MemoryScreen(
             val sorted = rawMemories.sortedByDescending { it.timestamp }
             val merged = deduplicateMemories(sorted)
 
-            val appGroups: List<AppGroup> = if (useAiCategories && grandCentralResult.idToCategoryMap.isNotEmpty()) {
-                // Group by AI category; fall back to app name for items not in the map
+            val appGroups: List<AppGroup> = if (useAiCategories && grandCentralSnapshot.idToCategoryMap.isNotEmpty()) {
                 val byCategoryName = merged.groupBy { item ->
-                    grandCentralResult.idToCategoryMap[item.primary.id]
+                    grandCentralSnapshot.idToCategoryMap[item.primary.id]
                         ?: getAppName(context, item.primary.packageName, item.primary.source)
                 }
                 byCategoryName.map { (groupName, items) ->
                     val rep = items.first().primary
-                    val emoji = grandCentralResult.categoryEmojiMap[groupName] ?: ""
+                    val emoji = grandCentralSnapshot.categoryEmojiMap[groupName] ?: ""
                     AppGroup(appName = groupName, packageName = rep.packageName, source = rep.source,
                         memories = items, categoryEmoji = emoji)
                 }.sortedWith(compareByDescending<AppGroup> { it.categoryEmoji.isNotEmpty() }
@@ -173,7 +191,6 @@ fun MemoryScreen(
             )
         }
 
-        // Bucket memories into day slots 0..6 (today = 0, yesterday = 1, …)
         val buckets = Array(7) { mutableListOf<MemoryEntity>() }
         val dayBoundaries = Array(7) { getStartOfDay(it) }
 

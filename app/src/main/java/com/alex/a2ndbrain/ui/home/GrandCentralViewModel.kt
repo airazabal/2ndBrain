@@ -15,8 +15,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import java.util.Calendar
 
 @OptIn(FlowPreview::class)
@@ -44,7 +46,7 @@ class GrandCentralViewModel(
             (monitored.isEmpty() || monitored.contains(m.packageName))
         }
         deduplicateMemories(emailMemories).count { !it.isRead }
-    }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     val unreadMessageCount: StateFlow<Int> = combine(allMemories, _monitoredAppsState) { memories, monitored ->
         val startOfToday = startOfToday()
@@ -54,7 +56,7 @@ class GrandCentralViewModel(
             (monitored.isEmpty() || monitored.contains(m.packageName))
         }
         deduplicateMemories(todayMessaging).count { !it.isRead }
-    }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
+    }.flowOn(Dispatchers.Default).stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
     private val _grandCentralResult = MutableStateFlow(GrandCentralResult())
     val grandCentralResult: StateFlow<GrandCentralResult> = _grandCentralResult.asStateFlow()
