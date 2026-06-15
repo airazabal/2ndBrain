@@ -38,8 +38,6 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
-import com.alex.a2ndbrain.core.reflection.ReflectionManager
-import com.alex.a2ndbrain.core.usage.DigitalTimeManager
 import com.alex.a2ndbrain.ui.chat.CopilotViewModel
 import com.alex.a2ndbrain.ui.home.HomeScreen
 import com.alex.a2ndbrain.ui.home.HomeViewModel
@@ -68,8 +66,6 @@ import org.koin.androidx.viewmodel.ext.android.viewModel as koinActivityViewMode
 class MainActivity : ComponentActivity() {
     private val clipboardCaptureManager: ClipboardCaptureManager by inject()
     private val settingsManager: SettingsRepository by inject()
-    private val reflectionPicker: ReflectionManager by inject()
-    private val digitalTimeManager: DigitalTimeManager by inject()
     private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager by inject()
     // Eagerly instantiated so it wires cloudSync into HealthRepository before first health read
     private val cloudHealthSyncManager: com.alex.a2ndbrain.core.sync.CloudHealthSyncManager by inject()
@@ -157,19 +153,7 @@ class MainActivity : ComponentActivity() {
         
         com.alex.a2ndbrain.core.sync.FirebaseInitializer.init(this)
         triggerGoogleSignInIfNeeded()
-        reflectionPicker.scheduleWorkers()
-        val circadianManager: com.alex.a2ndbrain.core.reflection.CircadianInsightManager by inject()
-        circadianManager.scheduleWeeklyAnalysis()
-        digitalTimeManager.schedulePeriodicSync()
-        nearbySyncManager.schedulePeriodicP2pSync()
-        com.alex.a2ndbrain.core.sync.CloudSyncWorker.schedule(this)
-        com.alex.a2ndbrain.core.usage.DistractionAlertWorker.schedule(this)
-        com.alex.a2ndbrain.core.todoist.TodoistReminderWorker.schedule(this)
-        com.alex.a2ndbrain.core.todoist.TodoistReminderWorker.runNow(this)
-        com.alex.a2ndbrain.core.mood.MoodReminderWorker.schedule(this)
-        com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.schedule(this)
         handleTileIntent(intent)
-        com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.runNow(this)
 
         enableEdgeToEdge()
         setContent {
