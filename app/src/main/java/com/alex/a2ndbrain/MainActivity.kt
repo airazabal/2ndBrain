@@ -323,6 +323,10 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        // Unread capture count — drives Feed tab badge
+                        val allMemories by memoryViewModel.memories.collectAsStateWithLifecycle()
+                        val feedUnreadCount = remember(allMemories) { allMemories.count { !it.isRead } }
+
                         // Hoisted so TopAppBar badge and Settings screen both use it
                         val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
                         val isSyncing = syncStatus is com.alex.a2ndbrain.core.sync.NearbySyncManager.SyncStatus.Scanning ||
@@ -447,7 +451,17 @@ class MainActivity : ComponentActivity() {
                                         ) {
                                             navTabs.forEach { (label, icon, tab) ->
                                                 NavigationBarItem(
-                                                    icon = { Icon(icon, contentDescription = label) },
+                                                    icon = {
+                                                        if (tab == AppTab.FEED && feedUnreadCount > 0) {
+                                                            BadgedBox(badge = {
+                                                                Badge { Text(if (feedUnreadCount > 99) "99+" else feedUnreadCount.toString()) }
+                                                            }) {
+                                                                Icon(icon, contentDescription = label)
+                                                            }
+                                                        } else {
+                                                            Icon(icon, contentDescription = label)
+                                                        }
+                                                    },
                                                     label = { Text(label) },
                                                     selected = currentTab == tab,
                                                     onClick = { navViewModel.setTab(tab) },
