@@ -19,9 +19,10 @@ import kotlinx.coroutines.flow.stateIn
 data class SearchResults(
     val memories: List<MemoryEntity> = emptyList(),
     val summaries: List<DailySummaryEntity> = emptyList(),
-    val isLoading: Boolean = false
+    val isLoading: Boolean = false,
+    val error: String? = null
 ) {
-    val isEmpty get() = memories.isEmpty() && summaries.isEmpty()
+    val isEmpty get() = memories.isEmpty() && summaries.isEmpty() && error == null
     val total get() = memories.size + summaries.size
 }
 
@@ -42,9 +43,13 @@ class SearchViewModel(
                     return@flow
                 }
                 emit(SearchResults(isLoading = true))
-                val memories = memoryRepository.searchMemoriesSync(q).take(20)
-                val summaries = memoryRepository.searchSummaries(q)
-                emit(SearchResults(memories, summaries))
+                try {
+                    val memories = memoryRepository.searchMemoriesSync(q).take(20)
+                    val summaries = memoryRepository.searchSummaries(q)
+                    emit(SearchResults(memories, summaries))
+                } catch (e: Exception) {
+                    emit(SearchResults(error = "Search unavailable. Please try again."))
+                }
             }.flowOn(Dispatchers.IO)
         }
         .stateIn(viewModelScope, SharingStarted.Lazily, SearchResults())

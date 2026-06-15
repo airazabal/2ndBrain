@@ -89,6 +89,25 @@ fun SearchScreen(
             results.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
+            results.error != null -> Box(
+                Modifier.fillMaxSize().padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        results.error ?: "",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    TextButton(onClick = { viewModel.setQuery(query) }) {
+                        Text("Retry")
+                    }
+                }
+            }
             results.isEmpty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("No results for \"$query\"", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
