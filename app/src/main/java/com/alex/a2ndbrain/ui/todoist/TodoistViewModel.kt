@@ -29,6 +29,7 @@ class TodoistViewModel(
         viewModelScope.launch {
             repository.getAllCompletionsFlow().collect { completions ->
                 _uiState.update { it.copy(completions = completions) }
+                refreshCounts()
             }
         }
         viewModelScope.launch {
@@ -36,7 +37,6 @@ class TodoistViewModel(
                 _uiState.update { it.copy(weeklyActivity = activity) }
             }
         }
-        refreshCounts()
     }
 
     private fun refreshCounts() {

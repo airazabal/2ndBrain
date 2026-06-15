@@ -551,6 +551,7 @@ class NearbySyncManager(
                     json.put("taskContent", c.taskContent)
                     json.put("completedAt", c.completedAt)
                     json.put("date", c.date)
+                    json.put("status", c.status)
                     completionsJsonArray.put(json)
                 }
 
@@ -983,27 +984,42 @@ class NearbySyncManager(
     private fun importTodoistCompletions(jsonArray: JSONArray) {
         scope.launch(Dispatchers.IO) {
             try {
-                val existingIds = todoistStatsRepository.getAllCompletions().map { it.id }.toSet()
+                val existingById = todoistStatsRepository.getAllCompletions().associateBy { it.id }
                 var importedCount = 0
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)
                     val id = obj.getString("id")
-                    if (id !in existingIds) {
+                    val incomingStatus = obj.optString("status", com.alex.a2ndbrain.core.todoist.TodoistCompletionEntity.STATUS_COMPLETED)
+                    val existing = existingById[id]
+                    // MISSED always wins: insert new records or upgrade COMPLETED→MISSED,
+                    // but never overwrite a MISSED record with COMPLETED (prevents bidirectional
+                    // sync from clobbering authoritative missed status with a stale copy).
+                    val shouldWrite = when {
+                        existing == null -> true
+                        incomingStatus == com.alex.a2ndbrain.core.todoist.TodoistCompletionEntity.STATUS_MISSED
+                                && existing.status != com.alex.a2ndbrain.core.todoist.TodoistCompletionEntity.STATUS_MISSED -> true
+                        else -> false
+                    }
+                    if (shouldWrite) {
                         todoistStatsRepository.insertCompletion(TodoistCompletion(
                             id = id,
                             taskId = obj.getString("taskId"),
                             taskContent = obj.getString("taskContent"),
                             completedAt = obj.getLong("completedAt"),
-                            date = obj.getString("date")
+                            date = obj.getString("date"),
+                            status = incomingStatus
                         ))
+                        importedCount++
                     }
                 }
                 if (importedCount > 0) {
                     for (i in 0 until jsonArray.length()) {
                         try {
                             val obj = jsonArray.getJSONObject(i)
-                            val content = "Completed task: ${obj.getString("taskContent")}"
-                            memoryRepository.insertEpisodicEvent(content, "task")
+                            if (obj.optString("status") != com.alex.a2ndbrain.core.todoist.TodoistCompletionEntity.STATUS_MISSED) {
+                                val content = "Completed task: ${obj.getString("taskContent")}"
+                                memoryRepository.insertEpisodicEvent(content, "task")
+                            }
                         } catch (_: Exception) {}
                     }
                 }
