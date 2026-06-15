@@ -202,6 +202,12 @@ object DatabaseMigrations {
         }
     }
 
+    val MIGRATION_30_31 = object : Migration(30, 31) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE todoist_completions ADD COLUMN status TEXT NOT NULL DEFAULT 'COMPLETED'")
+        }
+    }
+
     val ALL_MIGRATIONS: Array<Migration> = arrayOf(
         MIGRATION_14_15,
         MIGRATION_15_16,
@@ -218,6 +224,7 @@ object DatabaseMigrations {
         MIGRATION_26_27,
         MIGRATION_27_28,
         MIGRATION_28_29,
-        MIGRATION_29_30
+        MIGRATION_29_30,
+        MIGRATION_30_31
     )
 }

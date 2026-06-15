@@ -86,8 +86,11 @@ fun WellnessScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        // Primary 5-group tab row
-        TabRow(selectedTabIndex = WellnessGroup.entries.indexOf(selectedGroup)) {
+        // Primary 5-group tab row — scrollable so tabs never truncate on small screens
+        ScrollableTabRow(
+            selectedTabIndex = WellnessGroup.entries.indexOf(selectedGroup),
+            edgePadding = 0.dp
+        ) {
             WellnessGroup.entries.forEach { group ->
                 Tab(
                     selected = selectedGroup == group,
@@ -187,6 +190,8 @@ fun WellnessScreen(
                         todayCount = todoistUiState.todayCount,
                         weeklyCount = todoistUiState.weeklyCount,
                         totalCount = todoistUiState.totalCount,
+                        todayMissedCount = todoistUiState.todayMissedCount,
+                        weeklyMissedCount = todoistUiState.weeklyMissedCount,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

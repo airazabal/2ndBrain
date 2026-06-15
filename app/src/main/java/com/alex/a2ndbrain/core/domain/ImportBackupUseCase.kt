@@ -46,5 +46,10 @@ class ImportBackupUseCase(
         }
         if (obj.has("distractionThresholdMinutes"))
             settingsManager.setDistractionThresholdMinutes(obj.getInt("distractionThresholdMinutes"))
+        if (obj.has("fabOffsetX") && obj.has("fabOffsetY"))
+            settingsManager.saveFabPosition(
+                obj.getDouble("fabOffsetX").toFloat(),
+                obj.getDouble("fabOffsetY").toFloat()
+            )
     }
 }

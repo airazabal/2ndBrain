@@ -652,6 +652,7 @@ class MainActivity : ComponentActivity() {
                                                         taskLatencyStats = taskLatencyStats,
                                                         agendaLoading = agendaLoading,
                                                         onCompleteTask = { id -> todayAgendaViewModel.completeTask(id) },
+                                                        onDismissOverdue = { id -> todayAgendaViewModel.dismissOverdueTask(id) },
                                                         onToggleHabit = { id -> todayAgendaViewModel.toggleHabit(id) },
                                                         onRefreshAgenda = { todayAgendaViewModel.refresh() },
                                                         onRefreshIntervalChange = { homeViewModel.setRefreshInterval(it) },
@@ -855,8 +856,8 @@ class MainActivity : ComponentActivity() {
                                             if (!useRail && currentTab != AppTab.NOTES && currentTab != AppTab.COPILOT) {
                                                 val fabSizePx = with(androidx.compose.ui.platform.LocalDensity.current) { 56.dp.toPx() }
                                                 val fabPadPx = with(androidx.compose.ui.platform.LocalDensity.current) { 16.dp.toPx() }
-                                                var fabOffsetX by rememberSaveable { mutableFloatStateOf(0f) }
-                                                var fabOffsetY by rememberSaveable { mutableFloatStateOf(0f) }
+                                                var fabOffsetX by remember { mutableFloatStateOf(settingsManager.getFabOffsetX()) }
+                                                var fabOffsetY by remember { mutableFloatStateOf(settingsManager.getFabOffsetY()) }
 
                                                 // First-run coach mark — appears above FAB, fades after 5s
                                                 val fabCoachPrefs = remember { getSharedPreferences("coach_marks", android.content.Context.MODE_PRIVATE) }
@@ -909,6 +910,7 @@ class MainActivity : ComponentActivity() {
                                                                         .coerceIn(-(maxW - fabSizePx - fabPadPx), 0f)
                                                                     fabOffsetY = (fabOffsetY + dragAmount.y)
                                                                         .coerceIn(-(maxH - fabSizePx - fabPadPx), 0f)
+                                                                    settingsManager.saveFabPosition(fabOffsetX, fabOffsetY)
                                                                 }
                                                             )
                                                         }

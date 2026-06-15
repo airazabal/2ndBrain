@@ -15,13 +15,21 @@ class FakeTodoistStatsRepository : TodoistStatsRepository {
     override fun getWeeklyActivity(): Flow<List<Pair<String, Int>>> =
         MutableStateFlow(emptyList())
 
+    val savedMissed = mutableListOf<Pair<String, String>>()
+
     override suspend fun saveCompletion(taskId: String, taskContent: String) {
         savedCompletions += taskId to taskContent
+    }
+
+    override suspend fun saveMissed(taskId: String, taskContent: String) {
+        savedMissed += taskId to taskContent
     }
 
     override suspend fun getTodayCount(): Int = 0
     override suspend fun getWeeklyCount(): Int = 0
     override suspend fun getTotalCount(): Int = savedCompletions.size
+    override suspend fun getTodayMissedCount(): Int = savedMissed.size
+    override suspend fun getWeeklyMissedCount(): Int = savedMissed.size
 
     override suspend fun getAllCompletions(): List<TodoistCompletion> = completions.value
 

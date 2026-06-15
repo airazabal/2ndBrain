@@ -34,9 +34,18 @@ class TodayAgendaViewModel(
     private val _taskLatencyStats = MutableStateFlow(TaskLatencyStats())
     val taskLatencyStats: StateFlow<TaskLatencyStats> = _taskLatencyStats.asStateFlow()
 
+    // Overdue tasks dismissed for this session — cleared on next app open so they
+    // resurface in Todoist if still overdue. Each dismiss is also persisted as MISSED.
+    private val _dismissedOverdueIds = MutableStateFlow<Set<String>>(emptySet())
+
+    private val _visibleOverdue: Flow<List<TodoistTask>> =
+        combine(_todoistOverdue, _dismissedOverdueIds) { overdue, dismissed ->
+            overdue.filter { it.id !in dismissed }
+        }
+
     val agendaItems: StateFlow<List<TodayAgendaItem>> = combine(
         _todoistToday,
-        _todoistOverdue,
+        _visibleOverdue,
         habitSyncManager.getTodayHabitsFlow(),
         habitSyncManager.getCompletionsForDateFlow(today)
     ) { todayTasks, overdueTasks, habits, completions ->
@@ -110,6 +119,14 @@ class TodayAgendaViewModel(
                 _todoistOverdue.value = _todoistOverdue.value.filter { it.id != taskId }
                 _taskLatencyStats.value = taskLatencyTracker.getStats(_todoistOverdue.value)
             }
+        }
+    }
+
+    fun dismissOverdueTask(taskId: String) {
+        val task = _todoistOverdue.value.find { it.id == taskId } ?: return
+        _dismissedOverdueIds.value = _dismissedOverdueIds.value + taskId
+        viewModelScope.launch(Dispatchers.IO) {
+            todoistStatsRepository.saveMissed(task.id, task.content)
         }
     }
 

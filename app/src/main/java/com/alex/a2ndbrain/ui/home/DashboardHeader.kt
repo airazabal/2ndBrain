@@ -16,6 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -186,6 +189,9 @@ private fun DashCard(
     Card(
         modifier = Modifier
             .width(148.dp)
+            .clearAndSetSemantics {
+                contentDescription = "${label.replace("\n", " ")}: $value. $subtitle."
+            }
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -250,7 +256,11 @@ private fun RefreshChip(intervalMinutes: Int, onIntervalChange: (Int) -> Unit) {
         Surface(
             shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.clickable { showMenu = true }
+            modifier = Modifier
+                .clearAndSetSemantics {
+                    contentDescription = "Refreshes every $label. Tap to change interval."
+                }
+                .clickable { showMenu = true }
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),

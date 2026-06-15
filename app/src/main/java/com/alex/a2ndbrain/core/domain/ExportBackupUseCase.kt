@@ -79,6 +79,8 @@ class ExportBackupUseCase(
             put("digitalFocusBaselineMinutes", settingsManager.getDigitalFocusBaselineMinutes())
             put("distractionApps", JSONArray().also { arr -> settingsManager.getDistractionApps().forEach { arr.put(it) } })
             put("distractionThresholdMinutes", settingsManager.getDistractionThresholdMinutes())
+            put("fabOffsetX", settingsManager.getFabOffsetX())
+            put("fabOffsetY", settingsManager.getFabOffsetY())
         }.toString(2)
     }
 }
