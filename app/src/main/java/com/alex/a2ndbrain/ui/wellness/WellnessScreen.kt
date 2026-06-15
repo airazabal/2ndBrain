@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alex.a2ndbrain.ui.exercise.ExerciseScreen
 import com.alex.a2ndbrain.ui.exercise.ExerciseViewModel
@@ -22,20 +23,43 @@ import com.alex.a2ndbrain.ui.todoist.TodoistViewModel
 import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsScreen
 import com.alex.a2ndbrain.ui.trends.SenseOfDayTrendsViewModel
 import com.alex.a2ndbrain.ui.usage.DigitalTimeScreen
-import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
-private enum class WellnessTab(val label: String) {
-    HEALTH("Health"),
-    EXERCISE("Exercise"),
+private enum class WellnessGroup(val label: String) {
+    BODY("Body"),
+    MIND("Mind"),
     HABITS("Habits"),
-    GOALS("Goals"),
-    MOOD("Mood"),
-    TASKS("Tasks"),
-    TRENDS("Sense of Day"),
-    MEDITATION("Meditation"),
-    ONLINE("Online"),
-    REFLECT("Reflect")
+    TIME("Time"),
+    INSIGHTS("Insights")
+}
+
+private enum class WellnessLeaf(val label: String, val group: WellnessGroup) {
+    HEALTH("Health", WellnessGroup.BODY),
+    EXERCISE("Exercise", WellnessGroup.BODY),
+    MOOD("Mood", WellnessGroup.MIND),
+    MEDITATION("Meditation", WellnessGroup.MIND),
+    HABIT_LIST("Habits", WellnessGroup.HABITS),
+    GOALS("Goals", WellnessGroup.HABITS),
+    ONLINE("Online", WellnessGroup.TIME),
+    TASKS("Tasks", WellnessGroup.TIME),
+    TRENDS("Sense of Day", WellnessGroup.INSIGHTS),
+    REFLECT("Reflect", WellnessGroup.INSIGHTS)
+}
+
+private val groupLeaves: Map<WellnessGroup, List<WellnessLeaf>> =
+    WellnessLeaf.entries.groupBy { it.group }
+
+private fun resolveInitialLeaf(initialTab: String): WellnessLeaf = when (initialTab) {
+    "EXERCISE"   -> WellnessLeaf.EXERCISE
+    "MOOD"       -> WellnessLeaf.MOOD
+    "MEDITATION" -> WellnessLeaf.MEDITATION
+    "HABITS"     -> WellnessLeaf.HABIT_LIST
+    "GOALS"      -> WellnessLeaf.GOALS
+    "TASKS"      -> WellnessLeaf.TASKS
+    "ONLINE"     -> WellnessLeaf.ONLINE
+    "TRENDS"     -> WellnessLeaf.TRENDS
+    "REFLECT"    -> WellnessLeaf.REFLECT
+    else         -> WellnessLeaf.HEALTH
 }
 
 @Composable
@@ -53,48 +77,55 @@ fun WellnessScreen(
 
     LaunchedEffect(Unit) { healthViewModel.refresh() }
 
-    val startTab = WellnessTab.entries.firstOrNull { it.name == initialTab } ?: WellnessTab.HEALTH
-    var selectedTab by remember { mutableStateOf(startTab) }
+    val startLeaf = resolveInitialLeaf(initialTab)
+    var selectedGroup by remember { mutableStateOf(startLeaf.group) }
+    var selectedLeaf by remember { mutableStateOf(startLeaf) }
 
-    LaunchedEffect(selectedTab) {
-        if (selectedTab == WellnessTab.GOALS) goalsViewModel.refresh()
+    LaunchedEffect(selectedLeaf) {
+        if (selectedLeaf == WellnessLeaf.GOALS) goalsViewModel.refresh()
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        ScrollableTabRow(selectedTabIndex = selectedTab.ordinal) {
-            WellnessTab.entries.forEach { tab ->
+        // Primary 5-group tab row
+        TabRow(selectedTabIndex = WellnessGroup.entries.indexOf(selectedGroup)) {
+            WellnessGroup.entries.forEach { group ->
                 Tab(
-                    selected = selectedTab == tab,
-                    onClick = { selectedTab = tab },
-                    text = { Text(tab.label) }
+                    selected = selectedGroup == group,
+                    onClick = {
+                        if (selectedGroup != group) {
+                            selectedGroup = group
+                            selectedLeaf = groupLeaves[group]!!.first()
+                        }
+                    },
+                    text = { Text(group.label) }
                 )
             }
         }
 
-        // Each branch collects ONLY its own state — changes in one tab never recompose another.
+        // Secondary segmented picker — 2 choices per group
+        val leaves = groupLeaves[selectedGroup] ?: emptyList()
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            leaves.forEachIndexed { index, leaf ->
+                SegmentedButton(
+                    selected = selectedLeaf == leaf,
+                    onClick = { selectedLeaf = leaf },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = leaves.size),
+                    label = { Text(leaf.label) }
+                )
+            }
+        }
+
+        // Content — each branch collects only its own state so changes in one leaf never recompose another
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            when (selectedTab) {
-                WellnessTab.HEALTH -> HealthScreen(viewModel = healthViewModel, modifier = Modifier.fillMaxSize())
+            when (selectedLeaf) {
+                WellnessLeaf.HEALTH ->
+                    HealthScreen(viewModel = healthViewModel, modifier = Modifier.fillMaxSize())
 
-                WellnessTab.TASKS -> {
-                    val todoistUiState by todoistViewModel.uiState.collectAsStateWithLifecycle()
-                    TodoistScreen(
-                        completions = todoistUiState.completions,
-                        weeklyActivity = todoistUiState.weeklyActivity,
-                        todayCount = todoistUiState.todayCount,
-                        weeklyCount = todoistUiState.weeklyCount,
-                        totalCount = todoistUiState.totalCount,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-
-                WellnessTab.HABITS -> HabitsScreen(modifier = Modifier.fillMaxSize())
-
-                WellnessTab.GOALS -> GoalsScreen(viewModel = goalsViewModel, modifier = Modifier.fillMaxSize())
-
-                WellnessTab.MOOD -> MoodScreen(modifier = Modifier.fillMaxSize())
-
-                WellnessTab.EXERCISE -> {
+                WellnessLeaf.EXERCISE -> {
                     val exerciseUiState by exerciseViewModel.uiState.collectAsStateWithLifecycle()
                     ExerciseScreen(
                         sessions = exerciseUiState.sessions,
@@ -130,20 +161,42 @@ fun WellnessScreen(
                     )
                 }
 
-                WellnessTab.TRENDS -> {
-                    val trendsUiState by trendsViewModel.uiState.collectAsStateWithLifecycle()
-                    SenseOfDayTrendsScreen(uiState = trendsUiState, modifier = Modifier.fillMaxSize())
-                }
+                WellnessLeaf.MOOD ->
+                    MoodScreen(modifier = Modifier.fillMaxSize())
 
-                WellnessTab.MEDITATION -> {
+                WellnessLeaf.MEDITATION -> {
                     val sessions by wellnessViewModel.meditationSessions.collectAsStateWithLifecycle()
                     val streaks by wellnessViewModel.meditationStreaks.collectAsStateWithLifecycle()
                     MeditationScreen(sessions = sessions, streaks = streaks)
                 }
 
-                WellnessTab.ONLINE -> DigitalTimeScreen()
+                WellnessLeaf.HABIT_LIST ->
+                    HabitsScreen(modifier = Modifier.fillMaxSize())
 
-                WellnessTab.REFLECT -> {
+                WellnessLeaf.GOALS ->
+                    GoalsScreen(viewModel = goalsViewModel, modifier = Modifier.fillMaxSize())
+
+                WellnessLeaf.ONLINE ->
+                    DigitalTimeScreen()
+
+                WellnessLeaf.TASKS -> {
+                    val todoistUiState by todoistViewModel.uiState.collectAsStateWithLifecycle()
+                    TodoistScreen(
+                        completions = todoistUiState.completions,
+                        weeklyActivity = todoistUiState.weeklyActivity,
+                        todayCount = todoistUiState.todayCount,
+                        weeklyCount = todoistUiState.weeklyCount,
+                        totalCount = todoistUiState.totalCount,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                WellnessLeaf.TRENDS -> {
+                    val trendsUiState by trendsViewModel.uiState.collectAsStateWithLifecycle()
+                    SenseOfDayTrendsScreen(uiState = trendsUiState, modifier = Modifier.fillMaxSize())
+                }
+
+                WellnessLeaf.REFLECT -> {
                     val summaries by reflectionViewModel.summaries.collectAsStateWithLifecycle()
                     val weeklyUsageStats by reflectionViewModel.weeklyUsageStats.collectAsStateWithLifecycle()
                     val weeklyHealthTrends by reflectionViewModel.weeklyHealthTrends.collectAsStateWithLifecycle()

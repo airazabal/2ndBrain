@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.mutableFloatStateOf
@@ -165,6 +166,7 @@ class MainActivity : ComponentActivity() {
         com.alex.a2ndbrain.core.usage.DistractionAlertWorker.schedule(this)
         com.alex.a2ndbrain.core.todoist.TodoistReminderWorker.schedule(this)
         com.alex.a2ndbrain.core.todoist.TodoistReminderWorker.runNow(this)
+        com.alex.a2ndbrain.core.mood.MoodReminderWorker.schedule(this)
         com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.schedule(this)
         handleTileIntent(intent)
         com.alex.a2ndbrain.ui.widget.WidgetUpdateWorker.runNow(this)
@@ -321,6 +323,12 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        // Hoisted so TopAppBar badge and Settings screen both use it
+                        val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
+                        val isSyncing = syncStatus is com.alex.a2ndbrain.core.sync.NearbySyncManager.SyncStatus.Scanning ||
+                                syncStatus is com.alex.a2ndbrain.core.sync.NearbySyncManager.SyncStatus.Connecting ||
+                                syncStatus is com.alex.a2ndbrain.core.sync.NearbySyncManager.SyncStatus.Syncing
+
                         val configuration = androidx.compose.ui.platform.LocalConfiguration.current
                         val useRail = configuration.screenWidthDp >= 600
 
@@ -424,7 +432,9 @@ class MainActivity : ComponentActivity() {
                                                     Icon(Icons.Default.Search, contentDescription = "Search")
                                                 }
                                                 IconButton(onClick = { navViewModel.setTab(AppTab.SETTINGS) }) {
-                                                    Icon(Icons.Default.Settings, contentDescription = "Settings")
+                                                    BadgedBox(badge = { if (isSyncing) Badge() }) {
+                                                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                                                    }
                                                 }
                                             }
                                         )
@@ -747,7 +757,6 @@ class MainActivity : ComponentActivity() {
 
                                                 AppTab.SETTINGS -> {
                                                     val themePreference by settingsViewModel.themePreference.collectAsStateWithLifecycle()
-                                                    val syncStatus by settingsViewModel.syncStatus.collectAsStateWithLifecycle()
                                                     val lastSyncTimestamp = (syncStatus as? com.alex.a2ndbrain.core.sync.NearbySyncManager.SyncStatus.Success)?.atMs
                                                         ?: settingsViewModel.getLastSyncedAtMs()
                                                     AppCaptureSettingsScreen(
@@ -850,6 +859,45 @@ class MainActivity : ComponentActivity() {
                                                 val fabPadPx = with(androidx.compose.ui.platform.LocalDensity.current) { 16.dp.toPx() }
                                                 var fabOffsetX by rememberSaveable { mutableFloatStateOf(0f) }
                                                 var fabOffsetY by rememberSaveable { mutableFloatStateOf(0f) }
+
+                                                // First-run coach mark — appears above FAB, fades after 5s
+                                                val fabCoachPrefs = remember { getSharedPreferences("coach_marks", android.content.Context.MODE_PRIVATE) }
+                                                var fabCoachVisible by remember { mutableStateOf(!fabCoachPrefs.getBoolean("fab_drag", false)) }
+                                                if (fabCoachVisible) {
+                                                    LaunchedEffect(Unit) {
+                                                        kotlinx.coroutines.delay(5_000)
+                                                        fabCoachVisible = false
+                                                        fabCoachPrefs.edit().putBoolean("fab_drag", true).apply()
+                                                    }
+                                                    androidx.compose.animation.AnimatedVisibility(
+                                                        visible = fabCoachVisible,
+                                                        enter = androidx.compose.animation.fadeIn(),
+                                                        exit = androidx.compose.animation.fadeOut(),
+                                                        modifier = Modifier
+                                                            .align(Alignment.BottomEnd)
+                                                            .padding(end = 80.dp, bottom = 22.dp)
+                                                    ) {
+                                                        androidx.compose.material3.Surface(
+                                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+                                                            color = MaterialTheme.colorScheme.inverseSurface.copy(alpha = 0.93f),
+                                                            modifier = Modifier
+                                                                .widthIn(max = 220.dp)
+                                                                .clickable {
+                                                                    fabCoachVisible = false
+                                                                    fabCoachPrefs.edit().putBoolean("fab_drag", true).apply()
+                                                                }
+                                                        ) {
+                                                            Text(
+                                                                text = "💡 Long-press to drag anywhere. Tap to ask questions about your day.",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.inverseOnSurface,
+                                                                modifier = Modifier.padding(10.dp),
+                                                                lineHeight = androidx.compose.ui.unit.TextUnit(16f, androidx.compose.ui.unit.TextUnitType.Sp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+
                                                 FloatingActionButton(
                                                     onClick = { navViewModel.setTab(AppTab.COPILOT) },
                                                     modifier = Modifier

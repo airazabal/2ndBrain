@@ -155,6 +155,10 @@ fun HomeScreen(
     var isTimelineExpanded by remember { mutableStateOf(true) }
     var expandedTimelineEventId by remember { mutableStateOf<String?>(null) }
 
+    // Morning (5–11h) → Grand Central open by default; rest of day → collapsed
+    val currentHour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+    var grandCentralExpanded by rememberSaveable { mutableStateOf(currentHour in 5..11) }
+
     LaunchedEffect(Unit) {
         onRefreshHealth()
     }
@@ -235,6 +239,8 @@ fun HomeScreen(
                 healthMetrics      = healthMetrics,
                 unreadEmailCount   = unreadEmailCount,
                 unreadMessageCount = unreadMessageCount,
+                isExpanded         = grandCentralExpanded,
+                onToggleExpand     = { grandCentralExpanded = !grandCentralExpanded },
                 onTasksClick       = {
                     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -462,6 +468,8 @@ private fun GrandCentralCard(
     unreadEmailCount: Int,
     unreadMessageCount: Int,
     latestReflection: DailySummaryEntity? = null,
+    isExpanded: Boolean = true,
+    onToggleExpand: () -> Unit = {},
     onTasksClick: () -> Unit,
     onEmailClick: () -> Unit,
     onMessagesClick: () -> Unit,
@@ -505,9 +513,9 @@ private fun GrandCentralCard(
     ) {
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
 
-            // Header
+            // Header — tap anywhere to expand/collapse
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggleExpand),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -517,16 +525,47 @@ private fun GrandCentralCard(
                     Text("GRAND CENTRAL", fontSize = 10.sp, fontWeight = FontWeight.Bold,
                         letterSpacing = 0.8.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                 }
-                if (grandCentralResult.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary)
-                } else if (grandCentralResult.categories.isNotEmpty()) {
-                    Text("${grandCentralResult.categories.sumOf { it.items.size }} notifications",
-                        fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (grandCentralResult.isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary)
+                    } else if (!isExpanded) {
+                        // Compact summary chips when collapsed
+                        val alertCount = localAlerts.size
+                        val actionCount = grandCentralResult.suggestedActions.size
+                        val notifCount = grandCentralResult.categories.sumOf { it.items.size }
+                        if (alertCount > 0) {
+                            Surface(shape = RoundedCornerShape(4.dp), color = Color(0xFFD32F2F).copy(alpha = 0.12f)) {
+                                Text("$alertCount alert${if (alertCount == 1) "" else "s"}",
+                                    fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFFD32F2F),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            }
+                        }
+                        if (actionCount > 0) {
+                            Surface(shape = RoundedCornerShape(4.dp), color = Color(0xFF1E88E5).copy(alpha = 0.10f)) {
+                                Text("$actionCount action${if (actionCount == 1) "" else "s"}",
+                                    fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E88E5),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                            }
+                        }
+                        if (notifCount > 0 && alertCount == 0 && actionCount == 0) {
+                            Text("$notifCount notifications", fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                        }
+                    } else if (grandCentralResult.categories.isNotEmpty()) {
+                        Text("${grandCentralResult.categories.sumOf { it.items.size }} notifications",
+                            fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
+                    }
+                    Icon(
+                        if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.35f)
+                    )
                 }
             }
 
-            // ── Right Now (local alerts) ──────────────────────────────────────
+            // ── Right Now (local alerts) — always visible regardless of expand state ──
             if (localAlerts.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
                 Text("RIGHT NOW", fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
@@ -547,6 +586,13 @@ private fun GrandCentralCard(
                 }
             }
 
+            // ── Collapsible body ──────────────────────────────────────────────
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) { Column {
+
             // ── Loading placeholder ───────────────────────────────────────────
             if (grandCentralResult.isLoading) {
                 Spacer(Modifier.height(12.dp))
@@ -557,8 +603,13 @@ private fun GrandCentralCard(
             // ── Suggested Actions ─────────────────────────────────────────────
             if (grandCentralResult.suggestedActions.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("SUGGESTED ACTIONS", fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.5.sp, color = Color(0xFF1E88E5).copy(alpha = 0.8f))
+                CoachMark(
+                    prefKey = "grand_central_actions",
+                    text = "Time-sensitive items from your notifications — tap to open."
+                ) {
+                    Text("SUGGESTED ACTIONS", fontSize = 9.sp, fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.5.sp, color = Color(0xFF1E88E5).copy(alpha = 0.8f))
+                }
                 Spacer(Modifier.height(6.dp))
                 grandCentralResult.suggestedActions.forEach { action ->
                     Row(
@@ -772,6 +823,7 @@ private fun GrandCentralCard(
                     lineHeight = 18.sp
                 )
             }
+            } } // end AnimatedVisibility Column + AnimatedVisibility
         }
     }
 }
@@ -1245,27 +1297,33 @@ fun GlassmorphicConflictCard(
                 }
                 
                 // Deep Dive Button (switches to Co-Pilot screen)
-                Button(
-                    onClick = onDeepDive,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                    modifier = Modifier.height(38.dp).weight(1f)
+                CoachMark(
+                    prefKey = "deep_dive_button",
+                    text = "Sends this notification to Co-pilot for a full AI analysis.",
+                    modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.AutoAwesome,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Deep Dive",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Button(
+                        onClick = onDeepDive,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.height(38.dp).fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Deep Dive",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
             

@@ -310,13 +310,11 @@ private fun ChatBubble(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (!message.modelUsed.isNullOrEmpty()) {
-                            Text(
-                                text = "via ${message.modelUsed}",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-                            )
+                        val chip = remember(message.modelUsed) {
+                            parseModelChip(message.modelUsed)
+                        }
+                        if (chip != null) {
+                            ModelChip(chip)
                         } else {
                             Spacer(modifier = Modifier.width(1.dp))
                         }
@@ -464,6 +462,59 @@ private fun ThinkingBubble() {
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+private data class ModelChipData(
+    val label: String,
+    val elapsed: String,
+    val isLocal: Boolean
+)
+
+private fun parseModelChip(raw: String?): ModelChipData? {
+    if (raw.isNullOrBlank() || raw == "Empty") return null
+    val elapsed = Regex("(\\d+\\.\\d+s)").find(raw)?.value ?: ""
+    return when {
+        raw.startsWith("LiteRT") ->
+            ModelChipData("On-device", elapsed, isLocal = true)
+        raw.lowercase().contains("gemini") -> {
+            val label = if (raw.contains("lite", ignoreCase = true)) "Gemini Lite" else "Gemini"
+            ModelChipData(label, elapsed, isLocal = false)
+        }
+        raw == "Template" ->
+            ModelChipData("No AI key", "", isLocal = false)
+        else -> null
+    }
+}
+
+@Composable
+private fun ModelChip(chip: ModelChipData) {
+    val color = if (chip.isLocal) androidx.compose.ui.graphics.Color(0xFF7C4DFF)
+                else androidx.compose.ui.graphics.Color(0xFF1E88E5)
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = color.copy(alpha = 0.10f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(if (chip.isLocal) "⚡" else "☁", fontSize = 9.sp)
+            Text(
+                text = chip.label,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = color
+            )
+            if (chip.elapsed.isNotBlank()) {
+                Text(
+                    text = "· ${chip.elapsed}",
+                    fontSize = 9.sp,
+                    color = color.copy(alpha = 0.65f)
                 )
             }
         }
