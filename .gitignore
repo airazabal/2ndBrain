@@ -20,3 +20,6 @@ app/google-services.json
 *_second_brain_db
 *_second_brain_db-shm
 *_second_brain_db-wal
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
