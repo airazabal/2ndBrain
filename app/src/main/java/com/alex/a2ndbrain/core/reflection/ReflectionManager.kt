@@ -181,7 +181,11 @@ class ReflectionManager(
         )
         memoryRepository.insertSummary(summaryEntity)
 
-        if (isMorning) {
+        val isError = summaryText.startsWith("❌") || summaryText.startsWith("❗") ||
+            summaryText.startsWith("⏳") || summaryText.startsWith("💳") ||
+            summaryText.contains("All Gemini models failed") ||
+            summaryText.contains("AI Error")
+        if (isMorning && !isError) {
             BrainWatchBridge.syncBriefing(WatchBriefing(summary = summaryText))
         }
 

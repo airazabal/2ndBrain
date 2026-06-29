@@ -125,8 +125,12 @@ class MainActivity : ComponentActivity() {
                 WatchHabit(id = h.id, name = "${h.emoji} ${h.name}", done = h.id in completedIds)
             }
             val latestSummary = memoryRepository.getLatestSummary()
+            val summaryText = latestSummary?.summary ?: ""
+            val isErrorSummary = summaryText.startsWith("❌") || summaryText.startsWith("❗") ||
+                summaryText.startsWith("⏳") || summaryText.startsWith("💳") ||
+                summaryText.contains("All Gemini models failed") || summaryText.contains("AI Error")
             val briefing = WatchBriefing(
-                summary = latestSummary?.summary ?: "",
+                summary = if (isErrorSummary) "" else summaryText,
                 generatedAt = latestSummary?.let {
                     java.time.Instant.ofEpochMilli(it.timestamp).toString()
                 } ?: java.time.Instant.now().toString()
