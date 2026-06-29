@@ -265,6 +265,11 @@ class CaptureSettingsManager(private val context: Context) : SettingsRepository 
         conflictPrefs.edit().putStringSet("dismissed_$date", current).apply()
     }
     // ── Quick Settings Tile ───────────────────────────────────────────────────
+    override fun saveFocusMinutesForWatch(minutes: Int) {
+        context.getSharedPreferences("2ndbrain_tile", Context.MODE_PRIVATE)
+            .edit().putInt("focus_minutes", minutes).apply()
+    }
+
     override fun saveSenseOfDayScoreForTile(score: Int) {
         context.getSharedPreferences("2ndbrain_tile", Context.MODE_PRIVATE)
             .edit().putInt("score", score).apply()

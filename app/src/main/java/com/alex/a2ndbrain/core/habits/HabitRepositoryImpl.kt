@@ -1,6 +1,8 @@
 package com.alex.a2ndbrain.core.habits
 
 import com.alex.a2ndbrain.core.memory.MemoryRepository
+import com.alex.a2ndbrain.core.agents.BrainWatchBridge
+import com.alex.a2ndbrain.core.agents.WatchHabit
 import kotlinx.coroutines.flow.Flow
 import java.text.SimpleDateFormat
 import java.util.*
@@ -60,10 +62,20 @@ class HabitRepositoryImpl(
                 sourceTag = "habit"
             )
         }
+        syncHabitsToWatch(date)
     }
 
     override suspend fun markIncomplete(habitId: String, date: String) {
         dao.deleteCompletion(habitId, date)
+        syncHabitsToWatch(date)
+    }
+
+    private suspend fun syncHabitsToWatch(date: String) {
+        val allHabits = dao.getAllActiveHabitsList()
+        val completedIds = dao.getCompletionsForDate(date).map { it.habitId }.toSet()
+        BrainWatchBridge.syncHabits(allHabits.map { h ->
+            WatchHabit(id = h.id, name = "${h.emoji} ${h.name}", done = h.id in completedIds)
+        })
     }
 
     override suspend fun getStreakForHabit(habitId: String): Int {

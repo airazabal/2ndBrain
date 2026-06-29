@@ -29,6 +29,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 import com.alex.a2ndbrain.core.domain.ReflectionService
+import com.alex.a2ndbrain.core.agents.BrainWatchBridge
+import com.alex.a2ndbrain.core.agents.WatchBriefing
 
 /**
  * ReflectionManager — slimmed to scheduler + persistence only.
@@ -178,6 +180,11 @@ class ReflectionManager(
             modelName = modelUsed
         )
         memoryRepository.insertSummary(summaryEntity)
+
+        if (isMorning) {
+            BrainWatchBridge.syncBriefing(WatchBriefing(summary = summaryText))
+        }
+
         return@withContext null // null = success
     }
 

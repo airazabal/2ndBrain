@@ -266,6 +266,7 @@ class WellnessViewModel(
                     moodProgress = result.moodProgress
                 )
                 settingsManager.saveSenseOfDayScoreForTile(result.score)
+                settingsManager.saveFocusMinutesForWatch(focusMinutes)
             }
         }
     }

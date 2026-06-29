@@ -83,6 +83,7 @@ interface SettingsRepository {
 
     // Quick Settings tile
     fun saveSenseOfDayScoreForTile(score: Int)
+    fun saveFocusMinutesForWatch(minutes: Int)
 
     // App label resolution
     fun getAppLabel(packageName: String?): String

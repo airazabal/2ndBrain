@@ -38,6 +38,14 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alex.a2ndbrain.core.capture.SettingsRepository
 import com.alex.a2ndbrain.core.capture.ClipboardCaptureManager
+import com.alex.a2ndbrain.core.agents.BrainWatchBridge
+import com.alex.a2ndbrain.core.agents.WatchBriefing
+import com.alex.a2ndbrain.core.agents.WatchHabit
+import com.alex.a2ndbrain.core.agents.WatchStats
+import com.alex.a2ndbrain.core.habits.HabitRepository
+import com.alex.a2ndbrain.core.memory.MemoryRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.alex.a2ndbrain.ui.chat.CopilotViewModel
 import com.alex.a2ndbrain.ui.home.HomeScreen
 import com.alex.a2ndbrain.ui.home.HomeViewModel
@@ -66,6 +74,8 @@ import org.koin.androidx.viewmodel.ext.android.viewModel as koinActivityViewMode
 class MainActivity : ComponentActivity() {
     private val clipboardCaptureManager: ClipboardCaptureManager by inject()
     private val settingsManager: SettingsRepository by inject()
+    private val habitRepository: HabitRepository by inject()
+    private val memoryRepository: MemoryRepository by inject()
     private val nearbySyncManager: com.alex.a2ndbrain.core.sync.NearbySyncManager by inject()
     // Eagerly instantiated so it wires cloudSync into HealthRepository before first health read
     private val cloudHealthSyncManager: com.alex.a2ndbrain.core.sync.CloudHealthSyncManager by inject()
@@ -102,6 +112,38 @@ class MainActivity : ComponentActivity() {
         }
         return permissions.all {
             checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    private suspend fun initialWatchSync(cachedScore: Int? = null, cachedFocus: Int? = null) = withContext(Dispatchers.IO) {
+        try {
+            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                .format(java.util.Date())
+            val habits = habitRepository.getAllActiveHabitsList()
+            val completedIds = habitRepository.getTodayCompletions(today).map { it.habitId }.toSet()
+            val watchHabits = habits.map { h ->
+                WatchHabit(id = h.id, name = "${h.emoji} ${h.name}", done = h.id in completedIds)
+            }
+            val latestSummary = memoryRepository.getLatestSummary()
+            val briefing = WatchBriefing(
+                summary = latestSummary?.summary ?: "",
+                generatedAt = latestSummary?.let {
+                    java.time.Instant.ofEpochMilli(it.timestamp).toString()
+                } ?: java.time.Instant.now().toString()
+            )
+            val snap = cloudHealthSyncManager.healthRepository.getSnapshotsForSync(1).firstOrNull()
+            BrainWatchBridge.syncAll(
+                briefing = briefing,
+                habits   = watchHabits,
+                stats    = WatchStats(
+                    readinessScore = cachedScore,
+                    steps          = snap?.steps?.toInt(),
+                    heartRate      = snap?.avgHeartRate,
+                    focusMinutes   = cachedFocus
+                )
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Initial watch sync failed: ${e.message}")
         }
     }
 
@@ -152,6 +194,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         com.alex.a2ndbrain.core.sync.FirebaseInitializer.init(this)
+        BrainWatchBridge.init(this)
+        val tilePrefs = getSharedPreferences("2ndbrain_tile", android.content.Context.MODE_PRIVATE)
+        val cachedScore = tilePrefs.getInt("score", 0).takeIf { it > 0 }
+        val cachedFocus = tilePrefs.getInt("focus_minutes", 0).takeIf { it > 0 }
+        lifecycleScope.launch { initialWatchSync(cachedScore, cachedFocus) }
         triggerGoogleSignInIfNeeded()
         handleTileIntent(intent)
 
