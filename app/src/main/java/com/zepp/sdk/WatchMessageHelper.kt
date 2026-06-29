@@ -30,7 +30,11 @@ class WatchMessageHelper private constructor() {
     fun sendMessage(data: ByteArray) {
         val payload = data.decodeToString()
         // Route SYNC_HABITS to a separate doc so habit taps don't overwrite stats/briefing
-        val docId = if (payload.contains("\"SYNC_HABITS\"")) "habits" else DOC_ID
+        val docId = when {
+            payload.contains("\"SYNC_HABITS\"")   -> "habits"
+            payload.contains("\"SYNC_BRIEFING\"") -> "briefing"
+            else -> DOC_ID
+        }
         FirebaseFirestore.getInstance()
             .collection(COLLECTION)
             .document(docId)

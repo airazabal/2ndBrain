@@ -185,7 +185,7 @@ class ReflectionManager(
             summaryText.startsWith("⏳") || summaryText.startsWith("💳") ||
             summaryText.contains("All Gemini models failed") ||
             summaryText.contains("AI Error")
-        if (isMorning && !isError) {
+        if (!isError) {
             BrainWatchBridge.syncBriefing(WatchBriefing(summary = summaryText))
         }
 
